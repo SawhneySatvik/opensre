@@ -8,13 +8,15 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from app.agent.investigation import (
+from app.agent.stages.investigate import (
     ConnectedInvestigationAgent,
-    _availability_view,
-    _duplicate_call_result,
-    _tool_call_signature,
 )
-from app.agent.result import InvestigationResult
+from app.agent.stages.investigate.agent import _tools_for_plan
+from app.agent.stages.investigate.loop import (
+    duplicate_call_result,
+    tool_call_signature,
+)
+from app.agent.stages.investigate.tools import availability_view
 from app.agent.tool_loop import (
     _build_synthetic_assistant_tool_call_msg,
     _context_budget_ceiling_for_model,
@@ -25,12 +27,53 @@ from app.agent.tool_loop import (
 )
 from app.integrations.llm_cli.errors import CLITimeoutError
 from app.services.agent_llm_client import CLIBackedAgentClient, ToolCall
+from app.tools.registered_tool import RegisteredTool
+
+
+def _registered_tool(name: str, source: str) -> RegisteredTool:
+    def _run(**_kwargs: Any) -> dict[str, Any]:
+        return {"ok": True}
+
+    return RegisteredTool(
+        name=name,
+        description=name,
+        input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+        source=source,  # type: ignore[arg-type]
+        run=_run,
+    )
+
+
+def test_tools_for_plan_preserves_plan_order_and_filters_unknown_tools() -> None:
+    tools = [
+        _registered_tool("query_logs", "datadog"),
+        _registered_tool("query_metrics", "datadog"),
+        _registered_tool("query_commits", "github"),
+    ]
+
+    selected = _tools_for_plan(
+        tools,
+        {
+            "planned_actions": [
+                "query_metrics",
+                "missing_tool",
+                "query_logs",
+            ]
+        },
+    )
+
+    assert [tool.name for tool in selected] == ["query_metrics", "query_logs"]
+
+
+def test_tools_for_plan_falls_back_when_no_plan_matches() -> None:
+    tools = [_registered_tool("query_logs", "datadog")]
+
+    assert _tools_for_plan(tools, {"planned_actions": ["missing_tool"]}) == tools
 
 
 def test_availability_view_marks_configured_integrations_without_mutating_state() -> None:
     resolved = {"github": {"access_token": "token"}, "_all": [{"service": "github"}]}
 
-    view = _availability_view(resolved)
+    view = availability_view(resolved)
 
     assert view["github"]["connection_verified"] is True
     assert "connection_verified" not in resolved["github"]
@@ -77,8 +120,8 @@ def test_run_gracefully_handles_model_not_found_runtime_error() -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         state = {
@@ -109,8 +152,8 @@ def test_run_re_raises_unmatched_runtime_error() -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         state = {
@@ -133,8 +176,8 @@ def test_run_gracefully_handles_cli_timeout() -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         result = agent.run(
@@ -164,8 +207,8 @@ def test_run_gracefully_handles_api_timeout_runtime_error() -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         result = agent.run(
@@ -201,8 +244,8 @@ def test_run_gracefully_handles_tool_unsupported_model(error_msg: str) -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         state = {
@@ -236,8 +279,8 @@ def test_run_gracefully_handles_single_tool_call_only_model() -> None:
     mock_tracker = MagicMock()
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
     ):
         agent = ConnectedInvestigationAgent()
         state = {
@@ -274,7 +317,7 @@ def test_run_parallel_handles_interpreter_shutdown() -> None:
 
     shutdown_msg = "cannot schedule new futures after interpreter shutdown"
 
-    with patch("app.agent.tool_loop.ThreadPoolExecutor") as mock_executor_cls:
+    with patch("app.agent.tool_loop.execution.ThreadPoolExecutor") as mock_executor_cls:
         mock_pool = MagicMock()
         mock_pool.__enter__ = lambda s: s
         mock_pool.__exit__ = MagicMock(return_value=False)
@@ -611,8 +654,8 @@ def test_invalid_hook_return_false_none_raises_at_call_site() -> None:
     }
     agent = _BadAgent()
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=mock_tracker),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=mock_tracker),
         pytest.raises(ValueError, match="_should_accept_conclusion returned"),
     ):
         agent.run(state)
@@ -781,12 +824,12 @@ def test_tool_call_signature_is_argument_order_independent() -> None:
     b = ToolCall(id="2", name="query", input={"window": "1h", "service": "x"})
     c = ToolCall(id="3", name="query", input={"service": "y", "window": "1h"})
 
-    assert _tool_call_signature(a) == _tool_call_signature(b)
-    assert _tool_call_signature(a) != _tool_call_signature(c)
+    assert tool_call_signature(a) == tool_call_signature(b)
+    assert tool_call_signature(a) != tool_call_signature(c)
 
 
 def test_duplicate_call_result_marks_suppression() -> None:
-    result = _duplicate_call_result(ToolCall(id="1", name="list_posthog_tools", input={}))
+    result = duplicate_call_result(ToolCall(id="1", name="list_posthog_tools", input={}))
     assert result["suppressed_duplicate"] is True
     assert result["tool"] == "list_posthog_tools"
     assert "already" in result["note"].lower()
@@ -853,13 +896,9 @@ def _run_agent_with_scripted_llm(
     }
 
     with (
-        patch("app.agent.investigation.get_agent_llm", return_value=mock_llm),
-        patch("app.agent.investigation.get_tracker", return_value=MagicMock()),
-        patch("app.agent.investigation._get_available_tools", return_value=tools),
-        patch(
-            "app.agent.investigation.parse_diagnosis",
-            return_value=InvestigationResult(root_cause="done", root_cause_category="unknown"),
-        ),
+        patch("app.agent.stages.investigate.agent.get_agent_llm", return_value=mock_llm),
+        patch("app.agent.stages.investigate.agent.get_tracker", return_value=MagicMock()),
+        patch("app.agent.stages.investigate.agent.get_available_tools", return_value=tools),
     ):
         result = ConnectedInvestigationAgent().run(state)
     return result, mock_llm
@@ -896,9 +935,9 @@ def test_run_does_not_suppress_calls_with_different_args() -> None:
         _text_response("Final diagnosis."),
     ]
 
-    tool_run = _run_agent_with_scripted_llm(invoke=responses, tools=[tool])[0]
+    result = _run_agent_with_scripted_llm(invoke=responses, tools=[tool])[0]
     assert tool.run.call_count == 2
-    assert tool_run["root_cause"] == "done"
+    assert result["agent_messages"][-1]["content"] == "Final diagnosis."
 
 
 def test_run_forces_conclusion_when_stuck_repeating() -> None:
@@ -922,7 +961,7 @@ def test_run_forces_conclusion_when_stuck_repeating() -> None:
     assert mock_llm.invoke.call_count < 6
     # The final forced turn was invoked with NO tools.
     assert mock_llm.invoke.call_args_list[-1].kwargs["tools"] == []
-    assert result["root_cause"] == "done"
+    assert result["agent_messages"][-1]["content"] == "Final diagnosis: insufficient evidence."
 
 
 def test_truncate_content_distributes_across_multiple_blocks() -> None:

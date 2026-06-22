@@ -28,6 +28,7 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
+from app.agent.utils.alert_source import SECONDARY_TOOL_SOURCES
 from app.cli.interactive_shell.error_handling.exception_reporting import report_exception
 from app.cli.interactive_shell.runtime.session import ReplSession
 from app.cli.interactive_shell.ui import DIM
@@ -48,7 +49,7 @@ def _resolve_session_integrations(session: ReplSession) -> dict[str, Any]:
     if session.resolved_integrations_cache is not None:
         return session.resolved_integrations_cache
 
-    from app.agent.context import resolve_integrations
+    from app.agent.stages.resolve_integrations import resolve_integrations
 
     resolved = resolve_integrations({})  # type: ignore[arg-type]  # env/store resolution path
     session.resolved_integrations_cache = resolved
@@ -143,13 +144,15 @@ def gather_tool_evidence(
     never break the conversational turn.
     """
     try:
-        from app.agent.investigation import _get_available_tools
+        from app.agent.stages.investigate.tools import get_available_tools
         from app.agent.tool_loop import run_tool_calling_loop
         from app.services.agent_llm_client import get_agent_llm
 
         resolved = _resolve_session_integrations(session)
-        tools = _get_available_tools(resolved)
+        tools = get_available_tools(resolved)
         if not tools:
+            return None
+        if not any(str(tool.source) not in SECONDARY_TOOL_SOURCES for tool in tools):
             return None
 
         try:

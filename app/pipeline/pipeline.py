@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     # Type-only import — avoids paying the agent module's heavy import cost
     # at pipeline load while still letting static type-checkers validate
     # ``agent_class`` injections.
-    from app.agent.investigation import ConnectedInvestigationAgent
+    from app.agent.stages.investigate import ConnectedInvestigationAgent
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +144,7 @@ def run_connected_investigation(
     *,
     agent_class: type[ConnectedInvestigationAgent] | None = None,
 ) -> AgentState:
-    """Resolve connected integrations → parse alert → agent loop → deliver.
+    """Resolve connected integrations → parse alert → investigate → diagnose → deliver.
 
     All steps mutate a shared state dict. Each step returns a dict of updates
     which are merged in. Pure function: inputs in, state out.
@@ -154,11 +154,13 @@ def run_connected_investigation(
     custom termination policy, structured-stage progression, or other
     agent-level extensions can pass a subclass instead.
     """
-    from app.agent.context import resolve_integrations
     from app.agent.correlation.node import node_correlate_upstream
-    from app.agent.extract import extract_alert
-    from app.agent.investigation import ConnectedInvestigationAgent
-    from app.delivery import deliver
+    from app.agent.stages.diagnose import diagnose
+    from app.agent.stages.extract_alert import extract_alert
+    from app.agent.stages.investigate import ConnectedInvestigationAgent
+    from app.agent.stages.plan_actions import plan_actions
+    from app.agent.stages.publish_findings import deliver
+    from app.agent.stages.resolve_integrations import resolve_integrations
     from app.utils.sentry_sdk import capture_exception
 
     agent_class = agent_class or ConnectedInvestigationAgent
@@ -171,7 +173,9 @@ def run_connected_investigation(
         if state_any.get("is_noise"):
             return cast(AgentState, state_any)
 
+        _merge(state_any, plan_actions(cast(AgentState, state_any)))
         _merge(state_any, agent_class().run(state_any))
+        _merge(state_any, diagnose(state_any))
         _merge(
             state_any,
             node_correlate_upstream(
