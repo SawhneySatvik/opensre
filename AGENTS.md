@@ -52,7 +52,7 @@ Before any push or PR creation follow **[CI.md](CI.md)** — lint, format, typec
 - `app/pipeline/` — Investigation orchestration and runner helpers (`run_investigation`, `run_chat`).
 - `app/remote/` — Remote-hosted runtime operations and integration points.
 - `app/sandbox/` — Sandboxed execution helpers for controlled runtime actions.
-- `app/services/` — Reusable clients and adapters for integrations/tools. LLM APIs: `app/services/AGENTS.md`.
+- `app/services/` — Clients and adapters shared across multiple tools or integrations. Do not add a service here if only one tool uses it — keep single-consumer clients co-located inside the tool package. LLM APIs: `app/services/AGENTS.md`.
 - `app/state/` — Shared agent and investigation state models plus state factories.
 - `app/tools/` — Tool registry, decorator, base classes, per-tool packages, shared utilities, and registry helpers.
 - `app/types/` — Shared typed contracts for evidence, retrieval, and tool-related payloads.
@@ -70,7 +70,7 @@ Files to touch:
 
 - `app/tools/<ToolName>/__init__.py` for the tool implementation, or `app/tools/<tool_file>.py` for a lighter-weight function tool.
 - `app/tools/utils/` if the tool needs shared helper code.
-- `app/services/<vendor>/client.py` if the tool should reuse a dedicated API client instead of inlining requests.
+- `app/services/<vendor>/client.py` only if the client is shared across multiple tools or integrations; otherwise keep it inside `app/tools/<ToolName>/`.
 - `docs/<tool_name>.mdx` for user-facing usage, parameters, and examples.
 - `docs/docs.json` — add the page path (without `.mdx`) to the appropriate `pages` array so Mintlify navigation includes it.
 - `tests/tools/test_<tool_name>.py` for behavior and regression coverage.
@@ -79,7 +79,7 @@ Steps:
 
 1. Pick the simplest shape that fits the tool. Use a `BaseTool` subclass for richer behavior; use `@tool(...)` from `app.tools.tool_decorator` for a lightweight function tool.
 2. Declare clear metadata: `name`, `description`, `source`, `input_schema`, and any `use_cases`, `requires`, `outputs`, or `retrieval_controls` you need.
-3. Keep the tool self-contained. Put reusable transport or parsing code in `app/services/` or `app/tools/utils/` rather than copying it into the tool body.
+3. Keep the tool self-contained. If a service client is used by more than one tool, put it in `app/services/<vendor>/client.py`. If it is only used by a single tool, keep it co-located inside `app/tools/<ToolName>/` — do not create a `app/services/` entry just to satisfy a structural convention. Only promote to `app/services/` when a second consumer actually exists.
 4. If the tool should appear in both investigation and chat surfaces, set `surfaces=("investigation", "chat")`.
 5. Add tests that cover schema shape, availability, extraction, and the runtime behavior that the planner depends on.
 6. Before opening or approving the PR, follow [TOOL_INTEGRATION_CHECKLIST.md](TOOL_INTEGRATION_CHECKLIST.md) for tool/integration-specific wiring, payload, docs, and regression checks.
