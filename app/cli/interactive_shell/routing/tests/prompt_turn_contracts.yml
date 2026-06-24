@@ -507,20 +507,25 @@
       ok: true
 
 # P0 rank 2 — misc_capability_question (example 2)
-# Handoff (not slash): live planner compares kind only for assistant_handoff, avoiding
-# brittle exact slash string matching when the LLM routes capability questions variably.
+# Planner consistently maps this to /integrations list in live tests (same contract
+# as cli_agent_show_connected_services); slash content must match exactly.
 - id: priority_prompt_04_connected_services
   input: "show me connected services"
   expected_route_kind: "handle_message_with_agent"
   expected_planned_actions:
-    - kind: "assistant_handoff"
-      content: "capability:connected_services"
-  expected_executed_actions: []
+    - kind: "slash"
+      content: "/integrations list"
+  expected_executed_actions:
+    - kind: "slash"
+      content: "/integrations list"
   expected_terminal_response_contains:
-    - "integrat"
+    - "ran /integrations list"
   expected_session_history_delta:
     - type: "cli_agent"
       text: "show me connected services"
+      ok: true
+    - type: "slash"
+      text: "/integrations list"
       ok: true
 
 # P0 rank 3 — misc_real_investigation (example 1)
@@ -629,12 +634,13 @@
       ok: true
 
 # P0 rank 6 — kubernetes_workload_health (example 2)
+# CLI-shaped input; live planner routes to shell with the verbatim command string.
 - id: priority_prompt_12_sniffdog_investigate_service
   input: "sniffdog investigate --service myportfolio"
   expected_route_kind: "handle_message_with_agent"
   expected_planned_actions:
-    - kind: "assistant_handoff"
-      content: "cli_command:sniffdog_investigate_service"
+    - kind: "shell"
+      content: "sniffdog investigate --service myportfolio"
   expected_executed_actions: []
   expected_terminal_response_contains:
     - "investigat"
