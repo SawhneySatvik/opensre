@@ -459,6 +459,10 @@
 # Prompts 2–6, 9, and 13 duplicate inputs covered earlier in this file; those
 # entries remain canonical for backward-compatible ids — priority_prompt_* cases
 # re-assert the same contracts grouped for analytics reporting.
+#
+# Prompt #12 ("sniffdog investigate --service myportfolio") is intentionally
+# omitted: live OpenAI planner routing is non-deterministic (shell vs
+# assistant_handoff vs cli_command across retries), so no stable contract kind.
 # =============================================================================
 
 # P0 rank 1 — alert_or_incident_investigation (example 1)
@@ -634,20 +638,7 @@
       ok: true
 
 # P0 rank 6 — kubernetes_workload_health (example 2)
-# CLI-shaped input; live planner routes to shell with the verbatim command string.
-- id: priority_prompt_12_sniffdog_investigate_service
-  input: "sniffdog investigate --service myportfolio"
-  expected_route_kind: "handle_message_with_agent"
-  expected_planned_actions:
-    - kind: "shell"
-      content: "sniffdog investigate --service myportfolio"
-  expected_executed_actions: []
-  expected_terminal_response_contains:
-    - "investigat"
-  expected_session_history_delta:
-    - type: "cli_agent"
-      text: "sniffdog investigate --service myportfolio"
-      ok: true
+# Omitted from live planner contracts — see header comment for prompt #12.
 
 # P0 rank 7 — misc_setup_or_onboarding (example 1)
 - id: priority_prompt_13_railway_deploy
