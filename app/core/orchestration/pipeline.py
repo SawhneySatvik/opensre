@@ -1,11 +1,10 @@
-"""Raw-alert-first connected investigation coordinator."""
+"""Raw-alert-first connected investigation pipeline."""
 
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
-from app.pipeline.state_updates import apply_state_updates
+from app.core.orchestration.state_updates import apply_state_updates
 from app.state import AgentState
 
 if TYPE_CHECKING:
@@ -13,8 +12,6 @@ if TYPE_CHECKING:
     # at pipeline load while still letting static type-checkers validate
     # ``agent_class`` injections.
     from app.core.orchestration.node.investigate import ConnectedInvestigationAgent
-
-logger = logging.getLogger(__name__)
 
 
 def run_connected_investigation(
@@ -59,14 +56,9 @@ def run_connected_investigation(
     return state
 
 
-def run_investigation(state: AgentState) -> AgentState:
-    """Backward-compatible alias for the connected investigation coordinator."""
-    return run_connected_investigation(state)
-
-
 def run_chat(state: AgentState) -> AgentState:
     """Run a single chat turn via ChatAgent."""
-    from app.agent.chat import ChatAgent
+    from app.core.orchestration.chat import ChatAgent
     from app.utils.sentry_sdk import capture_exception
 
     try:
