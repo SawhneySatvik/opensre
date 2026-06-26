@@ -4,7 +4,6 @@ globs:
     - core/orchestration/**
     - core/runtime/**
     - core/domain/state/**
-    - app/agent/**
 ---
 
 # Investigation pipeline
@@ -25,7 +24,7 @@ globs:
 
 ## Conventions
 
-- Prefer `@traceable` from `utils.tracing` on externally-visible orchestration helpers.
+- Prefer `@traceable` from `platform.observability.tracing` on externally-visible orchestration helpers.
 - Stages read full state and return **partial dict** updates.
 - Use `get_tracker()` for CLI progress when appropriate.
 - Keep new persisted keys in the state `TypedDict` and any matching validators.
