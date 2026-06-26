@@ -1,6 +1,6 @@
 """Abstract benchmark adapter base class.
 
-Each benchmark suite (CloudOpsBench, OpenRCA, ToolCallBench) implements
+Each benchmark suite (CloudOpsBench, ToolCallBench, etc.) implements
 this interface to bridge its corpus / scoring / agent surface to the
 framework. The framework calls these methods; adapters do the
 benchmark-specific work.
@@ -111,7 +111,6 @@ class BenchmarkAdapter(ABC):
 
     Implementations:
       - ``tests/benchmarks/cloudopsbench/adapter.py``  (first)
-      - ``tests/benchmarks/openrca_scenarios/adapter.py``  (proves reusability)
       - ``tests/benchmarks/toolcall_model_benchmark/adapter.py``  (proves reusability)
 
     The framework calls these methods; adapters bridge to whatever the

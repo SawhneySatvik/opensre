@@ -1,11 +1,11 @@
-"""Local telemetry from the tracer-cloud/opensre Hugging Face dataset (OpenRCA-style CSVs)."""
+"""Local telemetry from the tracer-cloud/opensre Hugging Face dataset."""
 
 from __future__ import annotations
 
 from integrations.opensre.constants import OPENSRE_HF_DATASET_ID
 from integrations.opensre.csv_grafana_backend import OpenSRECsvGrafanaBackend
 from integrations.opensre.hf_remote import (
-    extract_openrca_scoring_points,
+    extract_scoring_points,
     infer_opensre_telemetry_relative,
     materialize_opensre_telemetry_from_hub,
     stream_opensre_query_alerts,
@@ -20,7 +20,7 @@ from integrations.opensre.seed_evidence import merge_opensre_seed_into_state
 __all__ = (
     "OPENSRE_HF_DATASET_ID",
     "OpenSRECsvGrafanaBackend",
-    "extract_openrca_scoring_points",
+    "extract_scoring_points",
     "infer_opensre_telemetry_relative",
     "inject_opensre_into_resolved_integrations",
     "merge_opensre_seed_into_state",

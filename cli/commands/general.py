@@ -165,7 +165,7 @@ def health_command(watch: bool, rate: int) -> None:
 @click.option(
     "--evaluate",
     is_flag=True,
-    help="After final diagnosis, LLM-judge vs OpenRCA scoring_points (rubric stripped from agent alert).",
+    help="After final diagnosis, LLM-judge vs scoring_points rubric (rubric stripped from agent alert).",
 )
 def investigate_command(
     input_path: str | None,

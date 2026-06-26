@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download OpenRCA-style alert JSON from the Hugging Face OpenSRE dataset (streaming).
+"""Download alert JSON from the Hugging Face OpenSRE dataset (streaming).
 
 Requires: ``pip install 'opensre[opensre-hub]'`` (or dev extra) and Hub auth if the dataset is gated.
 

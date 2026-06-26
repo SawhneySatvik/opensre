@@ -1,4 +1,4 @@
-"""Grafana-protocol backend that serves OpenRCA-style CSV telemetry (metrics, logs, traces)."""
+"""Grafana-protocol backend that serves OpenSRE CSV telemetry (metrics, logs, traces)."""
 
 from __future__ import annotations
 

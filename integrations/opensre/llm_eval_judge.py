@@ -1,4 +1,4 @@
-"""LLM judge: compare investigation conclusions to OpenRCA ``scoring_points`` rubric."""
+"""LLM judge: compare investigation conclusions to ``scoring_points`` rubric."""
 
 from __future__ import annotations
 
@@ -135,7 +135,7 @@ def build_opensre_judge_prompt(*, rubric: str, state: dict[str, Any]) -> str:
 
     return f"""You are an expert evaluator for incident root-cause reports.
 
-Your job: compare the AGENT CONCLUSIONS to the official RUBRIC (OpenRCA scoring_points).
+Your job: compare the AGENT CONCLUSIONS to the official RUBRIC (scoring_points).
 The rubric is ground truth for grading — the agent did NOT see it during the run.
 
 ## RUBRIC (ground truth)

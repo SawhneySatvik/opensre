@@ -9,7 +9,7 @@ from core.domain.alerts.normalization import normalize_alert_payload
 from core.domain.state.agent_state import AgentState, AgentStateModel, model_default_payload
 from core.domain.state.types import ChatMessage
 from integrations.opensre.hf_remote import (
-    extract_openrca_scoring_points,
+    extract_scoring_points,
     strip_scoring_points_from_alert,
 )
 
@@ -30,10 +30,10 @@ def make_initial_state(
     alert_payload: str | dict[str, Any] = raw_alert
     if isinstance(alert_payload, dict):
         if opensre_evaluate:
-            rubric = extract_openrca_scoring_points(alert_payload)
+            rubric = extract_scoring_points(alert_payload)
             if rubric:
                 alert_payload = strip_scoring_points_from_alert(dict(alert_payload))
-        elif extract_openrca_scoring_points(alert_payload):
+        elif extract_scoring_points(alert_payload):
             # Blind investigation: drop rubric from agent-visible alert (file may include it).
             alert_payload = strip_scoring_points_from_alert(dict(alert_payload))
 

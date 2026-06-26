@@ -45,7 +45,7 @@ opensre misses stats --since 30d --json
 
 ## Converting misses to regressions
 
-`opensre misses export` writes one scenario per recurring `(alert, taxonomy)` pair, ordered by how often it has recurred. The output mirrors the existing `tests/benchmarks/openrca_scenarios/*/alert.json` shape, so the benchmark runner consumes it without any adapter changes:
+`opensre misses export` writes one scenario per recurring `(alert, taxonomy)` pair, ordered by how often it has recurred. The output uses the same benchmark scenario `alert.json` shape, so the benchmark runner consumes it without any adapter changes:
 
 ```bash
 opensre misses export \

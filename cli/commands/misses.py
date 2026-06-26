@@ -169,7 +169,7 @@ def export_command(out_dir: Path, since_spec: str, top: int, taxonomy: str | Non
     """Convert top misses into benchmark scenarios.
 
     Writes one ``alert.json`` per (alert, taxonomy) into ``out_dir`` using the
-    same schema as ``tests/benchmarks/openrca_scenarios/*/alert.json`` so the
+    same schema as benchmark scenario ``alert.json`` files so the
     existing benchmark runner can pick them up as regressions.
     """
     since = _parse_since_option(since_spec)

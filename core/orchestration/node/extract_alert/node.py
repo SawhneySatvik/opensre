@@ -48,8 +48,8 @@ Extract these fields from the message text:
 - alert_name: The name of the alert (e.g. "Pipeline Error in Logs")
 - pipeline_name: The affected pipeline/table/service name
 - severity: critical/high/warning/info
-- alert_source: Which platform fired this alert. Preserve exact values of "openrca_dataset",
-  "opensre", and "opensre_dataset" when already set in JSON. Otherwise:
+- alert_source: Which platform fired this alert. Preserve exact values of "opensre"
+  and "opensre_dataset" when already set in JSON. Otherwise:
   - "grafana" for grafana.net, Grafana alerting, or grafana_folder
   - "datadog" for datadoghq.com or Datadog monitors
   - "honeycomb" for Honeycomb or api.honeycomb.io

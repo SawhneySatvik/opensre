@@ -18,26 +18,17 @@ def _annotation_dict(raw_alert: dict[str, Any]) -> dict[str, Any]:
 
 
 def _dataset_root(ann: dict[str, Any], raw_alert: dict[str, Any]) -> str:
-    """Resolve local clone root for tracer-cloud/opensre (or OpenRCA-style exports)."""
-    for key in (
-        "opensre_dataset_root",
-        "openrca_dataset_root",
-    ):
+    """Resolve local clone root for tracer-cloud/opensre dataset exports."""
+    for key in ("opensre_dataset_root",):
         v = ann.get(key) or raw_alert.get(key)
         if v and str(v).strip():
             return str(v).strip()
-    return (
-        os.environ.get("OPENSRE_DATASET_ROOT", "").strip()
-        or os.environ.get("OPENRCA_DATASET_ROOT", "").strip()
-    )
+    return os.environ.get("OPENSRE_DATASET_ROOT", "").strip()
 
 
 def _hf_dataset_id(ann: dict[str, Any], raw_alert: dict[str, Any]) -> str | None:
     """Hub repo id for telemetry materialization; unset avoids any network access."""
-    for key in (
-        "opensre_hf_dataset_id",
-        "openrca_hf_dataset_id",
-    ):
+    for key in ("opensre_hf_dataset_id",):
         v = ann.get(key) or raw_alert.get(key)
         if v and str(v).strip():
             return str(v).strip()
@@ -46,12 +37,7 @@ def _hf_dataset_id(ann: dict[str, Any], raw_alert: dict[str, Any]) -> str | None
 
 
 def _telemetry_relative(ann: dict[str, Any], raw_alert: dict[str, Any]) -> str | None:
-    rel = (
-        ann.get("opensre_telemetry_relative")
-        or raw_alert.get("opensre_telemetry_relative")
-        or ann.get("openrca_telemetry_relative")
-        or raw_alert.get("openrca_telemetry_relative")
-    )
+    rel = ann.get("opensre_telemetry_relative") or raw_alert.get("opensre_telemetry_relative")
     if rel and str(rel).strip():
         return str(rel).strip().lstrip("/")
     meta = raw_alert.get("_meta")
@@ -69,12 +55,7 @@ def _telemetry_relative(ann: dict[str, Any], raw_alert: dict[str, Any]) -> str |
 def resolve_opensre_telemetry_dir(raw_alert: dict[str, Any]) -> Path | None:
     """Return the absolute telemetry directory (the ``.../telemetry/YYYY_MM_DD`` folder)."""
     ann = _annotation_dict(raw_alert)
-    direct = (
-        ann.get("opensre_telemetry_dir")
-        or raw_alert.get("opensre_telemetry_dir")
-        or ann.get("openrca_telemetry_dir")
-        or raw_alert.get("openrca_telemetry_dir")
-    )
+    direct = ann.get("opensre_telemetry_dir") or raw_alert.get("opensre_telemetry_dir")
     if direct:
         p = Path(str(direct).strip()).expanduser()
         return p if p.is_dir() else None
@@ -92,8 +73,6 @@ def resolve_opensre_telemetry_dir(raw_alert: dict[str, Any]) -> Path | None:
         rev = (
             ann.get("opensre_hf_revision")
             or raw_alert.get("opensre_hf_revision")
-            or ann.get("openrca_hf_revision")
-            or raw_alert.get("openrca_hf_revision")
             or os.environ.get("OPENSRE_HF_REVISION")
             or None
         )

@@ -43,7 +43,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--evaluate",
         action="store_true",
         help=(
-            "After the final diagnosis, run an LLM judge vs OpenRCA scoring_points on the alert "
+            "After the final diagnosis, run an LLM judge vs scoring_points on the alert "
             "(rubric is stripped from the agent copy of the alert)."
         ),
     )

@@ -120,7 +120,7 @@ class DeliveryOutputSlice(TypedDict, total=False):
 
 
 class EvalHarnessSlice(TypedDict, total=False):
-    """OpenRCA offline evaluation harness fields."""
+    """OpenSRE offline evaluation harness fields."""
 
     opensre_evaluate: bool
     opensre_eval_rubric: str

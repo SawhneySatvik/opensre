@@ -281,12 +281,11 @@ def _slugify(value: str, *, fallback: str = "miss") -> str:
 def to_benchmark_scenario(miss: MissRecord) -> dict[str, Any]:
     """Convert a miss into a benchmark scenario ``alert.json`` payload.
 
-    The shape mirrors ``tests/benchmarks/openrca_scenarios/*/alert.json`` so
-    the existing benchmark runner can consume the exported scenarios with no
-    adapter changes.
+    The shape matches benchmark scenario ``alert.json`` payloads so the
+    benchmark runner can consume the exported scenarios with no adapter changes.
 
     The grading rubric lives at ``commonAnnotations.scoring_points`` — that is
-    where :func:`integrations.opensre.extract_openrca_scoring_points` looks for
+    where :func:`integrations.opensre.extract_scoring_points` looks for
     it (``opensre investigate --evaluate``), and where
     :func:`integrations.opensre.strip_scoring_points_from_alert` strips it before
     handing the alert to the agent. Putting it under ``_meta`` would both be

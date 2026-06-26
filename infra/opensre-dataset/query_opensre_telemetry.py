@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Query OpenSRE / OpenRCA telemetry CSVs locally — no Grafana server.
+"""Query OpenSRE telemetry CSVs locally — no Grafana server.
 
 ``opensre investigate`` runs the same reads at the start of the **Gathering evidence**
 step (``node_investigate``) when telemetry paths resolve (local clone or Hub).
@@ -68,11 +68,7 @@ def _resolve_telemetry_dir(args: argparse.Namespace) -> Path:
 
     import os
 
-    root = (
-        (args.dataset_root or "").strip()
-        or os.environ.get("OPENSRE_DATASET_ROOT", "").strip()
-        or os.environ.get("OPENRCA_DATASET_ROOT", "").strip()
-    )
+    root = (args.dataset_root or "").strip() or os.environ.get("OPENSRE_DATASET_ROOT", "").strip()
     if not root:
         raise SystemExit(
             "Local mode needs a dataset root: set OPENSRE_DATASET_ROOT or pass --dataset-root"

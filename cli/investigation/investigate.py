@@ -152,7 +152,7 @@ def run_investigation_cli(
                 "skipped": True,
                 "reason": (
                     "No scoring_points on this alert — nothing to judge against "
-                    "(not an OpenRCA rubric payload, or field missing)."
+                    "(not a scoring_points rubric payload, or field missing)."
                 ),
             }
         else:

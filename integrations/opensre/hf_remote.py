@@ -127,7 +127,7 @@ def strip_scoring_points_from_alert(alert: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
-def extract_openrca_scoring_points(alert: dict[str, Any]) -> str:
+def extract_scoring_points(alert: dict[str, Any]) -> str:
     """
     Collect ``scoring_points`` from ``commonAnnotations`` and ``annotations``.
 

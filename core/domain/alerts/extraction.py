@@ -8,7 +8,7 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-CANONICAL_ALERT_SOURCES = frozenset({"openrca_dataset", "opensre", "opensre_dataset"})
+CANONICAL_ALERT_SOURCES = frozenset({"opensre", "opensre_dataset"})
 
 RAW_ALERT_DETAIL_FIELDS = (
     "kube_namespace",
@@ -60,9 +60,7 @@ def needs_full_json_prompt(raw_alert: dict[str, Any]) -> bool:
         return True
     for key in (
         "opensre_telemetry_relative",
-        "openrca_telemetry_relative",
         "opensre_dataset_root",
-        "openrca_dataset_root",
     ):
         if raw_alert.get(key):
             return True
@@ -70,7 +68,7 @@ def needs_full_json_prompt(raw_alert: dict[str, Any]) -> bool:
         if isinstance(ann, dict) and ann.get(key):
             return True
     meta = raw_alert.get("_meta")
-    return bool(isinstance(meta, dict) and "openrca" in str(meta.get("purpose", "")).lower())
+    return bool(isinstance(meta, dict) and "opensre" in str(meta.get("purpose", "")).lower())
 
 
 def fallback_details(state: Mapping[str, Any], raw_alert: Any) -> AlertDetails:
