@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.domain.correlation.scoring import (
+from core.domain.correlation import (
     CandidateCorrelationScore,
     score_candidate_correlation,
 )

@@ -4,7 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
-from core.domain.correlation.scoring import (
+from core.domain.correlation import (
     TopologyNode,
     metric_to_time_series,
     rank_upstream_candidates,

@@ -12,7 +12,7 @@ import pytest
 
 pytestmark = pytest.mark.synthetic
 
-from core.domain.alerts.alert_source import ALERT_SOURCE_TO_SEED_TOOL_SOURCES
+from core.domain.alerts import ALERT_SOURCE_TO_SEED_TOOL_SOURCES
 from tools.TempoTool import query_tempo
 
 

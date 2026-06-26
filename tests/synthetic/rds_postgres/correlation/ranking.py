@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.domain.correlation.scoring import (
+from core.domain.correlation import (
     rank_upstream_candidates,
 )
 

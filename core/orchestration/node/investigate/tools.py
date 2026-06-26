@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.domain.alerts.alert_source import (
+from core.domain.alerts import (
     ALERT_SOURCE_TO_SEED_TOOL_SOURCES,
     resolve_alert_source,
 )

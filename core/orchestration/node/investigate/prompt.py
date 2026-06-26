@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from core.domain.alerts.alert_source import (
+from core.domain.alerts import (
     ALERT_SOURCE_TO_TOOL_SOURCES,
     SECONDARY_TOOL_SOURCES,
     relevant_sources_for_alert,
     resolve_alert_source,
 )
-from core.domain.state.diagnosis import root_cause_category_instruction_for_source
+from core.domain.diagnosis import root_cause_category_instruction_for_source
 
 _INVESTIGATION_SYSTEM = """You are Tracer, an AI SRE performing a live production incident investigation.
 

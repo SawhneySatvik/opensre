@@ -3,20 +3,21 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, TypedDict, cast
+from typing import Any, cast
 
 from pydantic import BaseModel
 
-from core.domain.alerts.alert_source import resolve_alert_source
-from core.domain.state import InvestigationState
-from core.domain.state.diagnosis import (
+from core.domain.alerts import resolve_alert_source
+from core.domain.diagnosis import (
     InvestigationResult,
+    build_diagnosis_extraction_prompt,
     build_diagnosis_schema,
-    build_investigation_result,
-    extract_last_assistant_text,
+    investigation_result_from_schema,
+    resolve_diagnosis_from_messages,
     result_to_state,
     taxonomy_categories_for_alert_source,
 )
+from core.domain.state import InvestigationState
 
 logger = logging.getLogger(__name__)
 
@@ -27,20 +28,17 @@ def parse_diagnosis(
     alert_name: str = "",
     alert_source: str = "",
 ) -> InvestigationResult:
-    """Parse the agent's final response into a structured InvestigationResult.
-
-    Uses structured output to extract root_cause, claims, remediation, etc.
-    Falls back to parse_root_cause() if structured output fails.
-    """
-    last_text = extract_last_assistant_text(messages)
-    if not last_text:
-        return InvestigationResult.unknown(alert_name)
-
-    try:
-        return _parse_via_structured_output(last_text, evidence, alert_source=alert_source)
-    except Exception as err:
-        logger.warning("Structured diagnosis parse failed, falling back: %s", err)
-        return _parse_via_legacy(last_text, evidence, alert_name, alert_source=alert_source)
+    """Parse the agent's final response into a structured InvestigationResult."""
+    return resolve_diagnosis_from_messages(
+        messages,
+        alert_name=alert_name,
+        structured_parse=lambda last_text: _parse_via_structured_output(
+            last_text, evidence, alert_source=alert_source
+        ),
+        legacy_parse=lambda last_text: _parse_via_legacy(
+            last_text, evidence, alert_name, alert_source=alert_source
+        ),
+    )
 
 
 def diagnose(state: InvestigationState) -> dict[str, Any]:
@@ -99,22 +97,7 @@ def _parse_via_structured_output(
 ) -> InvestigationResult:
     from services import get_llm_for_reasoning
 
-    prompt = f"""Extract the structured diagnosis from this investigation conclusion.
-
-Investigation conclusion:
-{last_text}
-
-Evidence keys collected: {", ".join(evidence.keys()) if evidence else "none"}
-"""
-
-    class _DiagnosisPayload(TypedDict):
-        root_cause: str
-        root_cause_category: str
-        causal_chain: list[str]
-        validated_claims: list[str]
-        non_validated_claims: list[str]
-        remediation_steps: list[str]
-        validity_score: float
+    prompt = build_diagnosis_extraction_prompt(last_text, evidence)
 
     llm = get_llm_for_reasoning()
     schema_model = build_diagnosis_schema(taxonomy_categories_for_alert_source(alert_source))
@@ -126,18 +109,9 @@ Evidence keys collected: {", ".join(evidence.keys()) if evidence else "none"}
     schema_instance = (
         raw_schema if isinstance(raw_schema, BaseModel) else schema_model.model_validate(raw_schema)
     )
-    schema = cast(_DiagnosisPayload, schema_instance.model_dump())
+    schema = cast(dict[str, Any], schema_instance.model_dump())
 
-    return build_investigation_result(
-        root_cause=schema["root_cause"],
-        root_cause_category=schema["root_cause_category"],
-        causal_chain=schema["causal_chain"],
-        validated_claims=schema["validated_claims"],
-        non_validated_claims=schema["non_validated_claims"],
-        remediation_steps=schema["remediation_steps"],
-        validity_score=schema["validity_score"],
-        alert_source=alert_source,
-    )
+    return investigation_result_from_schema(schema, alert_source=alert_source)
 
 
 def _parse_via_legacy(
@@ -151,14 +125,16 @@ def _parse_via_legacy(
 
     try:
         rr = parse_root_cause(last_text)
-        return build_investigation_result(
-            root_cause=rr.root_cause,
-            root_cause_category=rr.root_cause_category,
-            causal_chain=rr.causal_chain,
-            validated_claims=rr.validated_claims,
-            non_validated_claims=rr.non_validated_claims,
-            remediation_steps=rr.remediation_steps,
-            validity_score=0.5,
+        return investigation_result_from_schema(
+            {
+                "root_cause": rr.root_cause,
+                "root_cause_category": rr.root_cause_category,
+                "causal_chain": rr.causal_chain,
+                "validated_claims": rr.validated_claims,
+                "non_validated_claims": rr.non_validated_claims,
+                "remediation_steps": rr.remediation_steps,
+                "validity_score": 0.5,
+            },
             alert_source=alert_source,
         )
     except Exception as err:

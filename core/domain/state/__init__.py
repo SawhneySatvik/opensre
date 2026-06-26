@@ -1,12 +1,12 @@
 """Agent and investigation state contracts owned by ``core``."""
 
+from core.domain.diagnosis import InvestigationResult, result_to_state
 from core.domain.state.agent_state import (
     AgentState,
     AgentStateModel,
     InvestigationState,
     model_default_payload,
 )
-from core.domain.state.diagnosis import InvestigationResult, result_to_state
 from core.domain.state.evidence import EvidenceEntry
 from core.domain.state.factory import make_agent_incident_state, make_chat_state, make_initial_state
 from core.domain.state.runtime_slices import (

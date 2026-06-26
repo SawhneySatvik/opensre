@@ -7,7 +7,7 @@ import logging
 import time
 from typing import Any, cast
 
-from core.domain.alerts.extraction import (
+from core.domain.alerts import (
     AlertDetails,
     enrich_raw_alert,
     fallback_details,

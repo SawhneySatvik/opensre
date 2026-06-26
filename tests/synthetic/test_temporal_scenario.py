@@ -27,10 +27,10 @@ from typing import Any
 import httpx
 import pytest
 
-from core.domain.alerts.alert_source import (
+from core.domain.alerts import (
     ALERT_SOURCE_TO_SEED_TOOL_SOURCES as _SEEDING_MAP,
 )
-from core.domain.alerts.alert_source import (
+from core.domain.alerts import (
     ALERT_SOURCE_TO_TOOL_SOURCES as _PROMPT_MAP,
 )
 from services.temporal import TemporalClient, TemporalConfig

@@ -32,7 +32,7 @@ from cli.interactive_shell.error_handling.exception_reporting import report_exce
 from cli.interactive_shell.runtime.session import ReplSession
 from cli.interactive_shell.ui import DIM
 from cli.interactive_shell.ui.output.tool_details import tool_short_label, tool_source_label
-from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
+from core.domain.alerts import SECONDARY_TOOL_SOURCES
 
 # Keep the gathering loop short: this runs inline on a REPL turn, so it must stay
 # responsive. A handful of iterations is enough to fetch the data needed to

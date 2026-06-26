@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.domain.alerts.extraction import (
+from core.domain.alerts import (
     fallback_details,
     needs_full_json_prompt,
 )

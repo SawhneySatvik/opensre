@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from core.domain.correlation.scoring import (
+from core.domain.correlation import (
     TopologyCorrelation,
     TopologyNode,
     score_topology_adjacency,

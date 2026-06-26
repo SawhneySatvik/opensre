@@ -4,12 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from tools.SREGuidanceTool.knowledge_base import (
-    get_sre_guidance as _get_sre_guidance,
-)
-from tools.SREGuidanceTool.knowledge_base import (
-    get_topics_for_keywords,
-)
+from core.domain.sre_guidance import get_sre_guidance as _get_sre_guidance
+from core.domain.sre_guidance import get_topics_for_keywords
 from tools.tool_decorator import tool
 
 

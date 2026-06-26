@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from core.domain.alerts.tool_planning import (
+from core.domain.alerts import (
     metadata_matches_for_alert,
     score_tools,
 )

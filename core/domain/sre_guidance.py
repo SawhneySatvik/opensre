@@ -1,9 +1,11 @@
-"""SRE knowledge base with indexed content from Google SRE books.
+"""SRE knowledge lookup for pipeline incident investigation.
 
 Source: Google SRE Book and Workbook - Data Processing Pipelines chapters
 - https://sre.google/sre-book/data-processing-pipelines/
 - https://sre.google/workbook/data-processing/
 """
+
+from __future__ import annotations
 
 from dataclasses import dataclass
 
