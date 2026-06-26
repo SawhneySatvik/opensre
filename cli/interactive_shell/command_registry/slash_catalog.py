@@ -306,6 +306,16 @@ _MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
         "Toggle verbose logging in the REPL. on | off.",
         "User asks to enable or disable verbose logging",
     ),
+    "/verify": _mcp(
+        "Run connectivity checks on configured integrations. "
+        "Bare /verify checks all; pass a service name to verify one.",
+        "User asks to verify integrations or check if a named integration is reachable",
+        "User asks to verify one integration by name (e.g. datadog, telegram)",
+        anti_examples=(
+            "User asks for full agent and LLM health (use /health)",
+            "User asks to show integration config details (use /integrations show)",
+        ),
+    ),
     "/version": _mcp(
         "Print OpenSRE version, Python version, and OS information.",
         "User asks for version information",

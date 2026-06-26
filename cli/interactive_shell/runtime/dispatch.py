@@ -60,6 +60,7 @@ _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
         # CPR responses land as literal keystrokes in the incoming prompt buffer.
         "/doctor",
         "/version",
+        "/verify",
         "/status",
         "/cost",
         "/tasks",

@@ -81,6 +81,9 @@ def test_dispatch_needs_exclusive_stdin_for_bare_integration_menu(
     assert loop_dispatch.dispatch_needs_exclusive_stdin("/integrations list", session) is False
     assert loop_dispatch.dispatch_needs_exclusive_stdin("/theme blue", session) is True
     assert loop_dispatch.dispatch_needs_exclusive_stdin("integrations list", session) is False
+    assert loop_dispatch.dispatch_needs_exclusive_stdin("/verify", session) is True
+    assert loop_dispatch.dispatch_needs_exclusive_stdin("verify", session) is True
+    assert loop_dispatch.dispatch_needs_exclusive_stdin("/verify datadog", session) is False
 
 
 def test_dispatch_needs_exclusive_stdin_false_for_investigate_with_target(

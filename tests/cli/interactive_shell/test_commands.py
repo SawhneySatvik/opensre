@@ -516,6 +516,63 @@ class TestIntegrationsCommand:
         dispatch_slash("/integrations verify", ReplSession(), console)
         assert "all integrations ok" in buf.getvalue()
 
+    def test_verify_via_slash_command(self, monkeypatch: object) -> None:
+        self._patch(monkeypatch)
+        console, buf = _capture()
+        dispatch_slash("/verify", ReplSession(), console)
+        assert "need attention" in buf.getvalue()
+
+    def test_verify_one_service_via_slash_command(self, monkeypatch: object) -> None:
+        verified: list[str] = []
+
+        def _verify_one(service: str) -> dict[str, str]:
+            verified.append(service)
+            return {
+                "service": service,
+                "source": "env",
+                "status": "ok",
+                "detail": "ok",
+            }
+
+        monkeypatch.setattr(
+            "integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            ("datadog",),
+        )
+        monkeypatch.setattr(repl_data_module, "verify_integration", _verify_one)
+        console, buf = _capture()
+        dispatch_slash("/verify datadog", ReplSession(), console)
+        assert verified == ["datadog"]
+        assert "datadog ok" in buf.getvalue()
+
+    def test_verify_unsupported_service(self, monkeypatch: object) -> None:
+        monkeypatch.setattr(
+            "integrations.registry.SUPPORTED_VERIFY_SERVICES",
+            ("datadog",),
+        )
+        session = ReplSession()
+        console, buf = _capture()
+        dispatch_slash("/verify not_a_real_service", session, console)
+        assert "unsupported verify target" in buf.getvalue()
+        assert session.history[-1]["ok"] is False
+
+    def test_verify_one_service_via_integrations(self, monkeypatch: object) -> None:
+        verified: list[str] = []
+
+        def _verify_one(service: str) -> dict[str, str]:
+            verified.append(service)
+            return {
+                "service": service,
+                "source": "env",
+                "status": "ok",
+                "detail": "ok",
+            }
+
+        monkeypatch.setattr(repl_data_module, "verify_integration", _verify_one)
+        console, buf = _capture()
+        dispatch_slash("/integrations verify datadog", ReplSession(), console)
+        assert verified == ["datadog"]
+        assert "datadog ok" in buf.getvalue()
+
     def test_show_known_service(self, monkeypatch: object) -> None:
         verified: list[str | None] = []
 
