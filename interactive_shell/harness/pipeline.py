@@ -14,11 +14,11 @@ from rich.console import Console
 from rich.markup import escape
 
 from config.llm_reasoning_effort import apply_reasoning_effort
-from interactive_shell.harness.orchestration.command_dispatch import (
-    deterministic_command_text,
-)
 from interactive_shell.harness.orchestration.agent_actions import (
     TerminalActionExecutionResult,
+)
+from interactive_shell.harness.orchestration.command_dispatch import (
+    deterministic_command_text,
 )
 from interactive_shell.runtime.session import ReplSession
 from interactive_shell.ui import DIM, ERROR

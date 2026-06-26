@@ -11,10 +11,10 @@ import interactive_shell.harness.orchestration.agent_actions as _agent_actions
 from interactive_shell.chat import cli_agent as _cli_agent
 from interactive_shell.chat.tool_gathering import gather_tool_evidence
 from interactive_shell.command_registry import dispatch_slash
+from interactive_shell.harness.domain.types import RouteDecision
 from interactive_shell.harness.pipeline import (
     handle_message_with_agent,
 )
-from interactive_shell.harness.domain.types import RouteDecision
 from interactive_shell.runtime.session import ReplSession
 from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
 from platform.analytics.events import Event
