@@ -16,11 +16,11 @@ from typing import Literal, assert_never
 from rich.console import Console
 
 from config.llm_reasoning_effort import apply_reasoning_effort
-from interactive_shell.harness.agent_context import AgentContext
+from context.agent_context import AgentContext
+from context.session import ReplSession
+from context.state import MutableAgentState
 from interactive_shell.harness.events import AgentEvent, AgentEventSink
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.response import generate_response
-from interactive_shell.harness.state import ConversationState
 from interactive_shell.harness.tool_calling import run_tool_calling_turn
 from interactive_shell.runtime.core.confirmation import DispatchCancelled
 from interactive_shell.runtime.core.turn_accounting import (
@@ -112,7 +112,7 @@ class ShellTurnAgent:
             self.subscribe(event_sink)
 
     @property
-    def state(self) -> ConversationState:
+    def state(self) -> MutableAgentState:
         """Return the shell-owned conversational state for this session."""
         return self.session.agent
 

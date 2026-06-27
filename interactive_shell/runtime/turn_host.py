@@ -12,6 +12,7 @@ from typing import Any
 
 from rich.console import Console
 
+from context.session import ReplSession
 from interactive_shell.harness.agent import ShellTurnAgent
 from interactive_shell.harness.events import (
     AgentEvent,
@@ -19,7 +20,6 @@ from interactive_shell.harness.events import (
     AgentEventType,
     AsyncAgentEventSink,
 )
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.agent_presentation import ConsoleAgentEventSink
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.confirmation import (

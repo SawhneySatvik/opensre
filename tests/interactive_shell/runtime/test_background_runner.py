@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.session import ReplSession
 from interactive_shell.runtime.background.runner import drain_background_notices
 
 

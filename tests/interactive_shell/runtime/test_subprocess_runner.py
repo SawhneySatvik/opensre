@@ -12,8 +12,8 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
+from context.session import ReplSession
 from integrations.llm_cli.base import CLIInvocation, CLIProbe
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.subprocess_runner import (
     _MIN_SUBPROCESS_TERMINAL_WIDTH,
     _TASK_OUTPUT_PREFIX_WIDTH,

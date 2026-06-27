@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rich.console import Console
 
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.session import ReplSession
 from interactive_shell.runtime.core.prompt_manager import PromptManager
 from interactive_shell.runtime.core.state import ReplState
 from interactive_shell.runtime.input.events import (

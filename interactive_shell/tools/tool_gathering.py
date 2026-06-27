@@ -28,13 +28,13 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
-from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
-from interactive_shell.harness.llm_context.conversation_history import (
+from context.conversation_history import (
     MAX_CONVERSATION_MESSAGES,
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
 )
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.session import ReplSession
+from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
 from interactive_shell.ui import DIM
 from interactive_shell.ui.output.tool_details import tool_short_label, tool_source_label
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -162,7 +162,7 @@ def _persist_tool_calls(session: ReplSession, executed: list[tuple[Any, Any]]) -
     are redacted and bounded before writing; failures are swallowed so logging
     never breaks the turn.
     """
-    from interactive_shell.harness.llm_context.session import default_session_storage
+    from context.session import default_session_storage
     from platform.observability.tool_trace import redact_sensitive
 
     storage = default_session_storage()

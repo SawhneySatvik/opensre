@@ -11,9 +11,9 @@ from contextlib import contextmanager
 from rich.console import Console
 
 from config.repl_config import ReplConfig
+from context.session import create_repl_runtime_context
 from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.controller import InteractiveShellController
-from interactive_shell.harness.llm_context.session import create_repl_runtime_context
 from interactive_shell.runtime.startup.first_launch_github import require_startup_github_login
 from interactive_shell.runtime.startup.initial_input import run_initial_input
 from interactive_shell.ui import DIM, render_banner

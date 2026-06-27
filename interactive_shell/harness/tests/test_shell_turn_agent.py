@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
+from context.session import ReplSession
 from interactive_shell.harness.agent import ShellTurnAgent
 from interactive_shell.harness.events import AgentEvent
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.core.confirmation import DispatchCancelled
 from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
 

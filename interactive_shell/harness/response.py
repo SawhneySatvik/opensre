@@ -16,11 +16,11 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
+from context.agent_context import AgentContext
+from context.assistant_prompt import build_cli_agent_prompt
 from integrations.llm_cli.errors import CLITimeoutError
 from interactive_shell.harness.action_exec import _execute_action_plan
 from interactive_shell.harness.action_plan import _parse_action_plan
-from interactive_shell.harness.agent_context import AgentContext
-from interactive_shell.harness.llm_context.assistant_prompt import build_cli_agent_prompt
 from interactive_shell.runtime import ReplSession
 from interactive_shell.runtime.agent_presentation import render_json_like_response
 from interactive_shell.runtime.core.token_accounting import build_llm_run_info

@@ -20,8 +20,8 @@ from rich.console import Console
 from rich.markdown import Markdown
 from rich.markup import escape
 
+from context.session import ReplSession
 from interactive_shell.harness.events import AgentEvent, AsyncAgentEventSink
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.core.state import SpinnerState
 from interactive_shell.runtime.utils.input_policy import turn_should_show_spinner
 from interactive_shell.ui import (

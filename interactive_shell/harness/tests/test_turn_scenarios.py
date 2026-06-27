@@ -11,13 +11,13 @@ from typing import Any, NotRequired, TypedDict, cast
 import pytest
 from rich.console import Console
 
-from core.runtime import Agent, AgentTool, AgentToolContext
-from core.runtime.llm.agent_llm_client import ToolCall
-from interactive_shell.command_registry import SLASH_COMMANDS
-from interactive_shell.harness.llm_context import (
+from context import (
     build_action_system_prompt,
     build_action_user_message,
 )
+from core.runtime import Agent, AgentTool, AgentToolContext
+from core.runtime.llm.agent_llm_client import ToolCall
+from interactive_shell.command_registry import SLASH_COMMANDS
 from interactive_shell.harness.tests._ci_gates import (
     skip_or_fail,
 )
@@ -378,7 +378,7 @@ def _assert_live_action_planning_once(case: ScenarioCase) -> None:
     from core.runtime.llm import agent_llm_client
 
     llm = agent_llm_client.get_agent_llm()
-    from interactive_shell.harness.agent_context import AgentContext
+    from context.agent_context import AgentContext
 
     result = Agent(
         llm=llm,

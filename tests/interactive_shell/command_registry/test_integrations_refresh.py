@@ -14,8 +14,8 @@ from typing import Any
 
 from rich.console import Console
 
+from context.session import ReplSession
 from interactive_shell.command_registry import integrations as _integrations
-from interactive_shell.harness.llm_context.session import ReplSession
 
 
 def _console() -> Console:

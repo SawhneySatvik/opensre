@@ -18,7 +18,7 @@ import core.orchestration.node.investigate.tools as investigate_tools
 import core.runtime as runtime_module
 import core.runtime.agent as runtime_agent_module
 import core.runtime.llm.agent_llm_client as agent_llm_client
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.session import ReplSession
 from interactive_shell.tools.tool_gathering import (
     _format_gathering_progress_line,
     _resolve_gather_integrations,

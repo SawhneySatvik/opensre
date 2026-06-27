@@ -10,7 +10,7 @@ from prompt_toolkit.application import Application
 from prompt_toolkit.formatted_text import ANSI
 from rich.console import Console
 
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.session import ReplSession
 from interactive_shell.runtime.core.state import (
     PROMPT_REFRESH_INTERVAL_S,
     ReplState,

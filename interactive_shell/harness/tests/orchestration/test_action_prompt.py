@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.agent_context import AgentContext
-from interactive_shell.harness.llm_context import (
+from context import (
     SYSTEM_PROMPT_BASE,
     build_action_system_prompt,
     connected_integrations_block,
     recent_conversation_block,
 )
-from interactive_shell.harness.llm_context.conversation_history import NO_HISTORY_PLACEHOLDER
-from interactive_shell.harness.llm_context.models import coerce_messages
+from context.agent_context import AgentContext
+from context.conversation_history import NO_HISTORY_PLACEHOLDER
+from context.models import coerce_messages
 
 
 def _ctx(

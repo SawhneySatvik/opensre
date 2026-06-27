@@ -14,21 +14,21 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
 
-from core.runtime.agent import Agent
-from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from integrations.llm_cli.failure_explain import is_context_length_overflow
-from interactive_shell.harness.agent_context import AgentContext
-from interactive_shell.harness.llm_context import (
+from context import (
     build_action_system_prompt,
     build_action_user_message,
 )
-from interactive_shell.harness.llm_context.session import ReplSession
+from context.agent_context import AgentContext
+from context.session import ReplSession
+from core.runtime.agent import Agent
+from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
+from integrations.llm_cli.failure_explain import is_context_length_overflow
 from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
@@ -198,8 +198,20 @@ def run_tool_calling_turn(
         user_message = build_action_user_message(message)
         effective_ctx = agent_ctx or AgentContext.from_session(message, session)
         system_prompt = build_action_system_prompt(effective_ctx)
+    action_ctx = replace(
+        effective_ctx
+        if bang_command is None
+        else agent_ctx or AgentContext.from_session(message, session),
+        text=user_message,
+        system_prompt=system_prompt,
+        available_tools=tuple(tools),
+        active_tools=tuple(tools),
+        resolved_integrations={},
+        max_iterations=_MAX_TOOL_CALLING_ITERATIONS,
+    )
 
     try:
+        session.agent.begin_run()
         result = Agent(
             llm=llm_factory(),
             system=system_prompt,
@@ -207,7 +219,7 @@ def run_tool_calling_turn(
             resolved_integrations={},
             max_iterations=_MAX_TOOL_CALLING_ITERATIONS,
             on_event=observer,
-        ).run([{"role": "user", "content": user_message}])
+        ).run(agent_context=action_ctx)
     except Exception as exc:
         if is_context_length_overflow(str(exc)):
             log.debug("shell action prompt overflow; falling through to assistant", exc_info=True)
@@ -221,6 +233,9 @@ def run_tool_calling_turn(
         return ToolCallingTurnResult(
             0, 0, 0, True, True, response_text=error_text, accounting_status="not_run"
         )
+    finally:
+        if session.agent.run_status == "running":
+            session.agent.end_run()
 
     executed_entries = [
         item

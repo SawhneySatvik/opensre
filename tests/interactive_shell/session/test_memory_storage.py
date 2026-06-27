@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.llm_context.session import InMemorySessionStorage, ReplSession
+from context.session import InMemorySessionStorage, ReplSession
 
 
 def _session(storage: InMemorySessionStorage) -> ReplSession:

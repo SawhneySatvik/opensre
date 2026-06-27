@@ -7,6 +7,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from context.agent_context import AgentContext
 from core.runtime.context_budget import (
     context_budget_ceiling_for_model,
     enforce_context_budget,
@@ -78,22 +79,40 @@ class Agent[RuntimeToolT: RuntimeTool]:
         self._max_iterations = max_iterations
         self._on_event = on_event
 
-    def run(self, initial_messages: list[dict[str, Any]]) -> AgentRunResult:
+    def run(
+        self,
+        initial_messages: list[dict[str, Any]] | None = None,
+        *,
+        agent_context: AgentContext | None = None,
+    ) -> AgentRunResult:
         """Run the think → call-tools → observe loop and return its outcome."""
-        messages = list(initial_messages)
-        runtime_tools = list(self._filter_tools(self._tools))
+        if agent_context is not None:
+            agent_context.validate_runtime_request()
+            messages = agent_context.runtime_messages()
+            system = agent_context.system_prompt
+            tools = list(agent_context.active_tools)
+            resolved = agent_context.resolved_integrations
+            max_iterations = agent_context.max_iterations
+        elif initial_messages is not None:
+            messages = list(initial_messages)
+            system = self._system
+            tools = list(self._tools)
+            resolved = self._resolved
+            max_iterations = self._max_iterations
+        else:
+            raise ValueError("Agent.run requires initial_messages or agent_context.")
+
+        runtime_tools = list(self._filter_tools(tools))
         tool_schemas = self._llm.tool_schemas(runtime_tools)
         ceiling = context_budget_ceiling_for_model(getattr(self._llm, "_model", None))
         executed: list[tuple[ToolCall, Any]] = []
         final_text = ""
         hit_cap = True
 
-        for iteration in range(self._max_iterations):
+        for iteration in range(max_iterations):
             self._emit("llm_start", {"iteration": iteration})
-            enforce_context_budget(
-                messages, system=self._system, tools=tool_schemas, ceiling=ceiling
-            )
-            response = self._llm.invoke(messages, system=self._system, tools=tool_schemas)
+            enforce_context_budget(messages, system=system, tools=tool_schemas, ceiling=ceiling)
+            response = self._llm.invoke(messages, system=system, tools=tool_schemas)
             messages.append(build_assistant_message(self._llm, response))
 
             if not response.has_tool_calls:
@@ -120,7 +139,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                     {"id": tc.id, "name": tc.name, "input": public_tool_input(tc.input)},
                 )
 
-            results = execute_tools(response.tool_calls, runtime_tools, self._resolved)
+            results = execute_tools(response.tool_calls, runtime_tools, resolved)
             messages.extend(build_tool_result_messages(self._llm, response.tool_calls, results))
 
             for tc, output in zip(response.tool_calls, results):

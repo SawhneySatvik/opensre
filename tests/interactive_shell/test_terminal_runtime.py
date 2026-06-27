@@ -20,8 +20,8 @@ from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 
+from context.session import ReplSession
 from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.core import confirmation as controller_runtime
 from interactive_shell.runtime.core import state as loop_state
 from interactive_shell.runtime.core import turn_detection as loop_turn_detection

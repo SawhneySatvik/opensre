@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from interactive_shell.harness.llm_context.grounding import agents_md_reference
-from interactive_shell.harness.llm_context.grounding._cache import excerpt
-from interactive_shell.harness.llm_context.grounding.agents_md_reference import (
+from context.grounding import agents_md_reference
+from context.grounding._cache import excerpt
+from context.grounding.agents_md_reference import (
     AgentsMdFile,
     AgentsMdReference,
 )

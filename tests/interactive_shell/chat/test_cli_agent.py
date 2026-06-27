@@ -18,23 +18,23 @@ from typing import Any
 
 from rich.console import Console
 
+from context import assistant_prompt
+from context.assistant_prompt import (
+    build_assistant_system_prompt,
+    build_environment_block,
+    build_observation_block,
+)
+from context.rules import (
+    ACTION_RULE,
+    CLI_ASSISTANT_MARKDOWN_RULE,
+    INTERACTIVE_SHELL_TERMINOLOGY_RULE,
+)
+from context.session import ReplSession
 from interactive_shell.harness import response as response_module
 from interactive_shell.harness.action_plan import (
     ActionPlanAction,
     _parse_action_plan,
 )
-from interactive_shell.harness.llm_context import assistant_prompt
-from interactive_shell.harness.llm_context.assistant_prompt import (
-    build_assistant_system_prompt,
-    build_environment_block,
-    build_observation_block,
-)
-from interactive_shell.harness.llm_context.rules import (
-    ACTION_RULE,
-    CLI_ASSISTANT_MARKDOWN_RULE,
-    INTERACTIVE_SHELL_TERMINOLOGY_RULE,
-)
-from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.response import generate_response
 
 

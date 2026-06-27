@@ -9,12 +9,12 @@ from prompt_toolkit import PromptSession
 from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
-from core.domain.alerts import inbox as _alert_inbox
-from interactive_shell.harness.llm_context.session import (
+from context.session import (
     ReplRuntimeContext,
     ReplSession,
     create_repl_runtime_context,
 )
+from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.prompt_manager import PromptManager
 from interactive_shell.runtime.core.state import (
