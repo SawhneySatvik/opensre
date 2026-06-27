@@ -1,4 +1,4 @@
-"""Sample alert action tool."""
+"""Sample alert tool."""
 
 from __future__ import annotations
 
@@ -6,18 +6,15 @@ from collections.abc import Callable
 from typing import Any
 
 from rich.console import Console
-from rich.markup import escape
 
 from interactive_shell.runtime import ReplSession
-from interactive_shell.tools.shared import plan_foreground_tool
+from interactive_shell.tools.shared.investigation_launch import launch_investigation
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
     object_schema,
     string_property,
 )
-from interactive_shell.ui.execution_confirm import execution_allowed
-from interactive_shell.ui.foreground_investigation import run_foreground_investigation
 from platform.common.task_types import TaskRecord
 
 _SAMPLE_ALERT_TEMPLATES = ("generic",)
@@ -32,23 +29,16 @@ def run_sample_alert(
     is_tty: bool | None = None,
     action_already_listed: bool = False,
 ) -> None:
-    from cli.investigation import run_sample_alert_for_session
+    def _run(task: TaskRecord) -> dict[str, object]:
+        from cli.investigation import run_sample_alert_for_session
 
-    plan = plan_foreground_tool("sample_alert", "investigation_launch")
-    if not execution_allowed(
-        plan.policy,
-        session=session,
-        console=console,
-        action_summary=f"sample alert investigation ({template_name})",
-        confirm_fn=confirm_fn,
-        is_tty=is_tty,
-        action_already_listed=action_already_listed,
-    ):
-        session.record("alert", f"sample:{template_name}", ok=False)
-        return
+        return run_sample_alert_for_session(
+            template_name=template_name,
+            context_overrides=session.accumulated_context or None,
+            cancel_requested=task.cancel_requested,
+        )
 
-    console.print(f"[bold]sample alert:[/bold] {escape(template_name)}")
-    if session.background_mode_enabled:
+    def _start_background() -> None:
         from interactive_shell.runtime.background.runner import (
             start_background_template_investigation,
         )
@@ -59,33 +49,26 @@ def run_sample_alert(
             console=console,
             display_command=f"sample alert:{template_name}",
         )
-        session.record("alert", f"sample:{template_name}")
-        return
 
-    def _run(task: TaskRecord) -> dict[str, object]:
-        return run_sample_alert_for_session(
-            template_name=template_name,
-            context_overrides=session.accumulated_context or None,
-            cancel_requested=task.cancel_requested,
-        )
-
-    if (
-        run_foreground_investigation(
-            session=session,
-            console=console,
-            task_command=f"sample alert:{template_name}",
-            run=_run,
-            exception_context="interactive_shell.sample_alert",
-        )
-        is None
-    ):
-        session.record("alert", f"sample:{template_name}", ok=False)
-        return
-
-    session.record("alert", f"sample:{template_name}")
+    launch_investigation(
+        session=session,
+        console=console,
+        tool_type="sample_alert",
+        action_summary=f"sample alert investigation ({template_name})",
+        announce_label="sample alert",
+        announce_value=template_name,
+        record_value=f"sample:{template_name}",
+        foreground_task_command=f"sample alert:{template_name}",
+        exception_context="interactive_shell.sample_alert",
+        run=_run,
+        start_background=_start_background,
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+        action_already_listed=action_already_listed,
+    )
 
 
-def execute_sample_alert_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_sample_alert_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     template = str(args.get("template", "")).strip()
     if not template:
         return False
@@ -121,8 +104,8 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("template",),
     ),
-    execute=execute_sample_alert_action,
+    execute=execute_sample_alert_tool,
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_sample_alert_action", "run_sample_alert"]
+__all__ = ["TOOL_ENTRY", "execute_sample_alert_tool", "run_sample_alert"]

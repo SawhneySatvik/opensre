@@ -30,7 +30,7 @@ def _ask_result() -> ExecutionPolicyResult:
     """An explicit ``ask`` verdict (the default policy no longer emits these)."""
     return ExecutionPolicyResult(
         verdict="ask",
-        action_type="slash",
+        tool_type="slash",
         reason="this command may change configuration or run heavy work",
     )
 
@@ -41,7 +41,7 @@ def _ask_result() -> ExecutionPolicyResult:
 def test_allow_tool_is_allow() -> None:
     r = allow_tool("slash")
     assert r.verdict == "allow"
-    assert r.action_type == "slash"
+    assert r.tool_type == "slash"
     assert r.reason is None
 
 
@@ -49,7 +49,7 @@ def test_allow_tool_carries_arbitrary_tool_type() -> None:
     for tool_type in ("investigation", "sample_alert", "synthetic_test", "code_agent"):
         r = allow_tool(tool_type)
         assert r.verdict == "allow"
-        assert r.action_type == tool_type
+        assert r.tool_type == tool_type
 
 
 # --- plan_foreground_tool ---------------------------------------------------
@@ -58,7 +58,7 @@ def test_allow_tool_carries_arbitrary_tool_type() -> None:
 def test_plan_foreground_tool_defaults_classification_to_tool_type() -> None:
     plan = plan_foreground_tool("slash")
     assert isinstance(plan, ToolExecutionPlan)
-    assert plan.action_type == "slash"
+    assert plan.tool_type == "slash"
     assert plan.classification == "slash"
     assert plan.execution_mode is ToolExecutionMode.FOREGROUND
     assert plan.policy.verdict == "allow"
@@ -66,7 +66,7 @@ def test_plan_foreground_tool_defaults_classification_to_tool_type() -> None:
 
 def test_plan_foreground_tool_accepts_explicit_classification() -> None:
     plan = plan_foreground_tool("investigation", "investigation_launch")
-    assert plan.action_type == "investigation"
+    assert plan.tool_type == "investigation"
     assert plan.classification == "investigation_launch"
     assert plan.execution_mode is ToolExecutionMode.FOREGROUND
     assert plan.policy.verdict == "allow"
@@ -84,7 +84,7 @@ def test_resolve_allow_verdict_proceeds() -> None:
 def test_resolve_deny_verdict_blocks() -> None:
     result = ExecutionPolicyResult(
         verdict="deny",
-        action_type="shell",
+        tool_type="shell",
         reason="empty command.",
         hint="Enter a command to run.",
     )

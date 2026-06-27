@@ -14,7 +14,7 @@ import pytest
 from rich.console import Console
 
 import config.constants.platform as platform_module
-import interactive_shell.harness.agent_actions as agent_actions
+import interactive_shell.harness.controller as agent_actions
 import interactive_shell.runtime.subprocess_runner as subprocess_runner
 import interactive_shell.tools.implementation_tool as implementation_tool
 import interactive_shell.tools.llm_provider_tool as llm_provider_tool
@@ -30,12 +30,12 @@ from interactive_shell.harness.tests.orchestration.action_execution_test_harness
 )
 from interactive_shell.session import ReplSession
 from interactive_shell.tools.tool_registry import (
-    ACTION_KIND_TO_TOOL,
-    ActionKind,
+    TOOL_KIND_TO_NAME,
+    ToolKind,
 )
 from platform.common.task_types import TaskKind, TaskStatus
 
-_ACTION_LLM_FACTORY_PATCH = "interactive_shell.harness.agent_actions._default_llm_factory"
+_ACTION_LLM_FACTORY_PATCH = "interactive_shell.harness.controller._default_llm_factory"
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -44,7 +44,7 @@ def _capture() -> tuple[Console, io.StringIO]:
 
 
 def _action(
-    kind: ActionKind,
+    kind: ToolKind,
     content: str,
     position: int = 0,
     *,
@@ -97,7 +97,7 @@ def _response_from_actions(actions: list[PlannedAction]) -> AgentLLMResponse:
         tool_calls=[
             ToolCall(
                 id=f"call_{index}",
-                name=ACTION_KIND_TO_TOOL[action.kind],
+                name=TOOL_KIND_TO_NAME[action.kind],
                 input=_tool_args_for_action(action),
             )
             for index, action in enumerate(actions)

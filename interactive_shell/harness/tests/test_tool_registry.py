@@ -13,8 +13,8 @@ from interactive_shell.tools.tool_contracts import (
     ToolContext,
 )
 from interactive_shell.tools.tool_registry import (
-    ACTION_KIND_TO_TOOL,
     REGISTRY,
+    TOOL_KIND_TO_NAME,
 )
 
 # OpenAI's Chat Completions API rejects any tool name that does not match
@@ -26,7 +26,7 @@ _OPENAI_TOOL_NAME_RE = re.compile(r"^[a-zA-Z0-9_-]+$")
 
 
 def test_action_kind_mapping_targets_registered_tools() -> None:
-    for tool_name in ACTION_KIND_TO_TOOL.values():
+    for tool_name in TOOL_KIND_TO_NAME.values():
         assert REGISTRY.get(tool_name) is not None
 
 
@@ -43,9 +43,9 @@ def test_action_kind_to_tool_names_are_openai_compatible() -> None:
     """Guard against the dotted-name regression that broke all 56 live
     planner scenarios on OpenAI-style providers (HTTP 400 on
     ``tools[0].function.name``)."""
-    for kind, tool_name in ACTION_KIND_TO_TOOL.items():
+    for kind, tool_name in TOOL_KIND_TO_NAME.items():
         assert _OPENAI_TOOL_NAME_RE.match(tool_name), (
-            f"ACTION_KIND_TO_TOOL[{kind!r}] = {tool_name!r} must match "
+            f"TOOL_KIND_TO_NAME[{kind!r}] = {tool_name!r} must match "
             f"OpenAI's tool-name pattern ^[a-zA-Z0-9_-]+$"
         )
 

@@ -23,7 +23,7 @@ def _ask_result() -> ExecutionPolicyResult:
     """An explicit ``ask`` verdict (the default policy no longer emits these)."""
     return ExecutionPolicyResult(
         verdict="ask",
-        action_type="slash",
+        tool_type="slash",
         reason="this command may change configuration or run heavy work",
     )
 
@@ -74,7 +74,7 @@ def test_deny_verdict_blocks() -> None:
     # the execution_allowed deny path.
     r = ExecutionPolicyResult(
         verdict="deny",
-        action_type="shell",
+        tool_type="shell",
         reason="empty command.",
         hint="Enter a command to run.",
     )

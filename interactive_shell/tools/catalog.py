@@ -1,4 +1,4 @@
-"""Central tool catalog for interactive-shell action execution."""
+"""Central tool catalog for interactive-shell tool execution."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from . import (
 )
 
 # One explicit composition root for tool ordering and availability.
-ACTION_TOOL_CATALOG: tuple[ToolEntry, ...] = (
+TOOL_CATALOG: tuple[ToolEntry, ...] = (
     slash_tool.TOOL_ENTRY,
     shell_tool.TOOL_ENTRY,
     investigation_tool.TOOL_ENTRY,
@@ -34,4 +34,4 @@ ACTION_TOOL_CATALOG: tuple[ToolEntry, ...] = (
 )
 
 
-__all__ = ["ACTION_TOOL_CATALOG"]
+__all__ = ["TOOL_CATALOG"]

@@ -1,4 +1,4 @@
-"""Shell execution action tool."""
+"""Shell execution tool."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from interactive_shell.tools.tool_contracts import (
 )
 
 
-def execute_shell_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_shell_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     command = str(args.get("command", "")).strip()
     if not command:
         return False
@@ -51,9 +51,9 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("command",),
     ),
-    execute=execute_shell_action,
+    execute=execute_shell_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "shell_commands"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_shell_action"]
+__all__ = ["TOOL_ENTRY", "execute_shell_tool"]

@@ -92,10 +92,11 @@ class ReplSession:
     last_assistant_intent: str | None = None
     """Intent label set by the runtime after each handled turn.
 
-    Values: "slash", "cli_help", "investigation", "follow_up",
-    "cli_agent_handled" (actions executed), "cli_agent_denied" (fail-closed),
-    "cli_agent_handoff" (assistant-handoff only), "cli_agent_fallback"
-    (no plan, fell through to LLM chat).
+    Values: "slash", "cli_help", "investigation", "follow_up", and the three
+    shell action-agent turn paths: "cli_agent_summarized" (a successful action's
+    discovery output was summarized into an answer), "cli_agent_handled" (the
+    action fully handled the turn; no LLM answer), and "cli_agent_fallback"
+    (nothing handled, gathered evidence and answered via LLM chat).
     """
 
     configured_integrations: tuple[str, ...] = ()

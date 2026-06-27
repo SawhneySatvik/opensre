@@ -15,9 +15,9 @@ from interactive_shell.harness.tests.scenario_loader import (
     validate_action_shape,
 )
 from interactive_shell.tools.tool_registry import (
-    ACTION_KIND_TO_TOOL,
     REGISTRY,
-    ActionKind,
+    TOOL_KIND_TO_NAME,
+    ToolKind,
 )
 
 TESTS_DIR = Path(__file__).resolve().parent
@@ -126,7 +126,7 @@ def test_scenario_action_kinds_have_registered_tools() -> None:
                 continue
             if kind == "assistant_handoff":
                 continue
-            tool_name = ACTION_KIND_TO_TOOL.get(cast(ActionKind, kind))
+            tool_name = TOOL_KIND_TO_NAME.get(cast(ToolKind, kind))
             if tool_name is None:
                 missing.append(f"{case.scenario.id}: kind {kind!r} has no tool mapping")
                 continue

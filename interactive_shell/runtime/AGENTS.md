@@ -73,7 +73,11 @@ The interactive runtime must keep this shape:
 3. `InteractiveShellController.start_interactive_shell` owns prompt lifecycle,
    submitted input handling, queued-turn consumption, and per-turn task
    scheduling.
-4. `InteractiveShellController._run_queued_turn` performs the one-turn shell pipeline handoff.
+4. The module-level `interactive_shell.controller.run_agent_turn_queue` runs each turn via an
+   injected `run_turn` callable, which in production is `AgentTurnRunner.run_agent_turn` (shell
+   presentation: console, spinner, recorder, progress scope). `AgentTurnRunner.run_agent_turn`
+   delegates to `._run_loop` (dispatch state + lifecycle phases via `AgentEvent` emissions),
+   which performs the one-turn shell pipeline handoff through `._execute_agent_turn`.
 
 Do not invert this dependency direction.
 
@@ -83,8 +87,10 @@ Do not invert this dependency direction.
 flowchart TD
   runRepl["interactive_shell.entrypoint.run_repl"] --> replMain["interactive_shell.entrypoint.repl_main"]
   replMain --> controller["interactive_shell.controller.InteractiveShellController"]
-  controller --> executeTurn["controller._run_queued_turn"]
-  executeTurn --> sideEffects["slash/help/agent/follow-up/investigation side effects"]
+  controller --> shellTurn["AgentTurnRunner.run_agent_turn"]
+  shellTurn --> executeTurn["AgentTurnRunner._run_loop"]
+  executeTurn --> dispatchTurn["AgentTurnRunner._execute_agent_turn"]
+  dispatchTurn --> sideEffects["slash/help/agent/follow-up/investigation side effects"]
   controller --> replState["core.state.ReplState"]
   controller --> spinnerState["core.state.SpinnerState"]
   controller --> inputReader["input.PromptInputReader"]
@@ -106,8 +112,14 @@ flowchart TD
 ## Turn execution rules
 
 - Do not reintroduce `dispatch.py` or any compatibility-only forwarding module.
-- `InteractiveShellController._run_queued_turn` owns turn telemetry and the handoff into
-  `handle_message_with_agent`.
+- The turn execution is layered inside `AgentTurnRunner` in `controller.py`:
+  `.run_agent_turn` owns shell presentation (StreamingConsole, spinner, recorder, progress scope)
+  and constructs a private `ConsoleAgentEventSink`; `._run_loop` owns dispatch state and emits
+  `AgentEvent` objects; `._execute_agent_turn` owns the `handle_message_with_agent` handoff.
+  The module-level `interactive_shell.controller.run_agent_turn_queue` takes an injected
+  `run_turn` callable (production: `AgentTurnRunner.run_agent_turn`). Keep terminal side effects
+  (spinner, prompt suppression, `console.print`, CPR drain) in `ConsoleAgentEventSink`, not in
+  `._run_loop`.
 - Put cancel/confirm/correction text classifiers in `core/turn_detection.py`.
 - Put stdin blocking and spinner decisions in `utils/input_policy.py`.
 - Keep prompt-mediated confirmation waiting in `controller.py`.
@@ -117,8 +129,10 @@ flowchart TD
 - `../controller.py` owns:
   - `InteractiveShellController`
   - `start_interactive_shell` shell lifecycle orchestration
-  - `_run_prompt_loop` — read and handle user input until exit
-  - `_run_turn_queue_loop` — consume queued turns until exit
+  - `run_input_loop` (module-level) — read and handle user input until exit
+  - `run_agent_turn_queue` (module-level) — consume queued turns until exit (runs an injected `run_turn`)
+  - `AgentTurnRunner` — one turn: shell presentation (`.run_agent_turn`), lifecycle (`._run_loop`), harness invocation (`._execute_agent_turn`)
+  - `ConsoleAgentEventSink` (private by export surface) — terminal presentation for agent lifecycle events
   - prompt input acceptance until exit
   - submitted prompt rendering and cancel/confirm/queue handling
   - queued turn consumption

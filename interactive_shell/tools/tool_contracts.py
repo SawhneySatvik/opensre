@@ -1,4 +1,4 @@
-"""Shared tool contracts and schema helpers for action orchestration."""
+"""Shared tool contracts and schema helpers for tool orchestration."""
 
 from __future__ import annotations
 
@@ -22,7 +22,11 @@ class ToolContext:
     console: Console
     confirm_fn: Callable[[str], str] | None = None
     is_tty: bool | None = None
-    action_already_listed: bool = True
+    # Defaults False to match ``execution_allowed`` and the ``run_*`` helpers:
+    # nothing has been listed yet, so the confirmation UX should show the action
+    # summary. The action-agent turn dispatcher (``execute_cli_actions``) passes
+    # ``action_already_listed=True`` explicitly because it prints a numbered plan.
+    action_already_listed: bool = False
 
 
 def _tool_is_available(_session: ReplSession) -> bool:
@@ -48,7 +52,7 @@ class ToolEntry:
         return self.input_schema
 
     def to_agent_tool(self, ctx: ToolContext) -> AgentTool:
-        """Bind this shell action tool to a REPL turn context."""
+        """Bind this shell tool to a REPL turn context."""
 
         def _execute(args: dict[str, Any], _agent_ctx: AgentToolContext) -> dict[str, Any]:
             if getattr(ctx.console, "cancel_requested", False):

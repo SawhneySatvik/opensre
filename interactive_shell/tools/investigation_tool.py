@@ -1,4 +1,4 @@
-"""Investigation action tool."""
+"""Investigation tool."""
 
 from __future__ import annotations
 
@@ -6,18 +6,15 @@ from collections.abc import Callable
 from typing import Any
 
 from rich.console import Console
-from rich.markup import escape
 
 from interactive_shell.runtime import ReplSession
-from interactive_shell.tools.shared import plan_foreground_tool
+from interactive_shell.tools.shared.investigation_launch import launch_investigation
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
     object_schema,
     string_property,
 )
-from interactive_shell.ui.execution_confirm import execution_allowed
-from interactive_shell.ui.foreground_investigation import run_foreground_investigation
 from platform.common.task_types import TaskRecord
 
 
@@ -30,23 +27,16 @@ def run_text_investigation(
     is_tty: bool | None = None,
     action_already_listed: bool = False,
 ) -> None:
-    from cli.investigation import run_investigation_for_session
+    def _run(task: TaskRecord) -> dict[str, object]:
+        from cli.investigation import run_investigation_for_session
 
-    plan = plan_foreground_tool("investigation", "investigation_launch")
-    if not execution_allowed(
-        plan.policy,
-        session=session,
-        console=console,
-        action_summary=f'investigation from text "{alert_text}"',
-        confirm_fn=confirm_fn,
-        is_tty=is_tty,
-        action_already_listed=action_already_listed,
-    ):
-        session.record("alert", alert_text, ok=False)
-        return
+        return run_investigation_for_session(
+            alert_text=alert_text,
+            context_overrides=session.accumulated_context or None,
+            cancel_requested=task.cancel_requested,
+        )
 
-    console.print(f"[bold]investigation:[/bold] {escape(alert_text)}")
-    if session.background_mode_enabled:
+    def _start_background() -> None:
         from interactive_shell.runtime.background.runner import (
             start_background_text_investigation,
         )
@@ -57,33 +47,26 @@ def run_text_investigation(
             console=console,
             display_command="background free-text investigation",
         )
-        session.record("alert", alert_text)
-        return
 
-    def _run(task: TaskRecord) -> dict[str, object]:
-        return run_investigation_for_session(
-            alert_text=alert_text,
-            context_overrides=session.accumulated_context or None,
-            cancel_requested=task.cancel_requested,
-        )
-
-    if (
-        run_foreground_investigation(
-            session=session,
-            console=console,
-            task_command=f"investigate:{alert_text}",
-            run=_run,
-            exception_context="interactive_shell.text_investigation",
-        )
-        is None
-    ):
-        session.record("alert", alert_text, ok=False)
-        return
-
-    session.record("alert", alert_text)
+    launch_investigation(
+        session=session,
+        console=console,
+        tool_type="investigation",
+        action_summary=f'investigation from text "{alert_text}"',
+        announce_label="investigation",
+        announce_value=alert_text,
+        record_value=alert_text,
+        foreground_task_command=f"investigate:{alert_text}",
+        exception_context="interactive_shell.text_investigation",
+        run=_run,
+        start_background=_start_background,
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+        action_already_listed=action_already_listed,
+    )
 
 
-def execute_investigation_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_investigation_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     alert_text = str(args.get("alert_text", "")).strip()
     if not alert_text:
         return False
@@ -121,8 +104,8 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("alert_text",),
     ),
-    execute=execute_investigation_action,
+    execute=execute_investigation_tool,
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_investigation_action", "run_text_investigation"]
+__all__ = ["TOOL_ENTRY", "execute_investigation_tool", "run_text_investigation"]

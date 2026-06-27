@@ -20,7 +20,7 @@ from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 
-from interactive_shell import controller as controller_runtime
+from interactive_shell.harness import controller as controller_runtime
 from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
 from interactive_shell.runtime.core import state as loop_state
 from interactive_shell.runtime.core import turn_detection as loop_turn_detection
@@ -1194,7 +1194,7 @@ class TestRequestConfirmationViaPrompt:
         """
         state = loop_state.ReplState()
         # Active dispatch must have a cancel event parked; in production
-        # ``InteractiveShellController._run_queued_turn`` allocates this before invoking the
+        # ``interactive_shell.harness.controller.AgentTurnRunner.run_agent_turn`` allocates this before invoking the
         # confirm_fn. Never set in this test.
         state.current_cancel_event = threading.Event()
 
@@ -1446,7 +1446,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
 
         policy = ExecutionPolicyResult(
             verdict="ask",
-            action_type="opensre_cli",
+            tool_type="opensre_cli",
             reason="this opensre subcommand may change local config or infrastructure",
         )
 
@@ -1485,7 +1485,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
 
         policy = ExecutionPolicyResult(
             verdict="ask",
-            action_type="opensre_cli",
+            tool_type="opensre_cli",
             reason="this opensre subcommand may change local config or infrastructure",
         )
 

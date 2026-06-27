@@ -12,10 +12,10 @@ from interactive_shell.tools.tool_contracts import (
 )
 
 
-def execute_assistant_handoff_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_assistant_handoff_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     _ = args
     _ = ctx
-    # Handoff actions are informational planning outputs and intentionally
+    # Handoffs are informational planning outputs and intentionally
     # execute no terminal side effects.
     return True
 
@@ -41,8 +41,8 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("content",),
     ),
-    execute=execute_assistant_handoff_action,
+    execute=execute_assistant_handoff_tool,
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_assistant_handoff_action"]
+__all__ = ["TOOL_ENTRY", "execute_assistant_handoff_tool"]

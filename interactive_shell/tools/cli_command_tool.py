@@ -1,4 +1,4 @@
-"""CLI command action tool."""
+"""CLI command tool."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from interactive_shell.tools.tool_contracts import (
 )
 
 
-def execute_cli_command_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_cli_command_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     payload = str(args.get("payload", "")).strip()
     if not payload:
         return False
@@ -50,9 +50,9 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("payload",),
     ),
-    execute=execute_cli_command_action,
+    execute=execute_cli_command_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "cli_commands"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_cli_command_action"]
+__all__ = ["TOOL_ENTRY", "execute_cli_command_tool"]

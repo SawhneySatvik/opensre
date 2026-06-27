@@ -1,4 +1,4 @@
-"""Slash command action tool."""
+"""Slash command tool."""
 
 from __future__ import annotations
 
@@ -52,7 +52,7 @@ def _slash_drives_interactive_picker(name: str, slash_args: list[str]) -> bool:
     return (name, slash_args[0].lower()) in _INTERACTIVE_PICKER_SUBCOMMANDS
 
 
-def execute_slash_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_slash_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     command = str(args.get("command", "")).strip()
     raw_args = args.get("args")
     parsed_args = [str(item).strip() for item in raw_args] if isinstance(raw_args, list) else []
@@ -122,9 +122,9 @@ TOOL_ENTRY = ToolEntry(
     name="slash_invoke",
     description=slash_invoke_tool_description(),
     input_schema=slash_invoke_input_schema(),
-    execute=execute_slash_action,
+    execute=execute_slash_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "slash_commands"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_slash_action"]
+__all__ = ["TOOL_ENTRY", "execute_slash_tool"]

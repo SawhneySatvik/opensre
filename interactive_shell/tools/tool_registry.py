@@ -1,4 +1,4 @@
-"""Registry for interactive-shell action tools."""
+"""Registry for interactive-shell tools."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from interactive_shell.tools.tool_contracts import (
     ToolEntry,
 )
 
-ActionKind = Literal[
+ToolKind = Literal[
     "llm_provider",
     "slash",
     "shell",
@@ -26,7 +26,7 @@ ActionKind = Literal[
 ]
 
 
-class ActionToolRegistry:
+class ToolRegistry:
     def __init__(self) -> None:
         self._tools: dict[str, ToolEntry] = {}
 
@@ -77,7 +77,7 @@ class ActionToolRegistry:
 # failed for every OpenAI-style provider (OpenAI, OpenRouter, Gemini,
 # Nvidia, Minimax, Ollama). See ``test_tool_names_are_openai_compatible``
 # in ``test_tool_registry.py`` for the gate that prevents regressions.
-ACTION_KIND_TO_TOOL: dict[ActionKind, str] = {
+TOOL_KIND_TO_NAME: dict[ToolKind, str] = {
     "llm_provider": "llm_set_provider",
     "slash": "slash_invoke",
     "shell": "shell_run",
@@ -90,22 +90,22 @@ ACTION_KIND_TO_TOOL: dict[ActionKind, str] = {
     "assistant_handoff": "assistant_handoff",
 }
 
-REGISTRY = ActionToolRegistry()
+REGISTRY = ToolRegistry()
 
 
 @functools.cache
-def register_action_tools() -> tuple[str, ...]:
-    """Explicitly register all action tools from the composition root."""
+def register_tools() -> tuple[str, ...]:
+    """Explicitly register all tools from the composition root."""
     from interactive_shell.tools.catalog import (
-        ACTION_TOOL_CATALOG,
+        TOOL_CATALOG,
     )
 
-    for entry in ACTION_TOOL_CATALOG:
+    for entry in TOOL_CATALOG:
         if not isinstance(entry, ToolEntry):
-            msg = f"action tool entry must be ToolEntry, got {type(entry)!r}"
+            msg = f"tool entry must be ToolEntry, got {type(entry)!r}"
             raise TypeError(msg)
         REGISTRY.register(entry)
     return REGISTRY.names()
 
 
-register_action_tools()
+register_tools()

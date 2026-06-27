@@ -61,7 +61,7 @@ def test_interactive_picker_command_is_deferred_to_exclusive_stdin(
     dispatched = _record_dispatch(monkeypatch)
 
     ctx, buf, session = _ctx()
-    handled = slash_tool.execute_slash_action({"command": command, "args": args}, ctx)
+    handled = slash_tool.execute_slash_tool({"command": command, "args": args}, ctx)
 
     assert handled is True
     assert dispatched == []  # not run inline against the live prompt
@@ -78,7 +78,7 @@ def test_interactive_picker_runs_inline_when_not_a_tty(
     dispatched = _record_dispatch(monkeypatch)
 
     ctx, _buf, session = _ctx()
-    slash_tool.execute_slash_action({"command": "/integrations", "args": ["remove", "github"]}, ctx)
+    slash_tool.execute_slash_tool({"command": "/integrations", "args": ["remove", "github"]}, ctx)
 
     assert dispatched == ["/integrations remove github"]
     assert session.pending_prompt_default is None
@@ -104,7 +104,7 @@ def test_non_picker_slash_commands_run_inline_even_in_a_tty(
     dispatched = _record_dispatch(monkeypatch)
 
     ctx, _buf, session = _ctx()
-    slash_tool.execute_slash_action({"command": command, "args": args}, ctx)
+    slash_tool.execute_slash_tool({"command": command, "args": args}, ctx)
 
     expected = " ".join([command, *args]) if args else command
     assert dispatched == [expected]

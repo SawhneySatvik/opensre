@@ -53,7 +53,7 @@ class ExecutionPolicyResult:
     """Result of evaluating whether a tool may run."""
 
     verdict: ExecutionVerdict
-    action_type: str
+    tool_type: str
     reason: str | None
     hint: str | None = None
     shell_classification: str | None = None
@@ -63,7 +63,7 @@ class ExecutionPolicyResult:
 class ToolExecutionPlan:
     """Unified execution plan contract shared across tool executors."""
 
-    action_type: str
+    tool_type: str
     classification: str
     execution_mode: ToolExecutionMode
     policy: ExecutionPolicyResult
@@ -153,7 +153,7 @@ def allow_tool(tool_type: str) -> ExecutionPolicyResult:
     so every caller resolves to ``allow``. ``tool_type`` is carried through for
     analytics and confirmation UX.
     """
-    return ExecutionPolicyResult(verdict="allow", action_type=tool_type, reason=None)
+    return ExecutionPolicyResult(verdict="allow", tool_type=tool_type, reason=None)
 
 
 def plan_foreground_tool(
@@ -162,7 +162,7 @@ def plan_foreground_tool(
 ) -> ToolExecutionPlan:
     """Build a FOREGROUND execution plan around a default-allow verdict."""
     return ToolExecutionPlan(
-        action_type=tool_type,
+        tool_type=tool_type,
         classification=classification or tool_type,
         execution_mode=ToolExecutionMode.FOREGROUND,
         policy=allow_tool(tool_type),

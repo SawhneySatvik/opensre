@@ -12,7 +12,7 @@ from interactive_shell.tools.shell.policy import evaluate_shell_command
 def test_read_only_shell_is_allow() -> None:
     r = evaluate_shell_command("pwd")
     assert r.verdict == "allow"
-    assert r.action_type == "shell"
+    assert r.tool_type == "shell"
 
 
 def test_restricted_shell_is_allow() -> None:

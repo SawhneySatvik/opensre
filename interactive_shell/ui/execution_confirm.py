@@ -44,7 +44,7 @@ DEFAULT_CONFIRM_FN: Callable[[str], str] = _default_confirm_fn
 
 def _emit_decision(
     *,
-    action_type: str,
+    tool_type: str,
     policy_verdict: ExecutionVerdict,
     outcome: str,
     trust_mode: bool,
@@ -52,7 +52,7 @@ def _emit_decision(
     user_prompted: bool = False,
 ) -> None:
     props: Properties = {
-        "action_type": action_type,
+        "tool_type": tool_type,
         "policy_verdict": policy_verdict,
         "outcome": outcome,
         "trust_mode": trust_mode,
@@ -87,7 +87,7 @@ def execution_allowed(
 
     if plan.outcome == ConfirmationOutcome.DENY:
         _emit_decision(
-            action_type=result.action_type,
+            tool_type=result.tool_type,
             policy_verdict=result.verdict,
             outcome=plan.analytics_outcome or "blocked",
             trust_mode=trust_mode,
@@ -100,7 +100,7 @@ def execution_allowed(
 
     if plan.outcome == ConfirmationOutcome.ALLOW:
         _emit_decision(
-            action_type=result.action_type,
+            tool_type=result.tool_type,
             policy_verdict=result.verdict,
             outcome=plan.analytics_outcome or "allowed",
             trust_mode=trust_mode,
@@ -110,7 +110,7 @@ def execution_allowed(
 
     if plan.outcome == ConfirmationOutcome.BLOCK_NON_TTY:
         _emit_decision(
-            action_type=result.action_type,
+            tool_type=result.tool_type,
             policy_verdict=result.verdict,
             outcome=plan.analytics_outcome or "blocked",
             trust_mode=trust_mode,
@@ -137,7 +137,7 @@ def execution_allowed(
     answer = confirm("Proceed? [Y/n] ").strip().lower()
     if answer not in {"", "y", "yes"}:
         _emit_decision(
-            action_type=result.action_type,
+            tool_type=result.tool_type,
             policy_verdict=result.verdict,
             outcome="aborted",
             trust_mode=trust_mode,
@@ -148,7 +148,7 @@ def execution_allowed(
         return False
 
     _emit_decision(
-        action_type=result.action_type,
+        tool_type=result.tool_type,
         policy_verdict=result.verdict,
         outcome="allowed",
         trust_mode=trust_mode,

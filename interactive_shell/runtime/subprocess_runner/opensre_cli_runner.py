@@ -201,7 +201,7 @@ def _to_tool_execution_plan(plan: OpensreExecutionPlan) -> ToolExecutionPlan:
     if not plan.requires_confirmation:
         policy = ExecutionPolicyResult(
             verdict="allow",
-            action_type="cli_command",
+            tool_type="cli_command",
             reason=None,
             hint=None,
             shell_classification=plan.classification.value,
@@ -209,13 +209,13 @@ def _to_tool_execution_plan(plan: OpensreExecutionPlan) -> ToolExecutionPlan:
     else:
         policy = ExecutionPolicyResult(
             verdict="ask",
-            action_type="cli_command",
+            tool_type="cli_command",
             reason=plan.confirmation_reason,
             hint="Use a read-only subcommand (health, version, list, status, show)",
             shell_classification=plan.classification.value,
         )
     return ToolExecutionPlan(
-        action_type="cli_command",
+        tool_type="cli_command",
         classification=plan.classification.value,
         execution_mode=mode,
         policy=policy,

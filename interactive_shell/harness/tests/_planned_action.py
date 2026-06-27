@@ -5,13 +5,13 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Literal
 
-from interactive_shell.tools.tool_registry import ActionKind
+from interactive_shell.tools.tool_registry import ToolKind
 
 ActionSource = Literal["deterministic", "llm"]
 TargetSurface = Literal["slash", "terminal", "investigation", "implementation"]
 
 
-def default_target_surface(kind: ActionKind) -> TargetSurface | None:
+def default_target_surface(kind: ToolKind) -> TargetSurface | None:
     """Return the canonical execution surface for a given action kind."""
     if kind == "assistant_handoff":
         return None
@@ -28,7 +28,7 @@ def default_target_surface(kind: ActionKind) -> TargetSurface | None:
 class PlannedAction:
     """A structured action inferred from a natural-language terminal request."""
 
-    kind: ActionKind
+    kind: ToolKind
     content: str
     position: int
     source: ActionSource = "deterministic"

@@ -38,9 +38,9 @@ from interactive_shell.harness.tests.scenario_loader import (
 )
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import (
-    ACTION_KIND_TO_TOOL,
     REGISTRY,
-    ActionKind,
+    TOOL_KIND_TO_NAME,
+    ToolKind,
 )
 
 
@@ -59,7 +59,7 @@ class ExpectedAction(TypedDict):
 
 _ALL_CASES = load_all_scenarios()
 _LIVE_CASES = iter_scenarios_for_shard(_ALL_CASES)
-_TOOL_TO_ACTION_KIND = {tool: kind for kind, tool in ACTION_KIND_TO_TOOL.items()}
+_NAME_TO_TOOL_KIND = {tool: kind for kind, tool in TOOL_KIND_TO_NAME.items()}
 _LIVE_PLANNING_MAX_ITERATIONS = 3
 
 
@@ -95,11 +95,11 @@ def _skip_if_live_integrations_unavailable(case: ScenarioCase) -> None:
 
 
 def _build_actual_action(action: ToolCall) -> ExpectedAction:
-    kind = _TOOL_TO_ACTION_KIND.get(action.name)
+    kind = _NAME_TO_TOOL_KIND.get(action.name)
     if kind is None:
         msg = f"Unexpected action tool call: {action.name!r}"
         raise AssertionError(msg)
-    typed_kind = cast(ActionKind, kind)
+    typed_kind = cast(ToolKind, kind)
     content = _content_from_tool_call(typed_kind, action.input)
     expected: ExpectedAction = {
         "kind": typed_kind,
@@ -160,7 +160,7 @@ def _planning_probe_tool(tool: AgentTool) -> AgentTool:
     )
 
 
-def _content_from_tool_call(kind: ActionKind, args: dict[str, object]) -> str:
+def _content_from_tool_call(kind: ToolKind, args: dict[str, object]) -> str:
     if kind == "slash":
         command = str(args.get("command", "")).strip()
         raw_args = args.get("args", [])

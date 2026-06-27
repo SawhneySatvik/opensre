@@ -1,4 +1,4 @@
-"""Synthetic test action tool."""
+"""Synthetic test tool."""
 
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def list_rds_postgres_scenarios() -> tuple[str, ...]:
     )
 
 
-def execute_synthetic_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_synthetic_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     suite = str(args.get("suite", "")).strip()
     scenario = str(args.get("scenario", "")).strip()
     if not suite or not scenario:
@@ -87,9 +87,9 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("suite", "scenario"),
     ),
-    execute=execute_synthetic_action,
+    execute=execute_synthetic_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "synthetic_suites"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_synthetic_action", "list_rds_postgres_scenarios"]
+__all__ = ["TOOL_ENTRY", "execute_synthetic_tool", "list_rds_postgres_scenarios"]

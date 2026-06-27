@@ -1,4 +1,4 @@
-"""Implementation action tool."""
+"""Implementation tool."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from interactive_shell.tools.tool_contracts import (
 )
 
 
-def execute_implementation_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_implementation_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     task = str(args.get("task", "")).strip()
     if not task:
         return False
@@ -43,9 +43,9 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("task",),
     ),
-    execute=execute_implementation_action,
+    execute=execute_implementation_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "implementation"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_implementation_action"]
+__all__ = ["TOOL_ENTRY", "execute_implementation_tool"]

@@ -1,4 +1,4 @@
-"""LLM provider switch action tool."""
+"""LLM provider switch tool."""
 
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ def _apply_model_set_target(target: str, ctx: ToolContext) -> bool:
     return switch_reasoning_model(candidate, ctx.console)
 
 
-def execute_llm_provider_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_llm_provider_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     target = str(args.get("target", args.get("provider", ""))).strip()
     if not target:
         return False
@@ -76,9 +76,9 @@ TOOL_ENTRY = ToolEntry(
         properties={"target": _target_property_schema()},
         required=("target",),
     ),
-    execute=execute_llm_provider_action,
+    execute=execute_llm_provider_tool,
     is_available=lambda session: capability_not_explicitly_disabled(session, "llm_provider"),
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_llm_provider_action"]
+__all__ = ["TOOL_ENTRY", "execute_llm_provider_tool"]

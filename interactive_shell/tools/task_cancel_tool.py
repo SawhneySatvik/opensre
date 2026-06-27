@@ -1,4 +1,4 @@
-"""Task cancellation action tool."""
+"""Task cancellation tool."""
 
 from __future__ import annotations
 
@@ -65,7 +65,7 @@ def _resolve_task_cancel_target(ctx: ToolContext, target: str) -> str | None:
     return str(candidates[0].task_id)
 
 
-def execute_task_cancel_action(args: dict[str, Any], ctx: ToolContext) -> bool:
+def execute_task_cancel_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     target = str(args.get("target", "")).strip()
     if not target:
         return False
@@ -116,8 +116,8 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("target",),
     ),
-    execute=execute_task_cancel_action,
+    execute=execute_task_cancel_tool,
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_task_cancel_action"]
+__all__ = ["TOOL_ENTRY", "execute_task_cancel_tool"]

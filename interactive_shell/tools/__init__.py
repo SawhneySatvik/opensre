@@ -1,4 +1,4 @@
-"""Interactive-shell action tools.
+"""Interactive-shell tools.
 
 Import tool submodules explicitly (for example
 ``interactive_shell.tools.slash_tool`` or ``interactive_shell.tools.catalog``)

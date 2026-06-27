@@ -91,7 +91,7 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   primitives in turn tests.
 - Do **not** stub or monkeypatch the LLM client path in turn tests.
 - Harness contract tests must exercise the real turn-execution stack
-  (`InteractiveShellController._run_queued_turn` / initial-input replay ->
+  (`interactive_shell.controller.AgentTurnRunner.run_agent_turn` / initial-input replay ->
   `handle_message_with_agent`) and rely on curated
   prompts instead of synthetic mocked return values.
 

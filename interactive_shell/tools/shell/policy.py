@@ -33,7 +33,7 @@ def evaluate_shell_from_parsed(parsed: ParsedShellCommand) -> ExecutionPolicyRes
     if parsed.parse_error is not None:
         return ExecutionPolicyResult(
             verdict="deny",
-            action_type="shell",
+            tool_type="shell",
             reason=parsed.parse_error,
             hint="Enter a command to run.",
             shell_classification="unrestricted",
@@ -41,7 +41,7 @@ def evaluate_shell_from_parsed(parsed: ParsedShellCommand) -> ExecutionPolicyRes
 
     return ExecutionPolicyResult(
         verdict="allow",
-        action_type="shell",
+        tool_type="shell",
         reason=None,
         shell_classification="unrestricted",
     )
@@ -51,7 +51,7 @@ def plan_shell_execution(parsed: ParsedShellCommand) -> ToolExecutionPlan:
     policy = evaluate_shell_from_parsed(parsed)
     classification = policy.shell_classification or "unrestricted"
     return ToolExecutionPlan(
-        action_type="shell",
+        tool_type="shell",
         classification=classification,
         execution_mode=ToolExecutionMode.FOREGROUND,
         policy=policy,
