@@ -9,9 +9,9 @@ from pathlib import Path
 import pytest
 from rich.console import Console
 
+from interactive_shell.harness.agent import ShellTurnAgent
 from interactive_shell.harness.events import AgentEvent
 from interactive_shell.harness.llm_context.session import ReplSession
-from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.confirmation import DispatchCancelled
 from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
 
@@ -68,7 +68,7 @@ def test_shell_turn_agent_emits_interruption_event() -> None:
 
 
 def test_shell_turn_agent_lifecycle_module_does_not_import_core_domain_or_orchestration() -> None:
-    module_path = Path(__file__).parents[1] / "turn.py"
+    module_path = Path(__file__).parents[1] / "agent.py"
     tree = ast.parse(module_path.read_text())
 
     imports: list[str] = []

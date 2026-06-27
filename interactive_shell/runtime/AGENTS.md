@@ -82,7 +82,7 @@ The interactive runtime must keep this shape:
    `spinner`, `invalidate_prompt`) directly; it owns shell presentation
    (console, spinner, recorder, progress scope), dispatch state, cancellation,
    and the thread-safe bridge from shell-agent events to terminal presentation.
-   The persistent shell turn lifecycle lives in `harness/turn.py`
+   The persistent shell turn lifecycle lives in `harness/agent.py`
    (`ShellTurnAgent`), which emits `AgentEvent` objects from
    `harness/events.py`. Terminal presentation for those events lives in
    `runtime/agent_presentation.py` (`AgentPresentationState`,
@@ -140,7 +140,7 @@ flowchart TD
   dispatch state, cancellation, and prompt-mediated confirmation. It constructs
   a `ConsoleAgentEventSink` and subscribes a thread-safe event bridge to
   `ShellTurnAgent`. The shell turn lifecycle and route state live in
-  `harness/turn.py`: `ShellTurnAgent.run_turn` owns turn snapshots, observation
+  `harness/agent.py`: `ShellTurnAgent.run_turn` owns turn snapshots, observation
   reset, action/response routing, accounting finalization, and lifecycle event
   emission. Keep terminal side effects (spinner, prompt suppression,
   `console.print`, CPR drain) in `ConsoleAgentEventSink` — defined in
@@ -153,7 +153,7 @@ flowchart TD
 - Turn accounting is consolidated behind `ShellTurnAccounting` in
   `interactive_shell/turn_accounting.py` (alongside the `ToolCallingTurnResult`
   and `ShellTurnResult` turn data model), invoked from `ShellTurnAgent`
-  in `harness/turn.py`. It owns action-agent analytics, terminal-turn aggregate
+  in `harness/agent.py`. It owns action-agent analytics, terminal-turn aggregate
   telemetry, prompt-recorder flush, conversational-turn persistence, and the final
   assistant-intent stamp. `run_tool_calling_turn` (in `harness/tool_calling.py`)
   returns facts only (`ToolCallingTurnResult` with `accounting_status` of

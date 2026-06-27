@@ -1,10 +1,10 @@
-"""Turn routing for one interactive-shell turn.
+"""Stateful shell agent for interactive-shell turns.
 
 Decides, from the tool-calling action result and any left-over discovery
 observation, which of three paths a turn takes (summarize an observation,
 finish without the LLM, or gather evidence and answer), then performs the
 chosen path's effects. The path choice is the pure :func:`_route_turn`; this
-module is the imperative shell around it.
+module is the shell-owned agent boundary around it.
 """
 
 from __future__ import annotations
@@ -16,12 +16,12 @@ from typing import Literal, assert_never
 from rich.console import Console
 
 from config.llm_reasoning_effort import apply_reasoning_effort
+from interactive_shell.harness.agent_context import AgentContext
 from interactive_shell.harness.events import AgentEvent, AgentEventSink
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.response import generate_response
 from interactive_shell.harness.state import ConversationState
 from interactive_shell.harness.tool_calling import run_tool_calling_turn
-from interactive_shell.harness.turn_context import TurnContext
 from interactive_shell.runtime.core.confirmation import DispatchCancelled
 from interactive_shell.runtime.core.turn_accounting import (
     ShellTurnAccounting,
@@ -64,7 +64,7 @@ def _gather_and_answer(
     response_generator: ResponseGenerator,
     confirm_fn: Callable[[str], str] | None,
     is_tty: bool | None,
-    turn_ctx: TurnContext,
+    agent_ctx: AgentContext,
 ) -> LlmRunInfo | None:
     gathered = gather_evidence(text, session, console, is_tty=is_tty)
 
@@ -80,7 +80,7 @@ def _gather_and_answer(
         confirm_fn=confirm_fn,
         is_tty=is_tty,
         tool_observation=gathered or None,
-        turn_ctx=turn_ctx,
+        agent_ctx=agent_ctx,
         **on_screen,
     )
 
@@ -168,7 +168,7 @@ class ShellTurnAgent:
         # agent and the conversational assistant read from this frozen context
         # so prompts reflect a consistent turn-start view rather than live
         # session state.
-        turn_ctx = TurnContext.from_session(text, self.session)
+        agent_ctx = AgentContext.from_session(text, self.session)
         accounting = ShellTurnAccounting(session=self.session, text=text, recorder=recorder)
 
         # Clear any observation left by a prior turn so only this turn's
@@ -181,7 +181,7 @@ class ShellTurnAgent:
             console,
             confirm_fn=confirm_fn,
             is_tty=is_tty,
-            turn_ctx=turn_ctx,
+            agent_ctx=agent_ctx,
         )
         accounting.record_action_result(action_result)
 
@@ -190,7 +190,7 @@ class ShellTurnAgent:
         route = _route_turn(action_result, observation)
         match route:
             case "summarize_observation":
-                with apply_reasoning_effort(turn_ctx.reasoning_effort):
+                with apply_reasoning_effort(agent_ctx.reasoning_effort):
                     run = self._response_generator(
                         text,
                         self.session,
@@ -198,7 +198,7 @@ class ShellTurnAgent:
                         confirm_fn=confirm_fn,
                         is_tty=is_tty,
                         tool_observation=observation,
-                        turn_ctx=turn_ctx,
+                        agent_ctx=agent_ctx,
                     )
                 result = ShellTurnResult(
                     final_intent="cli_agent_summarized",
@@ -215,7 +215,7 @@ class ShellTurnAgent:
                 )
 
             case "gather_and_answer":
-                with apply_reasoning_effort(turn_ctx.reasoning_effort):
+                with apply_reasoning_effort(agent_ctx.reasoning_effort):
                     run = _gather_and_answer(
                         text=text,
                         session=self.session,
@@ -224,7 +224,7 @@ class ShellTurnAgent:
                         response_generator=self._response_generator,
                         confirm_fn=confirm_fn,
                         is_tty=is_tty,
-                        turn_ctx=turn_ctx,
+                        agent_ctx=agent_ctx,
                     )
                 result = ShellTurnResult(
                     final_intent="cli_agent_fallback",

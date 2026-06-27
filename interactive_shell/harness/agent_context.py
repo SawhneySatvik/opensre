@@ -1,4 +1,4 @@
-"""Per-turn immutable context snapshot for the interactive-shell agent.
+"""Agent-owned per-turn immutable context snapshot.
 
 Assembled once at the start of each turn from the live ``ReplSession``.
 All fields reflect session state at turn-start and do not change while the
@@ -7,8 +7,8 @@ concurrently-mutated object.
 
 Usage::
 
-    turn_ctx = TurnContext.from_session(text, session)
-    # pass turn_ctx to action agent + conversational assistant
+    agent_ctx = AgentContext.from_session(text, session)
+    # pass agent_ctx to action agent + conversational assistant
     # keep passing session for writes (recording history, token usage, etc.)
 """
 
@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 
 
 @dataclass(frozen=True)
-class TurnContext:
+class AgentContext:
     """Immutable per-turn snapshot assembled from ``ReplSession`` at turn start.
 
     Carries everything the action agent and conversational assistant need to
@@ -60,7 +60,7 @@ class TurnContext:
     """Session-scoped reasoning effort preference for LLM calls this turn."""
 
     @classmethod
-    def from_session(cls, text: str, session: ReplSession) -> TurnContext:
+    def from_session(cls, text: str, session: ReplSession) -> AgentContext:
         """Snapshot the relevant session fields for one turn.
 
         Call this once at the top of ``ShellTurnAgent.run_turn`` before any
@@ -83,4 +83,4 @@ class TurnContext:
         )
 
 
-__all__ = ["TurnContext"]
+__all__ = ["AgentContext"]

@@ -19,7 +19,7 @@ should be predictable, interruptible, explainable, and safe by default.
 | --- | --- | --- |
 | `controller.py` | top-level REPL wiring | feature-specific business logic or compatibility-only forwarding |
 | `entrypoint.py` | process/bootstrap boundary for starting the REPL | per-turn dispatch/runtime logic |
-| `turn_accounting.py` | turn-result data model (`ToolCallingTurnResult`, `ShellTurnResult`) and `ShellTurnAccounting` (analytics, telemetry, recorder flush, turn persistence, intent stamp) | turn-flow control (owned by `harness/turn.py`) or tool-calling turn execution (owned by `harness/tool_calling.py`) |
+| `turn_accounting.py` | turn-result data model (`ToolCallingTurnResult`, `ShellTurnResult`) and `ShellTurnAccounting` (analytics, telemetry, recorder flush, turn persistence, intent stamp) | turn-flow control (owned by `harness/agent.py`) or tool-calling turn execution (owned by `harness/tool_calling.py`) |
 | `command_registry/` | slash-command definitions, argument validation, command dispatch | long-running implementation details better placed in services/runtime modules |
 | `session/` | `ReplSession`, runtime context assembly, and session persistence (storage backends + cross-session repo) | UI rendering, prompt text, and runtime task scheduling |
 | `runtime/` | background tasks, lifecycle/`ReplState`, controller/entrypoint support modules (lazily re-exports the `session/` surface for back-compat) | UI rendering, prompt text, and session persistence |

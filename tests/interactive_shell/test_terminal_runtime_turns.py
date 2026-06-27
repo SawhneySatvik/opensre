@@ -8,11 +8,11 @@ import pytest
 from rich.console import Console
 
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
+from interactive_shell.harness.agent import ShellTurnAgent
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )

@@ -12,8 +12,8 @@ import io
 
 from rich.console import Console
 
+from interactive_shell.harness.agent import ShellTurnAgent
 from interactive_shell.harness.llm_context.session import ReplSession
-from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
