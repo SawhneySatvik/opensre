@@ -14,7 +14,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from core.domain.alerts import inbox as _alert_inbox
-from interactive_shell.harness.harness import ShellHarness
+from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.prompt_manager import PromptManager
 from interactive_shell.runtime.core.state import (
@@ -135,7 +135,6 @@ class InteractiveShellController:
         )
         self.background: BackgroundTaskManager | None = None
         self.tasks: list[tuple[str, asyncio.Task[None]]] = []
-        self._harness = ShellHarness(self.session)
 
     async def start_interactive_shell(self) -> None:
         self.session.schedule_warm_resolved_integrations()
@@ -260,8 +259,9 @@ class InteractiveShellController:
             )
             with _bound_cli_session(self.session.session_id), progress_scope:
                 await asyncio.to_thread(
-                    self._harness.handle_turn,
+                    handle_message_with_agent,
                     text,
+                    self.session,
                     console,
                     recorder=recorder,
                     confirm_fn=lambda prompt: request_confirmation_via_prompt(

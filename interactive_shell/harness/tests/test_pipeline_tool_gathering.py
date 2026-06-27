@@ -11,7 +11,7 @@ from rich.console import Console
 from interactive_shell.harness.agent_actions import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.harness.turn_loop import ShellTurnContext, ShellTurnDeps, run_shell_turn
+from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.session import ReplSession
 
 
@@ -42,18 +42,14 @@ def _record_answer() -> tuple[list[dict[str, Any]], Callable[..., None]]:
 def test_gather_string_threads_offscreen_observation() -> None:
     calls, fake_answer = _record_answer()
 
-    run_shell_turn(
-        ShellTurnContext(
-            text="question",
-            session=ReplSession(),
-            console=_console(),
-            recorder=None,
-        ),
-        ShellTurnDeps(
-            execute_actions=_unhandled_turn,
-            gather_evidence=lambda *_a, **_k: "Tool: x\nArguments: {}\nResult: y",
-            answer_agent=fake_answer,
-        ),
+    handle_message_with_agent(
+        "question",
+        ReplSession(),
+        _console(),
+        recorder=None,
+        execute_actions=_unhandled_turn,
+        gather_evidence=lambda *_a, **_k: "Tool: x\nArguments: {}\nResult: y",
+        answer_agent=fake_answer,
     )
 
     assert len(calls) == 1
@@ -64,18 +60,14 @@ def test_gather_string_threads_offscreen_observation() -> None:
 def test_gather_none_passes_through_without_observation() -> None:
     calls, fake_answer = _record_answer()
 
-    run_shell_turn(
-        ShellTurnContext(
-            text="question",
-            session=ReplSession(),
-            console=_console(),
-            recorder=None,
-        ),
-        ShellTurnDeps(
-            execute_actions=_unhandled_turn,
-            gather_evidence=lambda *_a, **_k: None,
-            answer_agent=fake_answer,
-        ),
+    handle_message_with_agent(
+        "question",
+        ReplSession(),
+        _console(),
+        recorder=None,
+        execute_actions=_unhandled_turn,
+        gather_evidence=lambda *_a, **_k: None,
+        answer_agent=fake_answer,
     )
 
     assert len(calls) == 1
@@ -104,18 +96,14 @@ def test_existing_command_observation_skips_gather() -> None:
             handled=True,
         )
 
-    run_shell_turn(
-        ShellTurnContext(
-            text="question",
-            session=ReplSession(),
-            console=_console(),
-            recorder=None,
-        ),
-        ShellTurnDeps(
-            execute_actions=_handled_with_observation,
-            gather_evidence=_should_not_run,
-            answer_agent=fake_answer,
-        ),
+    handle_message_with_agent(
+        "question",
+        ReplSession(),
+        _console(),
+        recorder=None,
+        execute_actions=_handled_with_observation,
+        gather_evidence=_should_not_run,
+        answer_agent=fake_answer,
     )
 
     assert len(calls) == 1
