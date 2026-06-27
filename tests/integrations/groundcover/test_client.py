@@ -17,7 +17,6 @@ from mcp import types
 
 import integrations.groundcover.client as gc_client
 from integrations.config_models import GroundcoverIntegrationConfig
-from integrations.groundcover.client import GroundcoverClient
 
 
 def _config(**overrides: Any) -> GroundcoverIntegrationConfig:
@@ -35,7 +34,7 @@ def _text_result(text: str, *, is_error: bool = False) -> types.CallToolResult:
 
 def _patch_session(
     monkeypatch: pytest.MonkeyPatch,
-    client: GroundcoverClient,
+    client: gc_client.GroundcoverClient,
     *,
     tools: list[str] | None = None,
     results: dict[str, Any] | None = None,
@@ -70,14 +69,14 @@ def _clear_reference_cache() -> None:
 
 
 def test_not_configured_returns_unavailable_without_network() -> None:
-    client = GroundcoverClient(_config(api_key=""))
+    client = gc_client.GroundcoverClient(_config(api_key=""))
     result = client.call_tool("query_logs", {"query": "* | limit 10"})
     assert result.success is False
     assert "not configured" in (result.error or "")
 
 
 def test_call_tool_parses_json_array_payload(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -91,7 +90,7 @@ def test_call_tool_parses_json_array_payload(monkeypatch: pytest.MonkeyPatch) ->
 
 def test_call_tool_keeps_trailing_guidance_as_notes(monkeypatch: pytest.MonkeyPatch) -> None:
     payload = '[{"a":1}]\nResults truncated at 1 rows. Use more specific filters.'
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(monkeypatch, client, results={"query_logs": _text_result(payload)})
     result = client.call_tool("query_logs", {"query": "* | limit 1"})
     assert result.data == [{"a": 1}]
@@ -100,7 +99,7 @@ def test_call_tool_keeps_trailing_guidance_as_notes(monkeypatch: pytest.MonkeyPa
 
 def test_call_tool_error_is_redacted(monkeypatch: pytest.MonkeyPatch) -> None:
     leaky = "auth failed for Bearer tok-secret using tok-secret"
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -114,7 +113,7 @@ def test_call_tool_error_is_redacted(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_get_query_reference_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     calls = {"n": 0}
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
 
     class _FakeSession:
         async def initialize(self) -> None:
@@ -140,7 +139,7 @@ def test_get_query_reference_caches(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_list_workspaces_normalizes(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod"]}]
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -153,12 +152,12 @@ def test_list_workspaces_normalizes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_probe_missing_when_not_configured() -> None:
-    probe = GroundcoverClient(_config(api_key="")).probe_access()
+    probe = gc_client.GroundcoverClient(_config(api_key="")).probe_access()
     assert probe.status == "missing"
 
 
 def test_probe_fails_when_required_tools_absent(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(monkeypatch, client, tools=["query_logs"])
     probe = client.probe_access()
     assert probe.status == "failed"
@@ -166,7 +165,7 @@ def test_probe_fails_when_required_tools_absent(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_probe_fails_when_no_workspaces(monkeypatch: pytest.MonkeyPatch) -> None:
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -183,7 +182,7 @@ def test_probe_reports_tenant_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None
         {"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod"]},
         {"tenant_uuid": "t2", "org_name": "Beta", "backends": ["prod"]},
     ]
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -197,7 +196,7 @@ def test_probe_reports_tenant_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None
 
 def test_probe_reports_backend_ambiguity(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod", "staging"]}]
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,
@@ -211,7 +210,7 @@ def test_probe_reports_backend_ambiguity(monkeypatch: pytest.MonkeyPatch) -> Non
 
 def test_probe_rejects_unknown_configured_tenant(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod"]}]
-    client = GroundcoverClient(_config(tenant_uuid="does-not-exist"))
+    client = gc_client.GroundcoverClient(_config(tenant_uuid="does-not-exist"))
     _patch_session(
         monkeypatch,
         client,
@@ -226,7 +225,7 @@ def test_probe_rejects_unknown_configured_tenant(monkeypatch: pytest.MonkeyPatch
 
 def test_probe_rejects_unknown_configured_backend(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod", "staging"]}]
-    client = GroundcoverClient(_config(tenant_uuid="t1", backend_id="typo"))
+    client = gc_client.GroundcoverClient(_config(tenant_uuid="t1", backend_id="typo"))
     _patch_session(
         monkeypatch,
         client,
@@ -240,7 +239,7 @@ def test_probe_rejects_unknown_configured_backend(monkeypatch: pytest.MonkeyPatc
 
 def test_probe_passes_with_valid_explicit_routing(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod", "staging"]}]
-    client = GroundcoverClient(_config(tenant_uuid="t1", backend_id="prod"))
+    client = gc_client.GroundcoverClient(_config(tenant_uuid="t1", backend_id="prod"))
     _patch_session(
         monkeypatch,
         client,
@@ -253,7 +252,7 @@ def test_probe_passes_with_valid_explicit_routing(monkeypatch: pytest.MonkeyPatc
 
 def test_probe_passes_single_workspace(monkeypatch: pytest.MonkeyPatch) -> None:
     workspaces = [{"tenant_uuid": "t1", "org_name": "Acme", "backends": ["prod"]}]
-    client = GroundcoverClient(_config())
+    client = gc_client.GroundcoverClient(_config())
     _patch_session(
         monkeypatch,
         client,

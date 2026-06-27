@@ -93,6 +93,7 @@ def decide_input_action(
                 text=stripped,
                 wait_until_idle=needs_exclusive_stdin(stripped),
             )
+    raise AssertionError(f"Unhandled input event: {event!r}")
 
 
 __all__ = [

@@ -15,7 +15,8 @@ class _PromptSpinner(Protocol):
     bytes_in: int
     streaming: bool
 
-    def stop(self) -> None: ...
+    def stop(self) -> None:
+        raise NotImplementedError
 
 
 class StreamingConsole(Console):

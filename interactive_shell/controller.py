@@ -189,6 +189,7 @@ class InteractiveShellController:
                 if wait:
                     await self._await_turn_completion()
                 return True
+        raise AssertionError(f"Unhandled input action: {action!r}")
 
     async def _enqueue_turn(self, text: str) -> None:
         await self.state.queue.put(text)
@@ -214,7 +215,7 @@ class InteractiveShellController:
             try:
                 await turn_task
             except asyncio.CancelledError:
-                pass
+                log.debug("Queued turn task was cancelled")
             except Exception as exc:
                 log.debug("Queued turn task ended with exception: %s", exc)
             self.state.clear_current_task()

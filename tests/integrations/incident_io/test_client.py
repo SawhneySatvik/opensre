@@ -254,10 +254,6 @@ def test_concurrent_append_summary_uses_shared_module_level_lock() -> None:
     order: list[str] = []
     barrier = threading.Barrier(2)
 
-    def write_a(client: IncidentIoClient, monkeypatch_fn) -> None:  # type: ignore[type-arg]
-        # Not testing HTTP here — just lock ordering
-        pass
-
     lock = _get_incident_write_lock("inc-concurrent")
     results: list[bool] = []
 

@@ -12,9 +12,11 @@ from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 
 
 class _DispatchCancelState(Protocol):
-    def is_dispatch_running(self) -> bool: ...
+    def is_dispatch_running(self) -> bool:
+        raise NotImplementedError
 
-    def cancel_current_dispatch(self) -> None: ...
+    def cancel_current_dispatch(self) -> None:
+        raise NotImplementedError
 
 
 # Keystroke escape (xterm modifyOtherKeys for Shift+Enter), not a colour code.
