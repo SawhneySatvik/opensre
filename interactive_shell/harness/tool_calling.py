@@ -27,7 +27,6 @@ from interactive_shell.harness.llm_context import (
     build_action_system_prompt,
     build_action_user_message,
 )
-from interactive_shell.harness.llm_context.conversation_history import MAX_CONVERSATION_MESSAGES
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.turn_context import TurnContext
 from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
@@ -122,10 +121,7 @@ def _response_text_from_history_entries(entries: list[dict[str, Any]]) -> str:
 
 
 def _persist_tool_calling_error(session: ReplSession, user_text: str, error_text: str) -> None:
-    session.cli_agent_messages.append(("user", user_text))
-    session.cli_agent_messages.append(("assistant", error_text))
-    if len(session.cli_agent_messages) > MAX_CONVERSATION_MESSAGES:
-        session.cli_agent_messages[:] = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
+    session.agent.record_turn(user_text, error_text)
 
 
 def _render_tool_calling_error(console: Console, message: str) -> None:

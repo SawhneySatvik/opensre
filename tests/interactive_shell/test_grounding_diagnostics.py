@@ -3,18 +3,15 @@
 from __future__ import annotations
 
 from interactive_shell.harness.llm_context.grounding.context import GroundingContext
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
+from interactive_shell.harness.llm_context.grounding.diagnostics import (
     GroundingSource,
     log_grounding_cache_diagnostics,
 )
+from interactive_shell.harness.llm_context.models import CacheStats
 
 
 def _make_source(name: str, hits: int = 0) -> GroundingSource:
-    return GroundingSource(
-        name=name,
-        stats_fn=lambda: {"hits": hits},
-        format_fn=lambda s: f"hits={s['hits']}",
-    )
+    return GroundingSource(name=name, stats_fn=lambda: CacheStats(name=name, hits=hits))
 
 
 def test_context_exposes_one_source_per_cache() -> None:
@@ -36,16 +33,16 @@ def test_context_sources_are_isolated_per_instance() -> None:
 def test_invalidate_clears_every_cache() -> None:
     ctx = GroundingContext()
     ctx.cli.build_text()
-    assert ctx.cli.stats()["misses"] >= 1
+    assert ctx.cli.stats().misses >= 1
     ctx.invalidate()
-    assert ctx.cli.stats()["misses"] == 0
+    assert ctx.cli.stats().misses == 0
 
 
 def test_log_grounding_iterates_provided_sources(monkeypatch: object) -> None:
     """log_grounding_cache_diagnostics logs each provided source when verbose."""
     import os
 
-    from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
+    from interactive_shell.harness.llm_context.grounding import diagnostics as _gd
 
     logged: list[str] = []
     try:

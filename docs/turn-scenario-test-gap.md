@@ -183,7 +183,7 @@ The docstring in `scenario_loader.py` acknowledges the gap explicitly:
 
 That execution-layer test does not exist. `tests/interactive_shell/runtime/
 test_answer_with_tools.py` patches both `gather_tool_evidence` and
-`answer_cli_agent` entirely, so it tests the wiring between them (gather output
+`generate_response` entirely, so it tests the wiring between them (gather output
 flows to answer), not whether the gather loop calls the right tools with the
 right config. The gap noted in the docstring has never been closed.
 

@@ -6,14 +6,15 @@ import logging
 
 import pytest
 
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
+from interactive_shell.harness.llm_context.grounding.diagnostics import (
     GroundingSource,
     log_grounding_cache_diagnostics,
 )
+from interactive_shell.harness.llm_context.models import CacheStats
 
 
 def _sources() -> list[GroundingSource]:
-    return [GroundingSource(name="unit", stats_fn=lambda: {"hits": 1})]
+    return [GroundingSource(name="unit", stats_fn=lambda: CacheStats(name="unit", hits=1))]
 
 
 def test_log_skips_when_tracer_verbose_unset(

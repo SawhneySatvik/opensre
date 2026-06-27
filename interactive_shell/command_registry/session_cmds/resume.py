@@ -164,7 +164,7 @@ def _apply_resume_data(
             session.record("slash", slash_command, ok=False)
         return True
 
-    existing = session.cli_agent_messages
+    existing = session.agent.messages
     if existing:
         console.print(
             f"[{WARNING}]current session has {len(existing)} messages — "
@@ -187,7 +187,7 @@ def _apply_resume_data(
         session.clear(rotate_identity=False)
         session.session_id = target_sid
 
-    session.cli_agent_messages = list(messages)
+    session.agent.messages = list(messages)
     session.accumulated_context = dict(context)
 
     if history:

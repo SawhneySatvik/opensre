@@ -61,7 +61,7 @@ def _record_integrations_observation(session: ReplSession, results: list[dict[st
             line += f" ({detail})"
         lines.append(line)
     if lines:
-        session.last_command_observation = "Integration status from `/integrations`:\n" + "\n".join(
+        session.agent.last_observation = "Integration status from `/integrations`:\n" + "\n".join(
             lines
         )
 
@@ -75,7 +75,7 @@ def _record_integration_show_observation(session: ReplSession, match: dict[str, 
             text = f"{text[: _MAX_OBSERVATION_DETAIL_CHARS - 1]}…"
         lines.append(f"- {key}: {text}")
     if lines:
-        session.last_command_observation = (
+        session.agent.last_observation = (
             "Integration detail from `/integrations show`:\n" + "\n".join(lines)
         )
 

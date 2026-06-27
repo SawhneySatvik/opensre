@@ -44,7 +44,7 @@ _DEFAULT_IMPLEMENT_PERMISSION_MODE = "acceptEdits"
 
 
 def _recent_cli_agent_context(session: ReplSession, *, limit: int = 6) -> str:
-    recent = session.cli_agent_messages[-limit:]
+    recent = session.agent.messages[-limit:]
     if not recent:
         return ""
     return "\n".join(f"{role}: {text}" for role, text in recent)
@@ -114,7 +114,7 @@ def run_claude_code_implementation(
         session.record("implementation", request, ok=False)
         return
 
-    if _is_context_dependent_implementation_request(request) and not session.cli_agent_messages:
+    if _is_context_dependent_implementation_request(request) and not session.agent.messages:
         console.print(
             f"[{ERROR}]implementation request is too vague:[/] "
             "describe what Claude Code should change."

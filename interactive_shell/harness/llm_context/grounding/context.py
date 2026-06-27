@@ -12,11 +12,11 @@ from dataclasses import dataclass, field
 
 from interactive_shell.harness.llm_context.grounding.agents_md_reference import AgentsMdReference
 from interactive_shell.harness.llm_context.grounding.cli_reference import CliReference
-from interactive_shell.harness.llm_context.grounding.docs_reference import DocsReference
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
+from interactive_shell.harness.llm_context.grounding.diagnostics import (
     GroundingSource,
     log_grounding_cache_diagnostics,
 )
+from interactive_shell.harness.llm_context.grounding.docs_reference import DocsReference
 
 
 @dataclass

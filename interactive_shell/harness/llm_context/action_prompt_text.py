@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-__all__ = ("_SYSTEM_PROMPT_BASE",)
+__all__ = ("SYSTEM_PROMPT_BASE",)
 
-_SYSTEM_PROMPT_BASE = """You plan actions for the OpenSRE interactive shell.
+SYSTEM_PROMPT_BASE = """You plan actions for the OpenSRE interactive shell.
 
 ══════════════════════════════════════════════════════════
 COMPOUND TURN RULE — HIGHEST PRIORITY, NO EXCEPTIONS:

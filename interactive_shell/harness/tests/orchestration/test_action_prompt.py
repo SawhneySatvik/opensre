@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from interactive_shell.harness.llm_context import (
-    _SYSTEM_PROMPT_BASE,
+    SYSTEM_PROMPT_BASE,
     build_action_system_prompt,
     connected_integrations_block,
     recent_conversation_block,
 )
 from interactive_shell.harness.llm_context.conversation_history import NO_HISTORY_PLACEHOLDER
+from interactive_shell.harness.llm_context.models import coerce_messages
 from interactive_shell.harness.turn_context import TurnContext
 
 
@@ -20,7 +21,7 @@ def _ctx(
 ) -> TurnContext:
     return TurnContext(
         text="",
-        conversation_messages=tuple(messages or []),
+        conversation_messages=coerce_messages(messages or []),
         configured_integrations=integrations,
         configured_integrations_known=integrations_known,
         last_state=None,
@@ -47,14 +48,14 @@ def test_recent_conversation_block_placeholder_without_history() -> None:
 
 
 def test_system_prompt_documents_followup_resolution() -> None:
-    prompt = _SYSTEM_PROMPT_BASE.lower()
+    prompt = SYSTEM_PROMPT_BASE.lower()
     assert "do both" in prompt
     assert "recent conversation" in prompt
     assert "assistant_handoff" in prompt
 
 
 def test_system_prompt_requires_same_response_for_slash_then_investigation() -> None:
-    prompt = _SYSTEM_PROMPT_BASE.lower()
+    prompt = SYSTEM_PROMPT_BASE.lower()
     assert "connect with /remote and then investigate" in prompt
     assert "same planner response" in prompt
     assert "do not stop after the slash command" in prompt
@@ -62,7 +63,7 @@ def test_system_prompt_requires_same_response_for_slash_then_investigation() -> 
 
 
 def test_system_prompt_keeps_bare_alert_blob_as_handoff() -> None:
-    prompt = _SYSTEM_PROMPT_BASE.lower()
+    prompt = SYSTEM_PROMPT_BASE.lower()
     assert "a bare pasted alert blob with no instruction remains assistant_handoff" in prompt
     assert "pasted alert blob / bare incident statement" in prompt
     assert "with no\ninstruction" in prompt
@@ -70,7 +71,7 @@ def test_system_prompt_keeps_bare_alert_blob_as_handoff() -> None:
 
 
 def test_system_prompt_preserves_bare_numeric_synthetic_mapping() -> None:
-    prompt = _SYSTEM_PROMPT_BASE.lower()
+    prompt = SYSTEM_PROMPT_BASE.lower()
     assert "run synthetic test 005 now" in prompt
     assert 'scenario="005-failover"' in prompt
     assert "never substitute a different numbered" in prompt

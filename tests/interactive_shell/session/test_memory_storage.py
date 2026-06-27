@@ -65,7 +65,7 @@ def test_flush_is_idempotent() -> None:
 def test_flush_writes_conversation_snapshot() -> None:
     storage = InMemorySessionStorage()
     session = _session(storage)
-    session.cli_agent_messages = [("user", "hello"), ("assistant", "hi")]
+    session.agent.messages = [("user", "hello"), ("assistant", "hi")]
     session.accumulated_context = {"service": "api"}
     storage.open_session(session)
     session.record("chat", "hello")

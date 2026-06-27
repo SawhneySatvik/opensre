@@ -5,21 +5,18 @@ from __future__ import annotations
 import logging
 import os
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
-from typing import Any
+
+from interactive_shell.harness.llm_context.models import CacheStats
 
 _logger = logging.getLogger(__name__)
 
 
-@dataclass
 class GroundingSource:
-    """A single grounding cache source exposing stats for diagnostics."""
+    """A single grounding cache source exposing typed stats for diagnostics."""
 
-    name: str
-    stats_fn: Callable[[], dict[str, Any]]
-    format_fn: Callable[[dict[str, Any]], str] = field(
-        default_factory=lambda: lambda s: ", ".join(f"{k}={v}" for k, v in s.items())
-    )
+    def __init__(self, *, name: str, stats_fn: Callable[[], CacheStats]) -> None:
+        self.name = name
+        self.stats_fn = stats_fn
 
 
 def log_grounding_cache_diagnostics(sources: Iterable[GroundingSource], reason: str) -> None:

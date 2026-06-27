@@ -36,7 +36,9 @@ def _read_lines(path: Path) -> list[dict]:
 
 
 def _patch_dir(tmp_path: Path):
-    return patch("interactive_shell.harness.llm_context.session.paths.sessions_dir", return_value=tmp_path)
+    return patch(
+        "interactive_shell.harness.llm_context.session.paths.sessions_dir", return_value=tmp_path
+    )
 
 
 @pytest.fixture
@@ -265,7 +267,7 @@ def test_flush_counts_cli_agent_turns_as_chat(tmp_path: Path) -> None:
 
 def test_flush_writes_conversation_snapshot_when_messages_present(tmp_path: Path) -> None:
     session = _make_session()
-    session.cli_agent_messages = [("user", "hello"), ("assistant", "hi there")]
+    session.agent.messages = [("user", "hello"), ("assistant", "hi there")]
     session.accumulated_context = {"service": "api", "cluster": "prod"}
     with _patch_dir(tmp_path):
         SessionStore.open_session(session)
@@ -436,7 +438,7 @@ def test_load_recent_uses_session_end_stats_when_available(tmp_path: Path) -> No
 
 def test_load_recent_reports_has_snapshot_true(tmp_path: Path) -> None:
     session = _make_session()
-    session.cli_agent_messages = [("user", "hi"), ("assistant", "hello")]
+    session.agent.messages = [("user", "hi"), ("assistant", "hello")]
     with _patch_dir(tmp_path):
         SessionStore.open_session(session)
         SessionStore.append_turn(session, "chat", "hi")
@@ -531,7 +533,7 @@ def test_load_session_returns_none_when_no_dir(tmp_path: Path) -> None:
 
 def test_load_session_restores_from_conversation_snapshot(tmp_path: Path) -> None:
     session = _make_session()
-    session.cli_agent_messages = [("user", "how is prod?"), ("assistant", "prod is healthy")]
+    session.agent.messages = [("user", "how is prod?"), ("assistant", "prod is healthy")]
     session.accumulated_context = {"service": "api"}
     with _patch_dir(tmp_path):
         SessionStore.open_session(session)

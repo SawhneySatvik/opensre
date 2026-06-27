@@ -1,10 +1,15 @@
-"""CLI-agent prompt construction for the interactive OpenSRE shell.
+"""Conversational assistant prompt construction for the interactive OpenSRE shell.
 
-Builds the full conversational-assistant prompt from grounding sources, prior
-investigation state, environment blocks, synthetic-run observations, and recent
+Builds the full docs-aware assistant prompt from grounding sources, prior
+investigation state, environment facts, synthetic-run observations, and recent
 conversation history. The turn runtime (``harness/agent.py``) calls
 ``build_cli_agent_prompt`` and stays out of the business of assembling prompt
 text.
+
+Prompt blocks are composed from typed :class:`PromptSection` values via
+``render_sections`` so the exact ``--- label ---`` spacing lives in one place;
+free-form framing blocks (observation, integration guard, synthetic failure)
+stay as small pure ``-> str`` builders because their bodies are bespoke prose.
 """
 
 from __future__ import annotations
@@ -14,16 +19,17 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from interactive_shell.harness.llm_context.assistant_system_prompt import (
-    _build_environment_block,
-    _build_observation_block,
-    _build_system_prompt,
-)
-from interactive_shell.harness.llm_context.conversation_history import (
-    format_recent_conversation,
-)
+from interactive_shell.harness.llm_context.conversation_history import format_recent_conversation
 from interactive_shell.harness.llm_context.grounding.investigation_flow_reference import (
     build_investigation_flow_reference_text,
+)
+from interactive_shell.harness.llm_context.models import PromptSection, render_sections
+from interactive_shell.harness.llm_context.rules import (
+    ACTION_RULE,
+    CLI_ASSISTANT_MARKDOWN_RULE,
+    INTERACTIVE_SHELL_TERMINOLOGY_RULE,
+    SETUP_GUIDANCE_RULE,
+    SOURCE_SCOPED_INVESTIGATION_RULE,
 )
 from interactive_shell.harness.llm_context.session import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
@@ -34,6 +40,112 @@ from interactive_shell.runtime import ReplSession
 _logger = logging.getLogger(__name__)
 
 _MAX_SYNTHETIC_OBSERVATION_PROMPT_CHARS = 120_000
+
+_ASSISTANT_INTRO = (
+    "You are the OpenSRE terminal assistant. You help with OpenSRE CLI "
+    "usage, the interactive shell, and onboarding. Explicit slash commands "
+    "and command aliases execute before this assistant as argv, without "
+    "shell semantics; ordinary free text should be answered conversationally. "
+    "Users must prefix with ! for full-shell semantics (pipes, redirects, "
+    "mutating commands). Do not tell users the interactive shell cannot "
+    "execute commands. You do NOT run incident "
+    "investigations yourself "
+    "(those use the separate investigation pipeline), but you are grounded on "
+    "that pipeline's architecture below and can answer questions about its "
+    "stages and source files.\n"
+    "When the user wants to investigate an alert, tell them to paste "
+    "alert text, JSON, or a concrete incident description (errors, "
+    "services, symptoms). Mention `opensre investigate` and pasting "
+    "into this interactive shell.\n"
+    "Be brief and friendly. Ground CLI facts in the reference below; do "
+    "not invent subcommands. For investigation-flow questions, use the "
+    "investigation flow reference below and do not claim the pipeline "
+    "definition is unavailable.\n"
+    "For vague operational questions (for example why a database is slow) "
+    "with no pasted alert, restate the user's question in your reply and "
+    "ask for the target system, service, or alert context.\n\n"
+)
+
+
+def build_environment_block(session: ReplSession) -> str:
+    """Render configured-integration facts so the assistant can answer directly."""
+    if not session.configured_integrations_known:
+        return ""
+    if session.configured_integrations:
+        connected = ", ".join(session.configured_integrations)
+        body = (
+            f"Configured integrations in this session: {connected}. "
+            "Any integration not in that list is NOT configured. When the user asks "
+            "whether a specific integration is installed/configured/connected, answer "
+            "directly and definitively from this list instead of telling them to run "
+            "a command."
+        )
+    else:
+        body = (
+            "No integrations are configured in this session. If the user asks whether "
+            "a specific integration is installed/configured, answer that none are "
+            "configured rather than deflecting."
+        )
+    return PromptSection(label="Environment (configured integrations)", body=body).render()
+
+
+def build_assistant_system_prompt(
+    reference: str,
+    history: str,
+    agents_md: str = "",
+    investigation_flow: str = "",
+    prior_investigation: str = "",
+    environment: str = "",
+) -> str:
+    """Build the system prompt for one assistant turn."""
+    grounding_sections = render_sections(
+        [
+            PromptSection(label="Investigation flow reference", body=investigation_flow),
+            PromptSection(label="Prior investigation in this session", body=prior_investigation),
+            PromptSection(label="Repo map (AGENTS.md)", body=agents_md),
+        ]
+    )
+    return (
+        f"{_ASSISTANT_INTRO}"
+        f"{SETUP_GUIDANCE_RULE}\n\n"
+        f"{SOURCE_SCOPED_INVESTIGATION_RULE}\n\n"
+        f"{INTERACTIVE_SHELL_TERMINOLOGY_RULE}\n{CLI_ASSISTANT_MARKDOWN_RULE}\n{ACTION_RULE}\n\n"
+        f"{environment}"
+        f"--- CLI reference ---\n{reference}\n\n"
+        f"{grounding_sections}"
+        f"--- Recent CLI conversation ---\n{history}\n"
+    )
+
+
+def build_observation_block(tool_observation: str | None, *, on_screen: bool = True) -> str:
+    """Wrap freshly-gathered tool output so the assistant summarizes it directly."""
+    if not tool_observation or not tool_observation.strip():
+        return ""
+    if on_screen:
+        framing = (
+            "A read-only discovery command was just run to answer the user's question; "
+            "its output is below. Summarize it to answer the user's question directly "
+            "and concisely (for example, whether a specific integration is configured), "
+            "citing the relevant status. The output is already on screen, so keep it "
+            "short."
+        )
+    else:
+        framing = (
+            "Live data was just gathered from the connected integrations to answer the "
+            "user's question; the tool results are below and are NOT otherwise shown to "
+            "the user. Answer the user's question directly using these results, citing "
+            "the concrete findings (e.g. relevant issues, log lines, or metrics). If the "
+            "data does not contain the answer, say so plainly. You have ALREADY queried "
+            "the connected sources, so do NOT tell the user to paste an alert or to run "
+            "`opensre investigate`; instead report what each source returned and, if you "
+            "need more signal, ask for the specific detail (error string, service, "
+            "version, or time window) that would let you narrow it down here."
+        )
+    return (
+        f"{framing} Do NOT request, plan, or emit any further actions — just answer in "
+        "plain Markdown.\n\n"
+        f"--- tool_results ---\n{tool_observation}\n\n"
+    )
 
 
 def _summarize_evidence(evidence: Any) -> list[str]:
@@ -168,7 +280,7 @@ def build_cli_agent_prompt(
     """
     session.grounding.log_cache_diagnostics("cli_agent_grounding")
 
-    system = _build_system_prompt(
+    system = build_assistant_system_prompt(
         session.grounding.cli.build_text(),
         format_recent_conversation(list(turn_ctx.conversation_messages)),
         agents_md=session.grounding.agents_md.build_text(),
@@ -176,11 +288,11 @@ def build_cli_agent_prompt(
         prior_investigation=(
             _summarize_last_state(turn_ctx.last_state) if turn_ctx.last_state is not None else ""
         ),
-        environment=_build_environment_block(session),
+        environment=build_environment_block(session),
     )
 
     integration_guard = _build_integration_guard(turn_ctx)
-    observation_block = _build_observation_block(
+    observation_block = build_observation_block(
         tool_observation, on_screen=tool_observation_on_screen
     )
     synthetic_block = _build_synthetic_failure_block(turn_ctx)
@@ -192,3 +304,11 @@ def build_cli_agent_prompt(
         f"{synthetic_block}"
         f"--- User message ---\n{message}"
     )
+
+
+__all__ = [
+    "build_assistant_system_prompt",
+    "build_cli_agent_prompt",
+    "build_environment_block",
+    "build_observation_block",
+]

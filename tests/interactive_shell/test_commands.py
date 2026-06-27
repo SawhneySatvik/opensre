@@ -1651,7 +1651,7 @@ class TestResumeCommand:
 
         assert result is True
         assert session.session_id == target_id
-        assert session.cli_agent_messages == [("user", "hello"), ("assistant", "hi")]
+        assert session.agent.messages == [("user", "hello"), ("assistant", "hi")]
         assert session.accumulated_context == {"service": "redis"}
         output = buf.getvalue()
         assert "resumed session" in output
@@ -1776,10 +1776,10 @@ class TestResumeCommand:
         # The error turn must be recorded in cli_agent_messages for /resume
         assert result.handled is True
         assert result.has_unhandled_clause is True
-        assert len(session.cli_agent_messages) == 2
-        assert session.cli_agent_messages[0] == ("user", "check cpu usage")
-        assert session.cli_agent_messages[1][0] == "assistant"
-        assert "quota" in session.cli_agent_messages[1][1]
+        assert len(session.agent.messages) == 2
+        assert session.agent.messages[0] == ("user", "check cpu usage")
+        assert session.agent.messages[1][0] == "assistant"
+        assert "quota" in session.agent.messages[1][1]
 
 
 class TestHistoryCommand:

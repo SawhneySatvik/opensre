@@ -12,18 +12,21 @@ from __future__ import annotations
 import os
 import re
 from collections.abc import Iterator
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar
 
 from prompt_toolkit.history import FileHistory
+from pydantic import ConfigDict
+
+from config.strict_config import StrictConfigModel
 
 DEFAULT_MAX_ENTRIES = 5000
 
 
-@dataclass(frozen=True)
-class RedactionRule:
+class RedactionRule(StrictConfigModel):
     """One named regex with its replacement."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True, arbitrary_types_allowed=True)
 
     name: str
     pattern: re.Pattern[str]
@@ -57,7 +60,9 @@ def _build_default_rules() -> tuple[RedactionRule, ...]:
             "[REDACTED:private_key]",
         ),
     ]
-    return tuple(RedactionRule(name, re.compile(p), repl) for (name, p, repl) in raw)
+    return tuple(
+        RedactionRule(name=name, pattern=re.compile(p), replacement=repl) for (name, p, repl) in raw
+    )
 
 
 DEFAULT_REDACTION_RULES: tuple[RedactionRule, ...] = _build_default_rules()
@@ -70,9 +75,10 @@ def redact_text(text: str, rules: tuple[RedactionRule, ...] = DEFAULT_REDACTION_
     return text
 
 
-@dataclass(frozen=True)
-class HistoryPolicy:
+class HistoryPolicy(StrictConfigModel):
     """Resolved privacy policy for the prompt-history persistence layer."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     enabled: bool = True
     redact: bool = True

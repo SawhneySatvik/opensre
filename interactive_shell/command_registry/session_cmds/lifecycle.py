@@ -24,14 +24,14 @@ def _cmd_new(session: ReplSession, console: Console, _args: list[str]) -> bool:
     accumulated_context so a resumed or in-progress conversation continues
     seamlessly in a fresh session file.
     """
-    saved_messages = list(session.cli_agent_messages)
+    saved_messages = list(session.agent.messages)
     saved_context = dict(session.accumulated_context)
     saved_resumed_name = session.resumed_from_name
 
     session.storage.flush(session)
     session.clear()
 
-    session.cli_agent_messages = saved_messages
+    session.agent.messages = saved_messages
     session.accumulated_context = saved_context
     session.resumed_from_name = saved_resumed_name
 

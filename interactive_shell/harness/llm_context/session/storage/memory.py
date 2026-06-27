@@ -161,10 +161,10 @@ class InMemorySessionStorage:
         started_at = datetime.fromtimestamp(session.started_at, tz=UTC)
         duration_secs = max(0, int((now - started_at).total_seconds()))
 
-        if session.cli_agent_messages or session.accumulated_context:
+        if session.agent.messages or session.accumulated_context:
             snapshot: dict[str, Any] = {"type": "conversation_snapshot"}
-            if session.cli_agent_messages:
-                snapshot["cli_agent_messages"] = [list(m) for m in session.cli_agent_messages]
+            if session.agent.messages:
+                snapshot["cli_agent_messages"] = [list(m) for m in session.agent.messages]
             if session.accumulated_context:
                 snapshot["accumulated_context"] = dict(session.accumulated_context)
             records.append(snapshot)

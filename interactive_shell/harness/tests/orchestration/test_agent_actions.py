@@ -21,7 +21,6 @@ import interactive_shell.tools.llm_provider_tool as llm_provider_tool
 import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
@@ -30,6 +29,7 @@ from interactive_shell.harness.tests._planned_action import (
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.tools.tool_registry import (
     TOOL_KIND_TO_NAME,
     ToolKind,
@@ -1288,7 +1288,7 @@ def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) ->
         session,
         console,
         recorder=None,
-        answer_agent=lambda *_a, **_k: None,
+        response_generator=lambda *_a, **_k: None,
     )
 
     action_result = result.action_result
@@ -1315,7 +1315,7 @@ def test_execute_cli_actions_persists_action_agent_llm_unavailable(
     assert handled.handled is True
     assert handled.has_unhandled_clause is True
     assert session.history == [{"type": "cli_agent", "text": "check health", "ok": False}]
-    assert session.cli_agent_messages[-1] == ("assistant", "action agent unavailable")
+    assert session.agent.messages[-1] == ("assistant", "action agent unavailable")
     output = buf.getvalue()
     assert "couldn't safely decide actions" not in output.lower()
     assert "action agent unavailable" in output
@@ -1364,7 +1364,7 @@ def test_execute_cli_actions_executes_matched_clause_ignoring_unhandled(
         session,
         console,
         recorder=None,
-        answer_agent=lambda *_a, **_k: None,
+        response_generator=lambda *_a, **_k: None,
     )
 
     # The unhandled flag no longer denies the turn: the matched /health runs.

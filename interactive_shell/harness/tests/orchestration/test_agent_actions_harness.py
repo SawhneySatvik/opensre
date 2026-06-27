@@ -107,4 +107,4 @@ def test_execute_with_harness_handles_llm_unavailable() -> None:
     assert result.handled is True
     assert result.has_unhandled_clause is True
     assert result.planned_count == 0
-    assert session.cli_agent_messages[-1] == ("assistant", "action agent unavailable")
+    assert session.agent.messages[-1] == ("assistant", "action agent unavailable")

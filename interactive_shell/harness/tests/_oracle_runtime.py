@@ -19,7 +19,6 @@ from rich.console import Console
 # cannot be resolved the scenario is skipped, never failed (env gap, not bug).
 LIVE_INTEGRATION_SENTINEL = "@live"
 
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests._oracle_normalize import (
     normalize_history_entry,
@@ -31,6 +30,7 @@ from interactive_shell.harness.tests.scenario_loader import (
     ScenarioCapabilities,
     ScenarioCase,
 )
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.tools.tool_contracts import ToolExecutor
 from interactive_shell.tools.tool_registry import (
     REGISTRY,

@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 from interactive_shell.harness.llm_context.grounding import docs_reference
+from interactive_shell.harness.llm_context.grounding._cache import excerpt
 from interactive_shell.harness.llm_context.grounding.docs_reference import (
     DocPage,
     DocsReference,
-    _excerpt,
     _query_tokens,
     build_docs_index,
     find_relevant_docs,
@@ -223,11 +223,11 @@ class TestBuildDocsIndex:
 class TestExcerpt:
     def test_returns_full_body_when_short(self) -> None:
         body = "Short body."
-        assert _excerpt(body, max_chars=100) == "Short body."
+        assert excerpt(body, max_chars=100) == "Short body."
 
     def test_truncates_long_body_with_marker(self) -> None:
         body = ("paragraph one. " * 10) + "\n\n" + ("paragraph two. " * 10)
-        out = _excerpt(body, max_chars=80)
+        out = excerpt(body, max_chars=80)
         assert "truncated" in out
 
 
@@ -241,7 +241,7 @@ class TestDocPageDataclass:
 class TestDocsGroundingCache:
     def test_cache_maxsize_matches_implementation(self) -> None:
         stats = DocsReference().stats()
-        assert stats["maxsize"] == 32
+        assert stats.maxsize == 32
 
     def test_repeated_discover_hits_parse_cache(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
@@ -250,20 +250,20 @@ class TestDocsGroundingCache:
         info1 = ref.stats()
         ref.discover(tmp_path)
         info2 = ref.stats()
-        assert info2["hits"] == info1["hits"] + 1
-        assert info2["misses"] == info1["misses"]
+        assert info2.hits == info1.hits + 1
+        assert info2.misses == info1.misses
 
     def test_invalidate_resets_stats(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
         ref = DocsReference()
         ref.discover(tmp_path)
         ref.discover(tmp_path)
-        assert ref.stats()["hits"] >= 1
+        assert ref.stats().hits >= 1
         ref.invalidate()
         cleared = ref.stats()
-        assert cleared["hits"] == 0
-        assert cleared["misses"] == 0
-        assert cleared["currsize"] == 0
+        assert cleared.hits == 0
+        assert cleared.misses == 0
+        assert cleared.currsize == 0
 
     def test_file_edit_invalidates_and_refreshes_content(self, tmp_path: Path) -> None:
         ref = DocsReference()

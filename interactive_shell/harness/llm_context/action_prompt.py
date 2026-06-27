@@ -5,10 +5,8 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING
 
+from interactive_shell.harness.llm_context.action_prompt_text import SYSTEM_PROMPT_BASE
 from interactive_shell.harness.llm_context.conversation_history import format_recent_conversation
-from interactive_shell.harness.llm_context.system_prompt import (
-    _SYSTEM_PROMPT_BASE,
-)
 
 if TYPE_CHECKING:
     from interactive_shell.harness.turn_context import TurnContext
@@ -19,7 +17,7 @@ _USER_TEMPLATE = "USER MESSAGE (literal): <<<{text}>>>"
 
 def build_action_system_prompt(turn_ctx: TurnContext) -> str:
     return (
-        _SYSTEM_PROMPT_BASE
+        SYSTEM_PROMPT_BASE
         + "\n\n"
         + connected_integrations_block(turn_ctx)
         + recent_conversation_block(turn_ctx)

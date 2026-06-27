@@ -7,8 +7,8 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -55,7 +55,7 @@ def test_recorder_flushes_once_for_chat_fallback() -> None:
         recorder=recorder,  # type: ignore[arg-type]
         execute_actions=_unhandled_turn,
         gather_evidence=lambda *_a, **_k: None,
-        answer_agent=_answer,
+        response_generator=_answer,
     )
 
     assert result.answered is True
@@ -84,7 +84,7 @@ def test_recorder_flushes_once_for_silent_handled_turn() -> None:
         recorder=recorder,  # type: ignore[arg-type]
         execute_actions=_handled,
         gather_evidence=lambda *_a, **_k: None,
-        answer_agent=lambda *_a, **_k: None,
+        response_generator=lambda *_a, **_k: None,
     )
 
     assert result.answered is False

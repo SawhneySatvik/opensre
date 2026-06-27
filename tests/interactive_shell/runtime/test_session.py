@@ -113,7 +113,7 @@ class TestReplSession:
         session.accumulated_context["service"] = "api"
         session.record("alert", "something")
         session.last_state = {"foo": "bar"}
-        session.cli_agent_messages.append(("user", "hey"))
+        session.agent.messages.append(("user", "hey"))
         session.record_intervention("ctrl_c")
         session.record_intervention("correction")
 
@@ -124,7 +124,7 @@ class TestReplSession:
         assert session.history == []
         assert session.last_state is None
         assert session.accumulated_context == {}
-        assert session.cli_agent_messages == []
+        assert session.agent.messages == []
         assert session.task_registry.list_recent() == []
         assert session.ctrl_c_intervention_count == 0
         assert session.correction_intervention_count == 0

@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 
 from interactive_shell.harness.llm_context.grounding import agents_md_reference
+from interactive_shell.harness.llm_context.grounding._cache import excerpt
 from interactive_shell.harness.llm_context.grounding.agents_md_reference import (
     AgentsMdFile,
     AgentsMdReference,
-    _excerpt,
 )
 
 
@@ -110,11 +110,11 @@ class TestBuildAgentsMdReferenceText:
 
 class TestExcerpt:
     def test_returns_full_body_when_short(self) -> None:
-        assert _excerpt("short body", max_chars=100) == "short body"
+        assert excerpt("short body", max_chars=100) == "short body"
 
     def test_truncates_long_body_at_paragraph_boundary(self) -> None:
         body = ("paragraph one. " * 10) + "\n\n" + ("paragraph two. " * 10)
-        out = _excerpt(body, max_chars=80)
+        out = excerpt(body, max_chars=80)
         assert "truncated" in out
         # The cut should happen at or before the second paragraph, since the
         # rfind for "\n\n" before max_chars is the preferred cutoff.
@@ -130,7 +130,7 @@ class TestAgentsMdFileDataclass:
 class TestAgentsMdGroundingCache:
     def test_cache_maxsize_matches_implementation(self) -> None:
         stats = AgentsMdReference().stats()
-        assert stats["maxsize"] == 32
+        assert stats.maxsize == 32
 
     def test_repeated_discover_hits_parse_cache(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
@@ -139,20 +139,20 @@ class TestAgentsMdGroundingCache:
         info1 = ref.stats()
         ref.discover(tmp_path)
         info2 = ref.stats()
-        assert info2["hits"] == info1["hits"] + 1
-        assert info2["misses"] == info1["misses"]
+        assert info2.hits == info1.hits + 1
+        assert info2.misses == info1.misses
 
     def test_invalidate_resets_stats(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
         ref = AgentsMdReference()
         ref.discover(tmp_path)
         ref.discover(tmp_path)
-        assert ref.stats()["hits"] >= 1
+        assert ref.stats().hits >= 1
         ref.invalidate()
         cleared = ref.stats()
-        assert cleared["hits"] == 0
-        assert cleared["misses"] == 0
-        assert cleared["currsize"] == 0
+        assert cleared.hits == 0
+        assert cleared.misses == 0
+        assert cleared.currsize == 0
 
     def test_file_edit_invalidates_and_refreshes_content(self, tmp_path: Path) -> None:
         ref = AgentsMdReference()

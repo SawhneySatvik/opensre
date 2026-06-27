@@ -260,7 +260,7 @@ def test_resolve_gather_integrations_uses_session_cache_on_follow_up() -> None:
         "github": {"connection_verified": True, "url": "https://api.githubcopilot.com/mcp/"}
     }
     session.github_repo_scope = ("Tracer-Cloud", "opensre")
-    session.cli_agent_messages = [
+    session.agent.messages = [
         ("user", "https://github.com/Tracer-Cloud/opensre"),
         ("assistant", "Got it."),
     ]
@@ -309,7 +309,7 @@ def test_gather_enriches_github_before_selecting_tools(monkeypatch: Any) -> None
 def test_gather_user_message_includes_recent_conversation(monkeypatch: Any) -> None:
     session = ReplSession()
     session.resolved_integrations_cache = {}
-    session.cli_agent_messages = [("user", "prior question"), ("assistant", "prior answer")]
+    session.agent.messages = [("user", "prior question"), ("assistant", "prior answer")]
     captured: dict[str, Any] = {}
 
     monkeypatch.setattr(

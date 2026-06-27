@@ -57,8 +57,7 @@ def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> boo
     table.add_row("reasoning effort", display_reasoning_effort(session.reasoning_effort))
     table.add_row("provider", _status_provider_display())
     for source in session.grounding.iter_sources():
-        stats = source.stats_fn()
-        table.add_row(f"grounding {source.name} cache", source.format_fn(stats))
+        table.add_row(f"grounding {source.name} cache", source.stats_fn().render())
     acc = session.accumulated_context
     if acc:
         table.add_row("accumulated context", ", ".join(sorted(acc.keys())))

@@ -8,8 +8,8 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -49,7 +49,7 @@ def test_gather_string_threads_offscreen_observation() -> None:
         recorder=None,
         execute_actions=_unhandled_turn,
         gather_evidence=lambda *_a, **_k: "Tool: x\nArguments: {}\nResult: y",
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert len(calls) == 1
@@ -67,7 +67,7 @@ def test_gather_none_passes_through_without_observation() -> None:
         recorder=None,
         execute_actions=_unhandled_turn,
         gather_evidence=lambda *_a, **_k: None,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert len(calls) == 1
@@ -87,7 +87,7 @@ def test_existing_command_observation_skips_gather() -> None:
         _console: Console,
         **_kwargs: object,
     ) -> ToolCallingTurnResult:
-        session.last_command_observation = "already gathered"
+        session.agent.last_observation = "already gathered"
         return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
@@ -103,7 +103,7 @@ def test_existing_command_observation_skips_gather() -> None:
         recorder=None,
         execute_actions=_handled_with_observation,
         gather_evidence=_should_not_run,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert len(calls) == 1

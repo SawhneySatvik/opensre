@@ -67,8 +67,8 @@ answered without adding keyword/regex rules. Two complementary mechanisms:
    `session.configured_integrations` from the shared
    `configured_integration_services()` helper in `integrations/catalog.py`
    (the same source the welcome banner uses, so they never diverge). The chat
-   assistant prompt (`_build_environment_block` in
-   `interactive_shell/harness/agent.py`) lists the configured set as
+   assistant prompt (`build_environment_block` in
+   `interactive_shell/harness/llm_context/assistant_prompt.py`) lists the configured set as
    facts, letting the model answer directly when state is already known.
 2. LLM-driven discovery. The action-agent system prompt
    (`.../llm_context/system_prompt.py`) lets the model, at its own
@@ -92,7 +92,7 @@ The pipeline now follows up with a short assistant pass that summarizes that
 output:
 
 1. Read-only discovery slash commands stash a compact text view of what they
-   found on `session.last_command_observation`
+   found on `session.agent.last_observation`
    (`_record_integrations_observation` in
    `interactive_shell/command_registry/integrations.py`).
 2. `handle_message_with_agent` resets that field at the start of every action-agent

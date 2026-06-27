@@ -18,6 +18,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from interactive_shell.harness.llm_context.conversation_history import MAX_CONVERSATION_MESSAGES
+from interactive_shell.harness.llm_context.models import ConversationMessage
 
 if TYPE_CHECKING:
     from config.llm_reasoning_effort import ReasoningEffortChoice
@@ -38,9 +39,10 @@ class TurnContext:
     text: str
     """Raw user input text for this turn."""
 
-    conversation_messages: tuple[tuple[str, str], ...]
-    """Snapshot of recent CLI conversation: ``(role, content)`` pairs, oldest
-    first, capped to ``MAX_CONVERSATION_MESSAGES`` entries at assembly time."""
+    conversation_messages: tuple[ConversationMessage, ...]
+    """Snapshot of recent CLI conversation as :class:`ConversationMessage`
+    values, oldest first, capped to ``MAX_CONVERSATION_MESSAGES`` entries at
+    assembly time."""
 
     configured_integrations: tuple[str, ...]
     """Integration names known to be configured at turn start."""
@@ -64,9 +66,9 @@ class TurnContext:
         Call this once at the top of ``handle_message_with_agent`` before any
         mutations happen, then pass the returned context downstream.
         """
-        messages = session.cli_agent_messages
-        snapshot: tuple[tuple[str, str], ...] = tuple(
-            (str(role), str(content))
+        messages = session.agent.messages
+        snapshot: tuple[ConversationMessage, ...] = tuple(
+            ConversationMessage.from_role_content(role, content)
             for role, content in messages[-MAX_CONVERSATION_MESSAGES:]
             if isinstance(role, str) and isinstance(content, str)
         )

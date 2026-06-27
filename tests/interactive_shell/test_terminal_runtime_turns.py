@@ -8,11 +8,11 @@ import pytest
 from rich.console import Console
 
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -180,7 +180,7 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
             handled=True,
         )
 
-    def _fake_answer_cli_agent(
+    def _fake_generate_response(
         text: str,
         _session: ReplSession,
         _console: Console,
@@ -198,7 +198,7 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
         confirm_fn=None,
         is_tty=None,
         execute_actions=_fake_execute_cli_actions,
-        answer_agent=_fake_answer_cli_agent,
+        response_generator=_fake_generate_response,
     )
 
     assert action_calls == [nitro_prompt]

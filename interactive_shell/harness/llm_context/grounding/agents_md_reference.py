@@ -39,14 +39,13 @@ empty string so callers can detect that and skip the block.
 
 from __future__ import annotations
 
-import hashlib
 import os
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
+from interactive_shell.harness.llm_context.grounding._cache import FingerprintCache, excerpt
+from interactive_shell.harness.llm_context.grounding.reference import GroundingReference
+from interactive_shell.harness.llm_context.models import CacheStats, PromptSection
 
 # Repo root is five levels above this file
 # (.../interactive_shell/harness/llm_context/grounding/agents_md_reference.py -> repo root).
@@ -105,37 +104,6 @@ def _iter_agents_md_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
-# Delimiters keep SHA-256 input unambiguous across (relpath, size, mtime)
-# tuple boundaries, mirroring docs_reference for symmetry.
-_FP_FIELD_SEP = b"\x00"
-_FP_RECORD_SEP = b"\xff"
-
-
-def _fingerprint_from_paths(root: Path, files: list[Path]) -> str:
-    """Digest of tracked AGENTS.md files using paths from a single tree walk."""
-    digest = hashlib.sha256()
-    if not root.exists() or not root.is_dir():
-        digest.update(b"nodir")
-        digest.update(_FP_FIELD_SEP)
-        digest.update(str(root.resolve() if root.exists() else root).encode())
-        digest.update(_FP_FIELD_SEP)
-        return digest.hexdigest()
-
-    for path in files:
-        rel = path.relative_to(root).as_posix()
-        try:
-            st = path.stat()
-            digest.update(rel.encode())
-            digest.update(_FP_FIELD_SEP)
-            digest.update(str(st.st_size).encode())
-            digest.update(_FP_FIELD_SEP)
-            digest.update(str(st.st_mtime_ns).encode())
-            digest.update(_FP_RECORD_SEP)
-        except OSError:
-            continue
-    return digest.hexdigest()
-
-
 def _parse_agents_md_files(root: Path, files: list[Path]) -> tuple[AgentsMdFile, ...]:
     if not root.exists() or not root.is_dir():
         return ()
@@ -155,17 +123,6 @@ def _parse_agents_md_files(root: Path, files: list[Path]) -> tuple[AgentsMdFile,
 _MAX_AGENTS_MD_FP_CACHE_ENTRIES = 32
 
 
-def _excerpt(body: str, max_chars: int = _MAX_PER_FILE_CHARS) -> str:
-    """Trim an AGENTS.md body to ``max_chars``, preferring to cut at a paragraph boundary."""
-    body = body.strip()
-    if len(body) <= max_chars:
-        return body
-    cutoff = body.rfind("\n\n", 0, max_chars)
-    if cutoff < max_chars // 2:
-        cutoff = max_chars
-    return body[:cutoff].rstrip() + "\n\n[... excerpt truncated ...]\n"
-
-
 def _format_label(relpath: str) -> str:
     """Header label used in the rendered block.
 
@@ -177,7 +134,7 @@ def _format_label(relpath: str) -> str:
     return relpath
 
 
-class AgentsMdReference:
+class AgentsMdReference(GroundingReference):
     """Session-scoped AGENTS.md discovery + grounding cache.
 
     Holds its parse cache as instance state so each :class:`GroundingContext`
@@ -187,41 +144,22 @@ class AgentsMdReference:
     name = "agents_md"
 
     def __init__(self) -> None:
-        self._parse_cache: OrderedDict[tuple[str, str], tuple[AgentsMdFile, ...]] = OrderedDict()
-        self._hits = 0
-        self._misses = 0
+        self._cache: FingerprintCache[AgentsMdFile] = FingerprintCache(
+            max_entries=_MAX_AGENTS_MD_FP_CACHE_ENTRIES
+        )
 
     def discover(self, root: Path | None = None) -> list[AgentsMdFile]:
-        """Walk the repo root, parse each ``AGENTS.md``, return :class:`AgentsMdFile` records."""
+        """Walk the repo root, parse each ``AGENTS.md``, return :class:`AgentsMdFile` records.
+
+        Every call walks the tree (and stats what it finds) — even on cache
+        hits — because the walk + per-file fingerprint is what detects in-file
+        edits between grounding calls during a long-running shell. The cost is
+        bounded by the ``_SKIP_DIRS`` prune (notably ``.venv``).
+        """
         target = root if root is not None else _REPO_ROOT
-        resolved = target.resolve() if target.exists() else target
-        root_key = str(resolved)
-
-        # Every discover call walks the tree (and stats what it finds) — even on
-        # cache hits — because the walk + per-file fingerprint is what detects
-        # in-file edits between grounding calls during a long-running shell.
-        # Skipping the walk on cache hits would make AGENTS.md edits invisible
-        # until eviction, which is the bug the fingerprint design in
-        # docs_reference.py was introduced to avoid; we keep the same trade-off
-        # here so the two grounding sources stay symmetric. The cost is bounded
-        # by the _SKIP_DIRS prune (notably ``.venv``).
-        files = _iter_agents_md_files(resolved)
-        fp = _fingerprint_from_paths(resolved, files)
-        cache_key = (root_key, fp)
-
-        cached = self._parse_cache.get(cache_key)
-        if cached is not None:
-            self._hits += 1
-            self._parse_cache.move_to_end(cache_key)
-            return list(cached)
-
-        self._misses += 1
-        parsed_tuple = _parse_agents_md_files(resolved, files)
-
-        while len(self._parse_cache) >= _MAX_AGENTS_MD_FP_CACHE_ENTRIES:
-            self._parse_cache.popitem(last=False)
-        self._parse_cache[cache_key] = parsed_tuple
-        return list(parsed_tuple)
+        return self._cache.get_or_parse(
+            target, iter_files=_iter_agents_md_files, parse=_parse_agents_md_files
+        )
 
     def build_text(self, *, max_chars: int = _DEFAULT_MAX_TOTAL_CHARS) -> str:
         """Assemble an AGENTS.md reference block for LLM grounding.
@@ -241,40 +179,28 @@ class AgentsMdReference:
         if not files:
             return ""
 
-        parts: list[str] = []
-        for f in files:
-            parts.append(f"=== {_format_label(f.relpath)} ===\n")
-            parts.append(_excerpt(f.body))
-            parts.append("\n\n")
-
-        text = "".join(parts).rstrip() + "\n"
+        text = (
+            "".join(
+                PromptSection(
+                    label=_format_label(f.relpath),
+                    body=excerpt(f.body, _MAX_PER_FILE_CHARS),
+                    style="heading",
+                ).render()
+                for f in files
+            ).rstrip()
+            + "\n"
+        )
         if len(text) > max_chars:
             return text[:max_chars] + "\n\n[... AGENTS.md reference truncated ...]\n"
         return text
 
     def invalidate(self) -> None:
         """Clear the bounded parse cache (tests, forced refresh)."""
-        self._parse_cache.clear()
-        self._hits = 0
-        self._misses = 0
+        self._cache.clear()
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self) -> CacheStats:
         """Debug metrics for AGENTS.md grounding cache (hits/misses/size)."""
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "currsize": len(self._parse_cache),
-            "maxsize": _MAX_AGENTS_MD_FP_CACHE_ENTRIES,
-        }
-
-    def as_grounding_source(self) -> GroundingSource:
-        return GroundingSource(
-            name=self.name,
-            stats_fn=self.stats,
-            format_fn=lambda s: (
-                f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
-            ),
-        )
+        return self._cache.stats(self.name)
 
 
 __all__ = [

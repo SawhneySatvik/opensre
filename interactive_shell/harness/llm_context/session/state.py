@@ -10,6 +10,8 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from pydantic import ConfigDict
+
 if TYPE_CHECKING:
     from prompt_toolkit.history import History
 
@@ -17,8 +19,10 @@ if TYPE_CHECKING:
     from interactive_shell.harness.llm_context.grounding.context import GroundingContext
 
 from config.llm_reasoning_effort import ReasoningEffortChoice
+from config.strict_config import StrictConfigModel
 from interactive_shell.harness.llm_context.session.storage.jsonl import JsonlSessionStorage
 from interactive_shell.harness.llm_context.session.types import SessionStorage
+from interactive_shell.harness.state import ConversationState
 from interactive_shell.runtime.background.models import (
     BackgroundInvestigationRecord,
     BackgroundNotificationPreferences,
@@ -58,9 +62,15 @@ def _default_grounding() -> GroundingContext:
     return GroundingContext()
 
 
-@dataclass
-class TerminalMetricsSnapshot:
-    """Session-level aggregate counters for interactive-shell analytics."""
+class TerminalMetricsSnapshot(StrictConfigModel):
+    """Session-level aggregate counters for interactive-shell analytics.
+
+    A pure immutable value snapshot returned from ``record_terminal_turn``; the
+    mutable session state itself stays a dataclass (it holds a lock and mutates
+    per turn).
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
 
     turn_index: int
     fallback_count: int
@@ -155,8 +165,12 @@ class ReplSession:
     llm_call_count: int = 0
     """Number of LLM calls accumulated into ``token_usage`` (for ``/cost``)."""
 
-    cli_agent_messages: list[tuple[str, str]] = field(default_factory=list)
-    """Assistant conversation history: alternating (\"user\"|\"assistant\", text)."""
+    agent: ConversationState = field(default_factory=ConversationState)
+    """Dedicated conversational-agent state (transcript + per-turn observation).
+
+    Owns the assistant conversation history (alternating
+    (\"user\"|\"assistant\", text)) and the per-turn read-only discovery
+    observation, kept in one place rather than as loose session fields."""
 
     prompt_history_backend: History | None = None
     """The live ``prompt_toolkit.History`` object backing the input prompt.
@@ -248,14 +262,6 @@ class ReplSession:
 
     last_synthetic_observation_path: str | None = None
     """Absolute path to ``latest.json`` for the last finished synthetic run (set on failure)."""
-
-    last_command_observation: str | None = None
-    """Compact textual result of a read-only discovery command run this turn.
-
-    Set by read-only discovery slash commands (e.g. ``/integrations``) so the
-    agent can summarize what the command found into a direct answer. Reset at
-    the start of every agent turn; only consumed when the planner (not the user)
-    chose to run the discovery command."""
 
     incoming_alerts: list[IncomingAlert] = field(default_factory=list)
     """Queued incoming alerts from the HTTP listener, capped at 256 entries.
@@ -571,7 +577,7 @@ class ReplSession:
         self.accumulated_context.clear()
         self.token_usage.clear()
         self.llm_call_count = 0
-        self.cli_agent_messages.clear()
+        self.agent.clear()
         self.incoming_alerts.clear()
         # Keep persisted cross-session task history on disk intact.
         # /new is session-scoped, so swap in a fresh in-memory registry

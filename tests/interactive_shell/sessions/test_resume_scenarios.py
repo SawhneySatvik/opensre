@@ -147,7 +147,7 @@ class TestResumeScenarioMatrix:
             t.get("kind") == "slash" and t.get("text", "").startswith("/resume")
             for t in target_turns
         )
-        assert session.cli_agent_messages[0] == ("user", "why is redis slow?")
+        assert session.agent.messages[0] == ("user", "why is redis slow?")
         assert session.accumulated_context == {"service": "redis"}
 
     def test_scenario_post_resume_slash_and_chat_append_to_target(
@@ -298,7 +298,7 @@ class TestResumeScenarioMatrix:
         turns_b = _read_turns(isolated_sessions / f"{id_b}.jsonl")
         assert any("/resume" in t.get("text", "") for t in turns_a)
         assert any("/resume" in t.get("text", "") for t in turns_b)
-        assert session.cli_agent_messages[0] == ("user", "session B question")
+        assert session.agent.messages[0] == ("user", "session B question")
 
     def test_scenario_active_session_with_turns_flushed_without_resume_slash(
         self,

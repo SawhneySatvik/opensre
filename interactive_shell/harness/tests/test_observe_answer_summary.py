@@ -12,8 +12,8 @@ import io
 
 from rich.console import Console
 
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -35,7 +35,7 @@ def test_discovery_output_is_summarized_into_a_direct_answer() -> None:
         console: Console,
         **kwargs: object,
     ) -> ToolCallingTurnResult:
-        session.last_command_observation = _OBSERVATION
+        session.agent.last_observation = _OBSERVATION
         return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
@@ -60,7 +60,7 @@ def test_discovery_output_is_summarized_into_a_direct_answer() -> None:
         _console(),
         recorder=None,
         execute_actions=fake_execute,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert observed == [_OBSERVATION]
@@ -97,7 +97,7 @@ def test_no_observation_keeps_silent_handled_turn() -> None:
         _console(),
         recorder=None,
         execute_actions=fake_execute,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert answer_calls == []
@@ -114,7 +114,7 @@ def test_failed_discovery_is_not_summarized() -> None:
         console: Console,
         **kwargs: object,
     ) -> ToolCallingTurnResult:
-        session.last_command_observation = _OBSERVATION
+        session.agent.last_observation = _OBSERVATION
         return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
@@ -134,7 +134,7 @@ def test_failed_discovery_is_not_summarized() -> None:
         _console(),
         recorder=None,
         execute_actions=fake_execute,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert answer_calls == []
@@ -165,15 +165,15 @@ def test_observation_is_reset_each_turn() -> None:
         return None
 
     session = ReplSession()
-    session.last_command_observation = "stale observation from a previous turn"
+    session.agent.last_observation = "stale observation from a previous turn"
     handle_message_with_agent(
         "deploy the remote instance",
         session,
         _console(),
         recorder=None,
         execute_actions=fake_execute,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert answer_calls == []
-    assert session.last_command_observation is None
+    assert session.agent.last_observation is None

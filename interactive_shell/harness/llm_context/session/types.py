@@ -15,6 +15,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from interactive_shell.harness.state import ConversationState
+
 # Turn kinds that represent user-initiated chat messages. ReplSession.record()
 # is called with the turn kind, not a normalized "chat" label, so this set must
 # cover all kinds that produce conversational turns.
@@ -26,7 +28,7 @@ class SessionPersistenceSource(Protocol):
 
     session_id: str
     started_at: float
-    cli_agent_messages: list[tuple[str, str]]
+    agent: ConversationState
     accumulated_context: dict[str, Any]
 
 

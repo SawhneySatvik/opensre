@@ -276,7 +276,7 @@ def test_run_claude_code_implementation_starts_tracked_task(
     )
 
     session = ReplSession()
-    session.cli_agent_messages.append(
+    session.agent.messages.append(
         ("assistant", "Process auto-discovery should scan local agent processes.")
     )
     buf = io.StringIO()

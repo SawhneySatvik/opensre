@@ -1,12 +1,12 @@
 """Live tool-gathering pass for the interactive-shell assistant.
 
-The REPL's conversational assistant (:func:`interactive_shell.harness.agent.answer_cli_agent`)
+The REPL's response generator (:func:`interactive_shell.harness.response.generate_response`)
 is grounded text generation — it cannot reach integrations on its own. This
 module gives a free-form turn access to the **same registered tools the
 investigation pipeline uses**: it runs a bounded think → call-tools → observe
 loop (:class:`core.runtime.agent.Agent`) over the available
 ``"investigation"`` surface tools, then hands the collected tool outputs back to
-``answer_cli_agent`` as an observation block so it can compose a grounded answer.
+``generate_response`` as an observation block so it can compose a grounded answer.
 
 Design notes:
 
@@ -214,7 +214,7 @@ def _resolve_gather_integrations(session: ReplSession, message: str) -> dict[str
     base = _resolve_session_integrations(session)
     scope = infer_github_repo_scope(
         message=message,
-        conversation_messages=session.cli_agent_messages,
+        conversation_messages=session.agent.messages,
         env=os.environ,
         cwd=os.getcwd(),
         cached=session.github_repo_scope,
@@ -226,7 +226,7 @@ def _resolve_gather_integrations(session: ReplSession, message: str) -> dict[str
 
 
 def _build_gather_user_message(session: ReplSession, message: str) -> str:
-    messages = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
+    messages = session.agent.messages[-MAX_CONVERSATION_MESSAGES:]
     history = format_recent_conversation(messages, max_turns=3)
     if history == NO_HISTORY_PLACEHOLDER:
         return message

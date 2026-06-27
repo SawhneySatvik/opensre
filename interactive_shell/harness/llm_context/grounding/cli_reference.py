@@ -4,11 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from typing import Any
 
 import click
 
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
+from interactive_shell.harness.llm_context.grounding.reference import GroundingReference
+from interactive_shell.harness.llm_context.models import CacheStats
 
 _logger = logging.getLogger(__name__)
 
@@ -165,7 +165,7 @@ def _interactive_shell_slash_hints() -> str:
     return "\n".join(lines)
 
 
-class CliReference:
+class CliReference(GroundingReference):
     """Session-scoped cache for assembled CLI help reference text.
 
     Holds its cache as instance state so each :class:`GroundingContext` (and
@@ -216,23 +216,15 @@ class CliReference:
         self._hits = 0
         self._misses = 0
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self) -> CacheStats:
         """Debug counters for grounding cache hit/miss and last signature."""
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "cached": self._text is not None,
-            "signature": self._signature,
-            "created_at_monotonic": self._created_at_monotonic,
-        }
-
-    def as_grounding_source(self) -> GroundingSource:
-        return GroundingSource(
+        return CacheStats(
             name=self.name,
-            stats_fn=self.stats,
-            format_fn=lambda s: (
-                f"hits={s['hits']} misses={s['misses']} cached={'yes' if s['cached'] else 'no'}"
-            ),
+            hits=self._hits,
+            misses=self._misses,
+            cached=self._text is not None,
+            signature=self._signature,
+            created_at_monotonic=self._created_at_monotonic,
         )
 
 

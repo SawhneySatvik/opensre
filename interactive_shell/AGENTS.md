@@ -25,7 +25,7 @@ should be predictable, interruptible, explainable, and safe by default.
 | `runtime/` | background tasks, lifecycle/`ReplState`, controller/entrypoint support modules (lazily re-exports the `session/` surface for back-compat) | UI rendering, prompt text, and session persistence |
 | `orchestration/` | action planning, execution policy, subprocess runner, deterministic command detection, and interaction models | raw UI formatting |
 | `tools/shell/` | shell command parsing, shell execution policy, subprocess execution, and the `run_shell_command`/`run_cd`/`run_pwd` runner (next to the `shell_run` tool in `tools/shell_tool.py`) | slash-command execution |
-| `harness/agent.py` | conversational assistant turn (`answer_cli_agent`), action-plan parsing, and capability validation | direct mutation of runtime state outside the subprocess runner |
+| `harness/response.py` | final response generation (`generate_response`), action-plan parsing, and capability validation | direct mutation of runtime state outside the subprocess runner |
 | `references/` | CLI/docs/source/AGENTS reference loading and caching | generated model prose |
 | `config/` | interactive-shell config loading and tool catalog metadata | global app config unrelated to the REPL |
 | `harness/llm_context/` | LLM prompt + grounding context: action/assistant system prompts, the shared recent-conversation helper (`conversation_history.py`), the session-scoped grounding caches (`grounding/` CLI/docs/AGENTS.md, aggregated by `GroundingContext`), and prompt-toolkit input-history persistence + secret redaction (`prompt_history/`) | session persistence (owned by `session/`) |

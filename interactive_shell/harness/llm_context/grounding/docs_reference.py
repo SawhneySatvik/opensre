@@ -40,14 +40,13 @@ CLI reference and avoid inventing setup steps.
 
 from __future__ import annotations
 
-import hashlib
 import re
-from collections import OrderedDict
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
-from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
+from interactive_shell.harness.llm_context.grounding._cache import FingerprintCache, excerpt
+from interactive_shell.harness.llm_context.grounding.reference import GroundingReference
+from interactive_shell.harness.llm_context.models import CacheStats, PromptSection
 
 # Docs live at the repository root, five levels above this file
 # (.../interactive_shell/harness/llm_context/grounding/docs_reference.py -> repo root).
@@ -214,38 +213,6 @@ def _iter_doc_files(root: Path) -> list[Path]:
     return sorted(files)
 
 
-# Delimiters keep SHA-256 input unambiguous across (relpath, size, mtime) tuple
-# boundaries — concatenating decimal digits without separators is only
-# heuristic-safe, not injective in general.
-_FP_FIELD_SEP = b"\x00"
-_FP_RECORD_SEP = b"\xff"
-
-
-def _fingerprint_from_paths(root: Path, files: list[Path]) -> str:
-    """Digest of tracked docs files using paths from a single tree walk."""
-    digest = hashlib.sha256()
-    if not root.exists() or not root.is_dir():
-        digest.update(b"nodir")
-        digest.update(_FP_FIELD_SEP)
-        digest.update(str(root.resolve() if root.exists() else root).encode())
-        digest.update(_FP_FIELD_SEP)
-        return digest.hexdigest()
-
-    for path in files:
-        rel = path.relative_to(root).as_posix()
-        try:
-            st = path.stat()
-            digest.update(rel.encode())
-            digest.update(_FP_FIELD_SEP)
-            digest.update(str(st.st_size).encode())
-            digest.update(_FP_FIELD_SEP)
-            digest.update(str(st.st_mtime_ns).encode())
-            digest.update(_FP_RECORD_SEP)
-        except OSError:
-            continue
-    return digest.hexdigest()
-
-
 def _parse_doc_files(root: Path, files: list[Path]) -> tuple[DocPage, ...]:
     if not root.exists() or not root.is_dir():
         return ()
@@ -338,17 +305,6 @@ def find_relevant_docs(
     return [page for _, page in scored[:top_n]]
 
 
-def _excerpt(body: str, max_chars: int = _MAX_PER_DOC_CHARS) -> str:
-    """Trim a doc body to ``max_chars``, preferring to cut at a paragraph boundary."""
-    body = body.strip()
-    if len(body) <= max_chars:
-        return body
-    cutoff = body.rfind("\n\n", 0, max_chars)
-    if cutoff < max_chars // 2:
-        cutoff = max_chars
-    return body[:cutoff].rstrip() + "\n\n[... excerpt truncated ...]\n"
-
-
 def build_docs_index(pages: list[DocPage], *, max_entries: int = 80) -> str:
     """Return a compact ``slug — title`` index of available pages.
 
@@ -365,7 +321,7 @@ def build_docs_index(pages: list[DocPage], *, max_entries: int = 80) -> str:
     return "\n".join(lines)
 
 
-class DocsReference:
+class DocsReference(GroundingReference):
     """Session-scoped docs discovery + grounding cache.
 
     Holds its parse cache as instance state so each :class:`GroundingContext`
@@ -375,33 +331,14 @@ class DocsReference:
     name = "docs"
 
     def __init__(self) -> None:
-        self._parse_cache: OrderedDict[tuple[str, str], tuple[DocPage, ...]] = OrderedDict()
-        self._hits = 0
-        self._misses = 0
+        self._cache: FingerprintCache[DocPage] = FingerprintCache(
+            max_entries=_MAX_DOCS_FP_CACHE_ENTRIES
+        )
 
     def discover(self, root: Path | None = None) -> list[DocPage]:
         """Walk the docs root, parse each MDX page, return them as :class:`DocPage` records."""
         target = root if root is not None else _DOCS_ROOT
-        resolved = target.resolve() if target.exists() else target
-        root_key = str(resolved)
-
-        files = _iter_doc_files(resolved)
-        fp = _fingerprint_from_paths(resolved, files)
-        cache_key = (root_key, fp)
-
-        cached = self._parse_cache.get(cache_key)
-        if cached is not None:
-            self._hits += 1
-            self._parse_cache.move_to_end(cache_key)
-            return list(cached)
-
-        self._misses += 1
-        pages_tuple = _parse_doc_files(resolved, files)
-
-        while len(self._parse_cache) >= _MAX_DOCS_FP_CACHE_ENTRIES:
-            self._parse_cache.popitem(last=False)
-        self._parse_cache[cache_key] = pages_tuple
-        return list(pages_tuple)
+        return self._cache.get_or_parse(target, iter_files=_iter_doc_files, parse=_parse_doc_files)
 
     def find_relevant(
         self,
@@ -436,13 +373,16 @@ class DocsReference:
         if not pages:
             return ""
 
-        parts: list[str] = []
         relevant = self.find_relevant(query, pages, top_n=top_n) if query else []
 
-        for page in relevant:
-            parts.append(f"=== docs/{page.relpath} (title: {page.title}) ===\n")
-            parts.append(_excerpt(page.body))
-            parts.append("\n\n")
+        parts: list[str] = [
+            PromptSection(
+                label=f"docs/{page.relpath} (title: {page.title})",
+                body=excerpt(page.body, _MAX_PER_DOC_CHARS),
+                style="heading",
+            ).render()
+            for page in relevant
+        ]
 
         index = build_docs_index(pages)
         if index:
@@ -456,27 +396,11 @@ class DocsReference:
 
     def invalidate(self) -> None:
         """Clear the bounded parse cache (tests, forced refresh)."""
-        self._parse_cache.clear()
-        self._hits = 0
-        self._misses = 0
+        self._cache.clear()
 
-    def stats(self) -> dict[str, Any]:
+    def stats(self) -> CacheStats:
         """Debug metrics for docs grounding cache (hits/misses/size)."""
-        return {
-            "hits": self._hits,
-            "misses": self._misses,
-            "currsize": len(self._parse_cache),
-            "maxsize": _MAX_DOCS_FP_CACHE_ENTRIES,
-        }
-
-    def as_grounding_source(self) -> GroundingSource:
-        return GroundingSource(
-            name=self.name,
-            stats_fn=self.stats,
-            format_fn=lambda s: (
-                f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
-            ),
-        )
+        return self._cache.stats(self.name)
 
 
 __all__ = [

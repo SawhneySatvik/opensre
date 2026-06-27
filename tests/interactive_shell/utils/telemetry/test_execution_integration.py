@@ -4,8 +4,8 @@ import io
 
 from rich.console import Console
 
-from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.turn import handle_message_with_agent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -53,7 +53,7 @@ def test_handle_message_with_agent_cli_agent_empty_response_is_recorded_empty() 
         confirm_fn=None,
         is_tty=None,
         execute_actions=fake_execute,
-        answer_agent=fake_answer,
+        response_generator=fake_answer,
     )
 
     assert output.getvalue() == ""
