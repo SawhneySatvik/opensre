@@ -10,12 +10,13 @@ for ``/rca``.
 from __future__ import annotations
 
 import contextlib
+import importlib
 import json
 from pathlib import Path
 from typing import Any
 
-import context.session.paths as paths
-from context.session.paths import derive_name
+paths = importlib.import_module("context.session.paths")
+derive_name = paths.derive_name
 
 _ROOT_CAUSE_PREVIEW_CHARS = 80
 _DEFAULT_RCA_HISTORY_LIMIT = 50

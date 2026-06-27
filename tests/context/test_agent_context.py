@@ -6,6 +6,7 @@ from context.agent_context import AgentContext
 from context.models import coerce_messages
 from core.runtime.agent import Agent
 from core.runtime.llm.agent_llm_client import AgentLLMResponse
+from core.runtime.messages import UserRuntimeMessage
 from core.runtime.types import AgentTool
 
 
@@ -71,6 +72,8 @@ def test_agent_context_can_be_runtime_request_without_shell_metadata() -> None:
 
     assert result.final_text == "done"
     assert result.hit_iteration_cap is False
+    assert isinstance(result.messages[0], UserRuntimeMessage)
+    assert result.messages[0].content == "investigate"
 
 
 def test_agent_context_runtime_validation_requires_runtime_fields() -> None:

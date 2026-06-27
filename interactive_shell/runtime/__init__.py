@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 from typing import TYPE_CHECKING, Any
 
 from interactive_shell.runtime.background.models import (
@@ -35,8 +36,7 @@ _SESSION_EXPORTS = frozenset(
 
 def __getattr__(name: str) -> Any:
     if name in _SESSION_EXPORTS:
-        import context.session as _session
-
+        _session = importlib.import_module("context.session")
         return getattr(_session, name)
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 

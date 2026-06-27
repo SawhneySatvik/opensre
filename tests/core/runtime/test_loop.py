@@ -8,6 +8,12 @@ import pytest
 
 from core.runtime.agent import Agent, AgentRunResult
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
+from core.runtime.messages import (
+    ToolResultRuntimeMessage,
+    UserRuntimeMessage,
+    app_runtime_message,
+    user_runtime_message,
+)
 from tools.registered_tool import RegisteredTool
 
 
@@ -23,6 +29,7 @@ class FakeLLM:
         self._responses = responses
         self.invocations = 0
         self.schema_tool_names: list[list[str]] = []
+        self.seen_messages: list[list[dict[str, Any]]] = []
 
     def tool_schemas(self, tools: list[Any]) -> list[dict[str, Any]]:
         self.schema_tool_names.append([t.name for t in tools])
@@ -36,6 +43,7 @@ class FakeLLM:
         tools: list[dict[str, Any]] | None = None,  # noqa: ARG002
     ) -> AgentLLMResponse:
         self.invocations += 1
+        self.seen_messages.append(messages)
         return next(self._responses)
 
     def build_assistant_message(
@@ -140,7 +148,29 @@ def test_one_tool_round_then_final() -> None:
     assert result.hit_iteration_cap is False
     # user + assistant(tool call) + tool-result + assistant(final)
     assert len(result.messages) == 4
-    assert result.messages[0] == initial[0]
+    assert isinstance(result.messages[0], UserRuntimeMessage)
+    assert result.messages[0].content == initial[0]["content"]
+    assert isinstance(result.messages[2], ToolResultRuntimeMessage)
+    assert llm.seen_messages[0] == initial
+
+
+def test_agent_transcript_can_keep_app_messages_out_of_provider_context() -> None:
+    llm = FakeLLM(iter([_text_response("done")]))
+
+    result = _agent(llm, _tools(FakeTool("query_logs"))).run(
+        [
+            user_runtime_message("hello"),
+            app_runtime_message("ui-note", "render only", include_in_context=False),
+            app_runtime_message("runtime-context", "visible context"),
+        ]
+    )
+
+    assert result.final_text == "done"
+    assert [message["content"] for message in llm.seen_messages[0]] == [
+        "hello",
+        "visible context",
+    ]
+    assert len(result.messages) == 4
 
 
 def test_on_event_emits_kinds_in_order() -> None:

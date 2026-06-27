@@ -14,7 +14,15 @@ from core.runtime.context_budget import (
 )
 from core.runtime.execution import execute_tools, public_tool_input
 from core.runtime.llm.agent_llm_client import ToolCall
-from core.runtime.messages import build_assistant_message, build_tool_result_messages
+from core.runtime.messages import (
+    RuntimeMessage,
+    RuntimeMessageLike,
+    convert_to_llm_messages,
+    ensure_runtime_messages,
+    runtime_assistant_message,
+    runtime_tool_result_message,
+    user_runtime_message,
+)
 from core.runtime.types import RuntimeTool
 from platform.observability.tool_trace import redact_sensitive
 
@@ -35,7 +43,7 @@ class AgentRunResult:
     during the loop.
     """
 
-    messages: list[dict[str, Any]]
+    messages: list[RuntimeMessage]
     final_text: str
     executed: list[tuple[ToolCall, Any]] = field(default_factory=list)
     hit_iteration_cap: bool = False
@@ -81,7 +89,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
 
     def run(
         self,
-        initial_messages: list[dict[str, Any]] | None = None,
+        initial_messages: Sequence[RuntimeMessageLike] | None = None,
         *,
         agent_context: AgentContext | None = None,
     ) -> AgentRunResult:
@@ -94,7 +102,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
             resolved = agent_context.resolved_integrations
             max_iterations = agent_context.max_iterations
         elif initial_messages is not None:
-            messages = list(initial_messages)
+            messages = ensure_runtime_messages(initial_messages)
             system = self._system
             tools = list(self._tools)
             resolved = self._resolved
@@ -111,9 +119,10 @@ class Agent[RuntimeToolT: RuntimeTool]:
 
         for iteration in range(max_iterations):
             self._emit("llm_start", {"iteration": iteration})
-            enforce_context_budget(messages, system=system, tools=tool_schemas, ceiling=ceiling)
-            response = self._llm.invoke(messages, system=system, tools=tool_schemas)
-            messages.append(build_assistant_message(self._llm, response))
+            llm_messages = convert_to_llm_messages(self._llm, messages)
+            enforce_context_budget(llm_messages, system=system, tools=tool_schemas, ceiling=ceiling)
+            response = self._llm.invoke(llm_messages, system=system, tools=tool_schemas)
+            messages.append(runtime_assistant_message(self._llm, response))
 
             if not response.has_tool_calls:
                 accept, nudge = self._should_accept_conclusion(
@@ -130,7 +139,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                         "the conclusion, otherwise the LLM will loop on an unchanged "
                         "message history until max_iterations."
                     )
-                messages.append({"role": "user", "content": nudge})
+                messages.append(user_runtime_message(nudge))
                 continue
 
             for tc in response.tool_calls:
@@ -140,7 +149,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                 )
 
             results = execute_tools(response.tool_calls, runtime_tools, resolved)
-            messages.extend(build_tool_result_messages(self._llm, response.tool_calls, results))
+            messages.append(runtime_tool_result_message(self._llm, response.tool_calls, results))
 
             for tc, output in zip(response.tool_calls, results):
                 executed.append((tc, output))

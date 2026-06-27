@@ -175,6 +175,7 @@ class MutableAgentState:
             try:
                 self._subscribers.remove(subscriber)
             except ValueError:
+                # Subscriber was already removed; keep unsubscribe idempotent.
                 pass
 
         return _unsubscribe

@@ -25,6 +25,7 @@ RuntimeTool = Any
 if TYPE_CHECKING:
     from config.llm_reasoning_effort import ReasoningEffortChoice
     from context.session import ReplSession
+    from core.runtime.messages import RuntimeMessage
 
 
 @dataclass(frozen=True)
@@ -112,9 +113,11 @@ class AgentContext:
             model=request_input.model,
         )
 
-    def runtime_messages(self) -> list[dict[str, Any]]:
+    def runtime_messages(self) -> list[RuntimeMessage]:
         """Return the user message list expected by the runtime loop."""
-        return [{"role": "user", "content": self.text}]
+        from core.runtime.messages import user_runtime_message
+
+        return [user_runtime_message(self.text)]
 
     def validate_runtime_request(self) -> None:
         """Validate fields required once this object reaches ``Agent.run``."""
