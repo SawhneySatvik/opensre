@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from config.version import get_version
-from interactive_shell.harness.state.history.policy import redact_text
+from interactive_shell.prompt_history.policy import redact_text
 from interactive_shell.utils.telemetry.config import PromptLogConfig
 from interactive_shell.utils.telemetry.integration_snapshot import (
     build_turn_integration_snapshot,

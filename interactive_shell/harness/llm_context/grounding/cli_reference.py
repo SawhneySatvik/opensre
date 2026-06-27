@@ -4,12 +4,11 @@ from __future__ import annotations
 
 import logging
 import time
-from dataclasses import dataclass
 from typing import Any
 
 import click
 
-from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
+from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
 
 _logger = logging.getLogger(__name__)
 
@@ -26,20 +25,6 @@ def _is_cacheable_cli_reference(text: str) -> bool:
     if len(stripped) < _MIN_CACHEABLE_CLI_REFERENCE_CHARS:
         return False
     return _CLI_REFERENCE_SENTINEL in text
-
-
-@dataclass
-class _CliReferenceCache:
-    """Process-local cache for assembled CLI help reference text."""
-
-    signature: str | None = None
-    text: str | None = None
-    created_at_monotonic: float = 0.0
-    hits: int = 0
-    misses: int = 0
-
-
-_cli_reference_cache = _CliReferenceCache()
 
 
 def _current_cli_signature() -> str:
@@ -180,66 +165,77 @@ def _interactive_shell_slash_hints() -> str:
     return "\n".join(lines)
 
 
-def invalidate_cli_reference_cache() -> None:
-    """Drop cached CLI reference text (for tests or forced refresh)."""
-    _cli_reference_cache.signature = None
-    _cli_reference_cache.text = None
-    _cli_reference_cache.created_at_monotonic = 0.0
-    _cli_reference_cache.hits = 0
-    _cli_reference_cache.misses = 0
+class CliReference:
+    """Session-scoped cache for assembled CLI help reference text.
 
-
-def get_cli_reference_cache_stats() -> dict[str, Any]:
-    """Debug counters for grounding cache hit/miss and last signature."""
-    return {
-        "hits": _cli_reference_cache.hits,
-        "misses": _cli_reference_cache.misses,
-        "cached": _cli_reference_cache.text is not None,
-        "signature": _cli_reference_cache.signature,
-        "created_at_monotonic": _cli_reference_cache.created_at_monotonic,
-    }
-
-
-def build_cli_reference_text() -> str:
-    """Assemble ``opensre`` and subcommand ``--help`` output for LLM grounding.
-
-    Cached process-locally while the command registry signature matches.
+    Holds its cache as instance state so each :class:`GroundingContext` (and
+    thus each ``ReplSession``) owns an isolated cache with no module-level
+    mutable globals.
     """
-    sig = _current_cli_signature()
-    if _cli_reference_cache.text is not None and _cli_reference_cache.signature == sig:
-        _cli_reference_cache.hits += 1
-        return _cli_reference_cache.text
 
-    _cli_reference_cache.misses += 1
-    text = _build_cli_reference_text_uncached()
-    if _is_cacheable_cli_reference(text):
-        _cli_reference_cache.signature = sig
-        _cli_reference_cache.text = text
-        _cli_reference_cache.created_at_monotonic = time.monotonic()
-    else:
-        _cli_reference_cache.signature = None
-        _cli_reference_cache.text = None
-        _cli_reference_cache.created_at_monotonic = 0.0
-        _logger.warning(
-            "CLI reference build produced non-cacheable output (%d chars); skipping cache",
-            len(text),
+    name = "cli"
+
+    def __init__(self) -> None:
+        self._signature: str | None = None
+        self._text: str | None = None
+        self._created_at_monotonic: float = 0.0
+        self._hits: int = 0
+        self._misses: int = 0
+
+    def build_text(self) -> str:
+        """Assemble ``opensre`` and subcommand ``--help`` output for LLM grounding.
+
+        Cached on this instance while the command registry signature matches.
+        """
+        sig = _current_cli_signature()
+        if self._text is not None and self._signature == sig:
+            self._hits += 1
+            return self._text
+
+        self._misses += 1
+        text = _build_cli_reference_text_uncached()
+        if _is_cacheable_cli_reference(text):
+            self._signature = sig
+            self._text = text
+            self._created_at_monotonic = time.monotonic()
+        else:
+            self._signature = None
+            self._text = None
+            self._created_at_monotonic = 0.0
+            _logger.warning(
+                "CLI reference build produced non-cacheable output (%d chars); skipping cache",
+                len(text),
+            )
+        return text
+
+    def invalidate(self) -> None:
+        """Drop cached CLI reference text (for tests or forced refresh)."""
+        self._signature = None
+        self._text = None
+        self._created_at_monotonic = 0.0
+        self._hits = 0
+        self._misses = 0
+
+    def stats(self) -> dict[str, Any]:
+        """Debug counters for grounding cache hit/miss and last signature."""
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "cached": self._text is not None,
+            "signature": self._signature,
+            "created_at_monotonic": self._created_at_monotonic,
+        }
+
+    def as_grounding_source(self) -> GroundingSource:
+        return GroundingSource(
+            name=self.name,
+            stats_fn=self.stats,
+            format_fn=lambda s: (
+                f"hits={s['hits']} misses={s['misses']} cached={'yes' if s['cached'] else 'no'}"
+            ),
         )
-    return text
-
-
-_gd.register_grounding_source(
-    _gd.GroundingSource(
-        name="cli",
-        stats_fn=get_cli_reference_cache_stats,
-        format_fn=lambda s: (
-            f"hits={s['hits']} misses={s['misses']} cached={'yes' if s['cached'] else 'no'}"
-        ),
-    )
-)
 
 
 __all__ = [
-    "build_cli_reference_text",
-    "get_cli_reference_cache_stats",
-    "invalidate_cli_reference_cache",
+    "CliReference",
 ]

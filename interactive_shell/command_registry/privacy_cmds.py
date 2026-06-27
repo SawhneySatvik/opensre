@@ -7,12 +7,12 @@ from rich.console import Console
 from rich.markup import escape
 
 from interactive_shell.command_registry.types import SlashCommand
-from interactive_shell.harness.state.history import (
+from interactive_shell.prompt_history import (
     clear_persisted_history,
     load_command_history_entries,
     prompt_history_path,
 )
-from interactive_shell.harness.state.history.policy import (
+from interactive_shell.prompt_history.policy import (
     DEFAULT_REDACTION_RULES,
     RedactingFileHistory,
 )

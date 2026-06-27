@@ -19,7 +19,11 @@ from typing import Any
 from rich.console import Console
 
 from interactive_shell.harness import agent as cli_agent
-from interactive_shell.harness.agent import _parse_action_plan, answer_cli_agent
+from interactive_shell.harness.agent import (
+    ActionPlanAction,
+    _parse_action_plan,
+    answer_cli_agent,
+)
 from interactive_shell.harness.llm_context.assistant_system_prompt import (
     _ACTION_RULE,
     _MARKDOWN_RULE,
@@ -268,7 +272,7 @@ class TestActionPlanParsing:
             """
         )
 
-        assert actions == [{"action": "switch_llm_provider", "provider": "anthropic", "model": ""}]
+        assert actions == (ActionPlanAction(kind="switch_llm_provider", provider="anthropic"),)
 
     def test_infers_provider_switch_action_when_action_field_is_missing(self) -> None:
         actions = _parse_action_plan(
@@ -282,7 +286,7 @@ class TestActionPlanParsing:
             """
         )
 
-        assert actions == [{"action": "switch_llm_provider", "provider": "anthropic", "model": ""}]
+        assert actions == (ActionPlanAction(kind="switch_llm_provider", provider="anthropic"),)
 
     def test_parses_single_action_object(self) -> None:
         actions = _parse_action_plan(
@@ -293,7 +297,7 @@ class TestActionPlanParsing:
             """
         )
 
-        assert actions == [{"action": "switch_llm_provider", "provider": "anthropic", "model": ""}]
+        assert actions == (ActionPlanAction(kind="switch_llm_provider", provider="anthropic"),)
 
 
 class TestAssistantOutputRendering:

@@ -17,7 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
+from interactive_shell.harness.llm_context.conversation_history import MAX_CONVERSATION_MESSAGES
 
 if TYPE_CHECKING:
     from config.llm_reasoning_effort import ReasoningEffortChoice

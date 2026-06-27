@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from prompt_toolkit.history import History
 
     from core.domain.alerts.inbox import IncomingAlert
+    from interactive_shell.harness.llm_context.grounding.context import GroundingContext
 
 from config.llm_reasoning_effort import ReasoningEffortChoice
 from interactive_shell.runtime.background.models import (
@@ -44,6 +45,17 @@ def _scenario_id_from_synthetic_label(label: str) -> str:
         candidate = label.rsplit(":", 1)[-1].strip()
         return candidate if _SYNTHETIC_SCENARIO_ID_RE.fullmatch(candidate) else ""
     return ""
+
+
+def _default_grounding() -> GroundingContext:
+    """Build a fresh per-session grounding cache bundle.
+
+    Imported lazily so the session package keeps a one-way static dependency
+    direction (``harness -> session``) and avoids an import cycle.
+    """
+    from interactive_shell.harness.llm_context.grounding.context import GroundingContext
+
+    return GroundingContext()
 
 
 @dataclass
@@ -152,6 +164,14 @@ class ReplSession:
     Stored here so ``/history`` and ``/privacy`` slash commands can mutate
     its ``paused`` flag (when it is a ``RedactingFileHistory``) without
     needing access to the ``PromptSession``."""
+
+    grounding: GroundingContext = field(
+        default_factory=_default_grounding, repr=False, compare=False
+    )
+    """Per-session LLM grounding caches (CLI help, docs, AGENTS.md).
+
+    Injected so the grounding caches have a process-scoped lifetime with no
+    module-level mutable globals; tests can supply a fresh ``GroundingContext``."""
 
     pt_style_app: Any = None
     """The prompt-toolkit ``Application`` instance for this session.

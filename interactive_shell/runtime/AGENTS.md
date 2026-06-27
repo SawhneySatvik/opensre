@@ -74,10 +74,12 @@ The interactive runtime must keep this shape:
    submitted input handling, queued-turn consumption, and per-turn task
    scheduling.
 4. The module-level `interactive_shell.controller.run_agent_turn_queue` runs each turn via an
-   injected `run_turn` callable, which in production is `AgentTurnRunner.run_agent_turn` (shell
-   presentation: console, spinner, recorder, progress scope). `AgentTurnRunner.run_agent_turn`
-   delegates to `._run_loop` (dispatch state + lifecycle phases via `AgentEvent` emissions),
-   which performs the one-turn shell pipeline handoff through `._execute_agent_turn`.
+   injected `run_turn` callable, which in production is `AgentTurnRunner.run_agent_turn` — a thin
+   compatibility wrapper over the functional driver in `harness/agent.py`. The driver is the
+   module-level `run_agent_turn(runtime, text)` (shell presentation: console, spinner, recorder,
+   progress scope) operating on an immutable `AgentTurnRuntime` record. It delegates to
+   `_run_agent_turn_loop` (dispatch state + lifecycle phases via `AgentEvent` emissions), which
+   performs the one-turn shell pipeline handoff through `_execute_agent_turn`.
 
 Do not invert this dependency direction.
 
@@ -87,9 +89,9 @@ Do not invert this dependency direction.
 flowchart TD
   runRepl["interactive_shell.entrypoint.run_repl"] --> replMain["interactive_shell.entrypoint.repl_main"]
   replMain --> controller["interactive_shell.controller.InteractiveShellController"]
-  controller --> shellTurn["AgentTurnRunner.run_agent_turn"]
-  shellTurn --> executeTurn["AgentTurnRunner._run_loop"]
-  executeTurn --> dispatchTurn["AgentTurnRunner._execute_agent_turn"]
+  controller --> shellTurn["AgentTurnRunner.run_agent_turn → run_agent_turn(runtime, text)"]
+  shellTurn --> executeTurn["_run_agent_turn_loop"]
+  executeTurn --> dispatchTurn["_execute_agent_turn"]
   dispatchTurn --> sideEffects["slash/help/agent/follow-up/investigation side effects"]
   controller --> replState["core.state.ReplState"]
   controller --> spinnerState["core.state.SpinnerState"]
@@ -126,14 +128,17 @@ flowchart TD
 ## Turn execution rules
 
 - Do not reintroduce `dispatch.py` or any compatibility-only forwarding module.
-- The turn execution is layered inside `AgentTurnRunner` in `controller.py`:
-  `.run_agent_turn` owns shell presentation (StreamingConsole, spinner, recorder, progress scope)
-  and constructs a private `ConsoleAgentEventSink`; `._run_loop` owns dispatch state and emits
-  `AgentEvent` objects; `._execute_agent_turn` owns the `handle_message_with_agent` handoff.
-  The module-level `interactive_shell.controller.run_agent_turn_queue` takes an injected
-  `run_turn` callable (production: `AgentTurnRunner.run_agent_turn`). Keep terminal side effects
-  (spinner, prompt suppression, `console.print`, CPR drain) in `ConsoleAgentEventSink`, not in
-  `._run_loop`.
+- The turn execution is a functional core in `harness/agent.py` with a thin class wrapper:
+  the module-level `run_agent_turn(runtime, text)` owns shell presentation (StreamingConsole,
+  spinner, recorder, progress scope) and constructs a `ConsoleAgentEventSink`;
+  `_run_agent_turn_loop` owns dispatch state and emits `AgentEvent` objects; `_execute_agent_turn`
+  owns the `handle_message_with_agent` handoff. `AgentTurnRunner` is a compatibility wrapper that
+  binds an `AgentTurnRuntime` and forwards `.run_agent_turn` to the driver. The module-level
+  `interactive_shell.controller.run_agent_turn_queue` takes an injected `run_turn` callable
+  (production: `AgentTurnRunner.run_agent_turn`). Keep terminal side effects (spinner, prompt
+  suppression, `console.print`, CPR drain) in `ConsoleAgentEventSink` — its imperative shell
+  routes each event through the pure `_reduce_agent_presentation` and the effectful
+  `_render_agent_presentation_transition` — not in `_run_agent_turn_loop`.
 - Put cancel/confirm/correction text classifiers in `core/turn_detection.py`.
 - Put stdin blocking and spinner decisions in `utils/input_policy.py`.
 - Keep prompt-mediated confirmation waiting in `controller.py`.
@@ -154,8 +159,8 @@ flowchart TD
   - `start_interactive_shell` shell lifecycle orchestration
   - `run_input_loop` (module-level) — read and handle user input until exit
   - `run_agent_turn_queue` (module-level) — consume queued turns until exit (runs an injected `run_turn`)
-  - `AgentTurnRunner` — one turn: shell presentation (`.run_agent_turn`), lifecycle (`._run_loop`), harness invocation (`._execute_agent_turn`)
-  - `ConsoleAgentEventSink` (private by export surface) — terminal presentation for agent lifecycle events
+  - `AgentTurnRunner` (in `harness/agent.py`) — compatibility wrapper binding an `AgentTurnRuntime`; the functional driver is `run_agent_turn(runtime, text)` with `_run_agent_turn_loop` / `_execute_agent_turn`
+  - `ConsoleAgentEventSink` (in `harness/agent.py`, private by export surface) — terminal presentation for agent lifecycle events over `_reduce_agent_presentation` / `_render_agent_presentation_transition`
   - prompt input acceptance until exit
   - submitted prompt rendering and cancel/confirm/queue handling
   - queued turn consumption

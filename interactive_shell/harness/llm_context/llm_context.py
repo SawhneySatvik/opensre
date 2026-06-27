@@ -7,7 +7,7 @@ import re
 from interactive_shell.harness.llm_context.system_prompt import (
     _SYSTEM_PROMPT_BASE,
 )
-from interactive_shell.harness.state.conversation_history import format_recent_conversation
+from interactive_shell.harness.llm_context.conversation_history import format_recent_conversation
 from interactive_shell.harness.turn_context import TurnContext
 
 _MAX_TEXT_LEN = 512

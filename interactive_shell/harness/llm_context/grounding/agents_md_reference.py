@@ -1,17 +1,18 @@
 """AGENTS.md grounding helpers for OpenSRE interactive-shell answers.
 
 The conversational interactive-shell assistant grounds answers on the
-``opensre --help`` reference (via :mod:`interactive_shell.harness.llm_context.grounding.cli_reference`)
+``opensre --help`` reference (via :class:`~interactive_shell.harness.llm_context.grounding.cli_reference.CliReference`)
 and, for procedural questions, excerpts from ``docs/`` (via
-:mod:`interactive_shell.harness.llm_context.grounding.docs_reference`). Neither surface includes
-internal repo-map content, so the assistant cannot answer questions like
-"where do I add a new tool?" or "how does the remote threads pipeline work?"
-from maintained internal documentation.
+:class:`~interactive_shell.harness.llm_context.grounding.docs_reference.DocsReference`). Neither surface
+includes internal repo-map content, so the assistant cannot answer questions
+like "where do I add a new tool?" or "how does the remote threads pipeline
+work?" from maintained internal documentation.
 
 This module surfaces the repo's ``AGENTS.md`` files (root + per-package) as a
 third grounding source for the conversational shell. It is purely static
 (no embeddings, no DB, no new dependencies) and mirrors the shape of
-:mod:`interactive_shell.harness.llm_context.grounding.docs_reference` so the two stay symmetric.
+:class:`~interactive_shell.harness.llm_context.grounding.docs_reference.DocsReference` so the two stay
+symmetric.
 
 Source of truth
 ---------------
@@ -21,17 +22,18 @@ test-fixture or installed-package content into the prompt.
 
 How files stay fresh
 --------------------
-Files are parsed lazily and cached in-process keyed by the resolved repo root
-and a lightweight fingerprint of each tracked file (relative path, size,
-``st_mtime_ns``). Edits to ``AGENTS.md`` files during a long-running shell
-invalidate the fingerprint and trigger a re-parse on the next grounding
-call. There is no on-disk cache. Use :func:`invalidate_agents_md_cache` in
-tests to clear the parse cache between cases.
+Files are parsed lazily and cached on each :class:`AgentsMdReference` instance
+keyed by the resolved repo root and a lightweight fingerprint of each tracked
+file (relative path, size, ``st_mtime_ns``). Edits to ``AGENTS.md`` files
+during a long-running shell invalidate the fingerprint and trigger a re-parse
+on the next grounding call. There is no on-disk cache. Use
+:meth:`AgentsMdReference.invalidate` in tests to clear the parse cache between
+cases.
 
 When files are missing
 ----------------------
 For non-editable installs that do not ship ``AGENTS.md`` files the discovery
-returns an empty list and :func:`build_agents_md_reference_text` returns an
+returns an empty list and :meth:`AgentsMdReference.build_text` returns an
 empty string so callers can detect that and skip the block.
 """
 
@@ -44,7 +46,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import interactive_shell.harness.llm_context.grounding.grounding_diagnostics as _gd
+from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
 
 # Repo root is five levels above this file
 # (.../interactive_shell/harness/llm_context/grounding/agents_md_reference.py -> repo root).
@@ -67,7 +69,7 @@ _SKIP_DIRS = frozenset(
     }
 )
 
-# Per-file excerpt cap; total cap is enforced by build_agents_md_reference_text.
+# Per-file excerpt cap; total cap is enforced by AgentsMdReference.build_text.
 # AGENTS.md files are typically small repo-map docs, so 2K per file gives
 # headroom for the root file (which tends to be the largest) without
 # crowding the prompt.
@@ -148,66 +150,9 @@ def _parse_agents_md_files(root: Path, files: list[Path]) -> tuple[AgentsMdFile,
     return tuple(parsed)
 
 
-# Distinct (root_key, fingerprint) entries retained under churn. Eviction
-# drops oldest keys; a reverted tree re-parses once then stays hot again.
+# Distinct (root_key, fingerprint) entries retained per instance under churn.
+# Eviction drops oldest keys; a reverted tree re-parses once then stays hot.
 _MAX_AGENTS_MD_FP_CACHE_ENTRIES = 32
-
-_AGENTS_MD_PARSE_CACHE: OrderedDict[tuple[str, str], tuple[AgentsMdFile, ...]] = OrderedDict()
-_agents_md_cache_hits = 0
-_agents_md_cache_misses = 0
-
-
-def discover_agents_md_files(root: Path | None = None) -> list[AgentsMdFile]:
-    """Walk the repo root, parse each ``AGENTS.md``, return :class:`AgentsMdFile` records."""
-    global _agents_md_cache_hits, _agents_md_cache_misses
-
-    target = root if root is not None else _REPO_ROOT
-    resolved = target.resolve() if target.exists() else target
-    root_key = str(resolved)
-
-    # Every discover call walks the tree (and stats what it finds) — even on
-    # cache hits — because the walk + per-file fingerprint is what detects
-    # in-file edits between grounding calls during a long-running shell.
-    # Skipping the walk on cache hits would make AGENTS.md edits invisible
-    # until eviction, which is the bug the fingerprint design in
-    # docs_reference.py was introduced to avoid; we keep the same trade-off
-    # here so the two grounding sources stay symmetric. The cost is bounded
-    # by the _SKIP_DIRS prune (notably ``.venv``).
-    files = _iter_agents_md_files(resolved)
-    fp = _fingerprint_from_paths(resolved, files)
-    cache_key = (root_key, fp)
-
-    cached = _AGENTS_MD_PARSE_CACHE.get(cache_key)
-    if cached is not None:
-        _agents_md_cache_hits += 1
-        _AGENTS_MD_PARSE_CACHE.move_to_end(cache_key)
-        return list(cached)
-
-    _agents_md_cache_misses += 1
-    parsed_tuple = _parse_agents_md_files(resolved, files)
-
-    while len(_AGENTS_MD_PARSE_CACHE) >= _MAX_AGENTS_MD_FP_CACHE_ENTRIES:
-        _AGENTS_MD_PARSE_CACHE.popitem(last=False)
-    _AGENTS_MD_PARSE_CACHE[cache_key] = parsed_tuple
-    return list(parsed_tuple)
-
-
-def invalidate_agents_md_cache() -> None:
-    """Clear the bounded parse cache (tests, forced refresh)."""
-    global _agents_md_cache_hits, _agents_md_cache_misses
-    _AGENTS_MD_PARSE_CACHE.clear()
-    _agents_md_cache_hits = 0
-    _agents_md_cache_misses = 0
-
-
-def get_agents_md_cache_stats() -> dict[str, Any]:
-    """Debug metrics for AGENTS.md grounding cache (hits/misses/size)."""
-    return {
-        "hits": _agents_md_cache_hits,
-        "misses": _agents_md_cache_misses,
-        "currsize": len(_AGENTS_MD_PARSE_CACHE),
-        "maxsize": _MAX_AGENTS_MD_FP_CACHE_ENTRIES,
-    }
 
 
 def _excerpt(body: str, max_chars: int = _MAX_PER_FILE_CHARS) -> str:
@@ -232,50 +177,107 @@ def _format_label(relpath: str) -> str:
     return relpath
 
 
-def build_agents_md_reference_text(*, max_chars: int = _DEFAULT_MAX_TOTAL_CHARS) -> str:
-    """Assemble an AGENTS.md reference block for LLM grounding.
+class AgentsMdReference:
+    """Session-scoped AGENTS.md discovery + grounding cache.
 
-    Concatenates one section per discovered file, in sorted relpath order, of
-    the form::
-
-        === AGENTS.md (root) ===
-        ...
-        === core/runtime/llm/AGENTS.md ===
-        ...
-
-    Returns ``""`` when no AGENTS.md files are available so callers can
-    detect that and skip the block entirely.
+    Holds its parse cache as instance state so each :class:`GroundingContext`
+    owns an isolated cache with no module-level mutable globals.
     """
-    files = discover_agents_md_files()
-    if not files:
-        return ""
 
-    parts: list[str] = []
-    for f in files:
-        parts.append(f"=== {_format_label(f.relpath)} ===\n")
-        parts.append(_excerpt(f.body))
-        parts.append("\n\n")
+    name = "agents_md"
 
-    text = "".join(parts).rstrip() + "\n"
-    if len(text) > max_chars:
-        return text[:max_chars] + "\n\n[... AGENTS.md reference truncated ...]\n"
-    return text
+    def __init__(self) -> None:
+        self._parse_cache: OrderedDict[tuple[str, str], tuple[AgentsMdFile, ...]] = OrderedDict()
+        self._hits = 0
+        self._misses = 0
 
+    def discover(self, root: Path | None = None) -> list[AgentsMdFile]:
+        """Walk the repo root, parse each ``AGENTS.md``, return :class:`AgentsMdFile` records."""
+        target = root if root is not None else _REPO_ROOT
+        resolved = target.resolve() if target.exists() else target
+        root_key = str(resolved)
 
-_gd.register_grounding_source(
-    _gd.GroundingSource(
-        name="agents_md",
-        stats_fn=get_agents_md_cache_stats,
-        format_fn=lambda s: (
-            f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
-        ),
-    )
-)
+        # Every discover call walks the tree (and stats what it finds) — even on
+        # cache hits — because the walk + per-file fingerprint is what detects
+        # in-file edits between grounding calls during a long-running shell.
+        # Skipping the walk on cache hits would make AGENTS.md edits invisible
+        # until eviction, which is the bug the fingerprint design in
+        # docs_reference.py was introduced to avoid; we keep the same trade-off
+        # here so the two grounding sources stay symmetric. The cost is bounded
+        # by the _SKIP_DIRS prune (notably ``.venv``).
+        files = _iter_agents_md_files(resolved)
+        fp = _fingerprint_from_paths(resolved, files)
+        cache_key = (root_key, fp)
+
+        cached = self._parse_cache.get(cache_key)
+        if cached is not None:
+            self._hits += 1
+            self._parse_cache.move_to_end(cache_key)
+            return list(cached)
+
+        self._misses += 1
+        parsed_tuple = _parse_agents_md_files(resolved, files)
+
+        while len(self._parse_cache) >= _MAX_AGENTS_MD_FP_CACHE_ENTRIES:
+            self._parse_cache.popitem(last=False)
+        self._parse_cache[cache_key] = parsed_tuple
+        return list(parsed_tuple)
+
+    def build_text(self, *, max_chars: int = _DEFAULT_MAX_TOTAL_CHARS) -> str:
+        """Assemble an AGENTS.md reference block for LLM grounding.
+
+        Concatenates one section per discovered file, in sorted relpath order, of
+        the form::
+
+            === AGENTS.md (root) ===
+            ...
+            === core/runtime/llm/AGENTS.md ===
+            ...
+
+        Returns ``""`` when no AGENTS.md files are available so callers can
+        detect that and skip the block entirely.
+        """
+        files = self.discover()
+        if not files:
+            return ""
+
+        parts: list[str] = []
+        for f in files:
+            parts.append(f"=== {_format_label(f.relpath)} ===\n")
+            parts.append(_excerpt(f.body))
+            parts.append("\n\n")
+
+        text = "".join(parts).rstrip() + "\n"
+        if len(text) > max_chars:
+            return text[:max_chars] + "\n\n[... AGENTS.md reference truncated ...]\n"
+        return text
+
+    def invalidate(self) -> None:
+        """Clear the bounded parse cache (tests, forced refresh)."""
+        self._parse_cache.clear()
+        self._hits = 0
+        self._misses = 0
+
+    def stats(self) -> dict[str, Any]:
+        """Debug metrics for AGENTS.md grounding cache (hits/misses/size)."""
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "currsize": len(self._parse_cache),
+            "maxsize": _MAX_AGENTS_MD_FP_CACHE_ENTRIES,
+        }
+
+    def as_grounding_source(self) -> GroundingSource:
+        return GroundingSource(
+            name=self.name,
+            stats_fn=self.stats,
+            format_fn=lambda s: (
+                f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
+            ),
+        )
+
 
 __all__ = [
     "AgentsMdFile",
-    "build_agents_md_reference_text",
-    "discover_agents_md_files",
-    "get_agents_md_cache_stats",
-    "invalidate_agents_md_cache",
+    "AgentsMdReference",
 ]

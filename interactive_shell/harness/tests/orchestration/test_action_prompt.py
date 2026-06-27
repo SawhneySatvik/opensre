@@ -8,7 +8,7 @@ from interactive_shell.harness.llm_context import (
     connected_integrations_block,
     recent_conversation_block,
 )
-from interactive_shell.harness.state.conversation_history import NO_HISTORY_PLACEHOLDER
+from interactive_shell.harness.llm_context.conversation_history import NO_HISTORY_PLACEHOLDER
 from interactive_shell.harness.turn_context import TurnContext
 
 

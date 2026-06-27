@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.state.conversation_history import (
+from interactive_shell.harness.llm_context.conversation_history import (
     MAX_CONVERSATION_MESSAGES,
     MAX_CONVERSATION_TURNS,
     NO_HISTORY_PLACEHOLDER,

@@ -15,24 +15,25 @@ plus subdirectories like ``tutorials/`` and ``use-cases/``.
 
 How docs stay fresh
 -------------------
-Pages are parsed lazily and cached in-process keyed by the resolved docs root
-and a lightweight fingerprint of each tracked file (relative path, size,
-``st_mtime_ns``). Edits under ``docs/`` during a long-running shell invalidate
-the fingerprint and trigger a re-parse on the next grounding call. There is no
-on-disk cache. Use :func:`invalidate_docs_cache` in tests to clear the parse
-cache between cases.
+Pages are parsed lazily and cached on each :class:`DocsReference` instance
+keyed by the resolved docs root and a lightweight fingerprint of each tracked
+file (relative path, size, ``st_mtime_ns``). Edits under ``docs/`` during a
+long-running shell invalidate the fingerprint and trigger a re-parse on the
+next grounding call. There is no on-disk cache. Use
+:meth:`DocsReference.invalidate` in tests to clear the parse cache between
+cases.
 
-Each :func:`discover_docs` call walks the docs tree once to compute the
-fingerprint and (on cache miss) parse files in that same walk result. A prior
-``lru_cache`` on the root path alone avoided that walk but could not detect
-in-file edits during a session; the trade-off is intentional. Between
+Each :meth:`DocsReference.discover` call walks the docs tree once to compute
+the fingerprint and (on cache miss) parse files in that same walk result. A
+prior ``lru_cache`` on the root path alone avoided that walk but could not
+detect in-file edits during a session; the trade-off is intentional. Between
 fingerprinting and ``read_text``, a file may change (TOCTOU); the next call
 picks up the new ``st_mtime_ns`` and re-parses.
 
 When docs are missing
 ---------------------
 For non-editable installs that do not ship the ``docs/`` directory the
-discovery returns an empty list and :func:`build_docs_reference_text`
+discovery returns an empty list and :meth:`DocsReference.build_text`
 returns an empty string. Callers must tell the LLM to fall back to the
 CLI reference and avoid inventing setup steps.
 """
@@ -46,7 +47,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import interactive_shell.harness.llm_context.grounding.grounding_diagnostics as _gd
+from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import GroundingSource
 
 # Docs live at the repository root, five levels above this file
 # (.../interactive_shell/harness/llm_context/grounding/docs_reference.py -> repo root).
@@ -268,58 +269,9 @@ def _parse_doc_files(root: Path, files: list[Path]) -> tuple[DocPage, ...]:
     return tuple(pages)
 
 
-# Distinct (root_key, fingerprint) entries retained under churn. Eviction drops
-# oldest keys; a reverted doc tree re-parses once then stays hot again.
+# Distinct (root_key, fingerprint) entries retained per instance under churn.
+# Eviction drops oldest keys; a reverted doc tree re-parses once then stays hot.
 _MAX_DOCS_FP_CACHE_ENTRIES = 32
-
-_DOCS_PARSE_CACHE: OrderedDict[tuple[str, str], tuple[DocPage, ...]] = OrderedDict()
-_docs_cache_hits = 0
-_docs_cache_misses = 0
-
-
-def discover_docs(root: Path | None = None) -> list[DocPage]:
-    """Walk the docs root, parse each MDX page, return them as :class:`DocPage` records."""
-    global _docs_cache_hits, _docs_cache_misses
-
-    target = root if root is not None else _DOCS_ROOT
-    resolved = target.resolve() if target.exists() else target
-    root_key = str(resolved)
-
-    files = _iter_doc_files(resolved)
-    fp = _fingerprint_from_paths(resolved, files)
-    cache_key = (root_key, fp)
-
-    cached = _DOCS_PARSE_CACHE.get(cache_key)
-    if cached is not None:
-        _docs_cache_hits += 1
-        _DOCS_PARSE_CACHE.move_to_end(cache_key)
-        return list(cached)
-
-    _docs_cache_misses += 1
-    pages_tuple = _parse_doc_files(resolved, files)
-
-    while len(_DOCS_PARSE_CACHE) >= _MAX_DOCS_FP_CACHE_ENTRIES:
-        _DOCS_PARSE_CACHE.popitem(last=False)
-    _DOCS_PARSE_CACHE[cache_key] = pages_tuple
-    return list(pages_tuple)
-
-
-def invalidate_docs_cache() -> None:
-    """Clear the bounded parse cache (tests, forced refresh)."""
-    global _docs_cache_hits, _docs_cache_misses
-    _DOCS_PARSE_CACHE.clear()
-    _docs_cache_hits = 0
-    _docs_cache_misses = 0
-
-
-def get_docs_cache_stats() -> dict[str, Any]:
-    """Debug metrics for docs grounding cache (hits/misses/size)."""
-    return {
-        "hits": _docs_cache_hits,
-        "misses": _docs_cache_misses,
-        "currsize": len(_DOCS_PARSE_CACHE),
-        "maxsize": _MAX_DOCS_FP_CACHE_ENTRIES,
-    }
 
 
 def _tokenize(text: str) -> set[str]:
@@ -370,7 +322,7 @@ def _score(query_tokens: set[str], page: DocPage) -> int:
 
 def find_relevant_docs(
     query: str,
-    pages: list[DocPage] | None = None,
+    pages: list[DocPage],
     *,
     top_n: int = _DEFAULT_TOP_N,
 ) -> list[DocPage]:
@@ -381,8 +333,7 @@ def find_relevant_docs(
     qt = _query_tokens(query)
     if not qt:
         return []
-    candidates = pages if pages is not None else discover_docs()
-    scored = [(s, p) for p in candidates for s in [_score(qt, p)] if s > 0]
+    scored = [(s, p) for p in pages for s in [_score(qt, p)] if s > 0]
     scored.sort(key=lambda item: (-item[0], item[1].relpath))
     return [page for _, page in scored[:top_n]]
 
@@ -398,76 +349,139 @@ def _excerpt(body: str, max_chars: int = _MAX_PER_DOC_CHARS) -> str:
     return body[:cutoff].rstrip() + "\n\n[... excerpt truncated ...]\n"
 
 
-def build_docs_index(pages: list[DocPage] | None = None, *, max_entries: int = 80) -> str:
+def build_docs_index(pages: list[DocPage], *, max_entries: int = 80) -> str:
     """Return a compact ``slug — title`` index of available pages.
 
     Always included so the LLM knows what topics docs cover even when
     nothing scored against the query.
     """
-    candidates = pages if pages is not None else discover_docs()
-    if not candidates:
+    if not pages:
         return ""
     lines = ["docs index (all available pages):"]
-    for page in candidates[:max_entries]:
+    for page in pages[:max_entries]:
         lines.append(f"  - {page.relpath}: {page.title}")
-    if len(candidates) > max_entries:
-        lines.append(f"  ... and {len(candidates) - max_entries} more pages")
+    if len(pages) > max_entries:
+        lines.append(f"  ... and {len(pages) - max_entries} more pages")
     return "\n".join(lines)
 
 
-def build_docs_reference_text(
-    query: str | None,
-    *,
-    top_n: int = _DEFAULT_TOP_N,
-    max_chars: int = _DEFAULT_MAX_TOTAL_CHARS,
-) -> str:
-    """Assemble a docs reference block for LLM grounding.
+class DocsReference:
+    """Session-scoped docs discovery + grounding cache.
 
-    Includes the top-N most relevant pages (with body excerpts) followed by
-    a compact index of all discovered pages. Returns ``""`` when no docs
-    are available so callers can detect that and adjust the prompt.
+    Holds its parse cache as instance state so each :class:`GroundingContext`
+    owns an isolated cache with no module-level mutable globals.
     """
-    pages = discover_docs()
-    if not pages:
-        return ""
 
-    parts: list[str] = []
-    if query:
-        relevant = find_relevant_docs(query, pages, top_n=top_n)
-    else:
-        relevant = []
+    name = "docs"
 
-    for page in relevant:
-        parts.append(f"=== docs/{page.relpath} (title: {page.title}) ===\n")
-        parts.append(_excerpt(page.body))
-        parts.append("\n\n")
+    def __init__(self) -> None:
+        self._parse_cache: OrderedDict[tuple[str, str], tuple[DocPage, ...]] = OrderedDict()
+        self._hits = 0
+        self._misses = 0
 
-    index = build_docs_index(pages)
-    if index:
-        parts.append(index)
-        parts.append("\n")
+    def discover(self, root: Path | None = None) -> list[DocPage]:
+        """Walk the docs root, parse each MDX page, return them as :class:`DocPage` records."""
+        target = root if root is not None else _DOCS_ROOT
+        resolved = target.resolve() if target.exists() else target
+        root_key = str(resolved)
 
-    text = "".join(parts).rstrip() + "\n"
-    if len(text) > max_chars:
-        return text[:max_chars] + "\n\n[... docs reference truncated ...]\n"
-    return text
+        files = _iter_doc_files(resolved)
+        fp = _fingerprint_from_paths(resolved, files)
+        cache_key = (root_key, fp)
+
+        cached = self._parse_cache.get(cache_key)
+        if cached is not None:
+            self._hits += 1
+            self._parse_cache.move_to_end(cache_key)
+            return list(cached)
+
+        self._misses += 1
+        pages_tuple = _parse_doc_files(resolved, files)
+
+        while len(self._parse_cache) >= _MAX_DOCS_FP_CACHE_ENTRIES:
+            self._parse_cache.popitem(last=False)
+        self._parse_cache[cache_key] = pages_tuple
+        return list(pages_tuple)
+
+    def find_relevant(
+        self,
+        query: str,
+        pages: list[DocPage] | None = None,
+        *,
+        top_n: int = _DEFAULT_TOP_N,
+    ) -> list[DocPage]:
+        """Return up to ``top_n`` docs most relevant to ``query``."""
+        candidates = pages if pages is not None else self.discover()
+        return find_relevant_docs(query, candidates, top_n=top_n)
+
+    def build_index(self, pages: list[DocPage] | None = None, *, max_entries: int = 80) -> str:
+        """Return a compact ``slug — title`` index of available pages."""
+        candidates = pages if pages is not None else self.discover()
+        return build_docs_index(candidates, max_entries=max_entries)
+
+    def build_text(
+        self,
+        query: str | None,
+        *,
+        top_n: int = _DEFAULT_TOP_N,
+        max_chars: int = _DEFAULT_MAX_TOTAL_CHARS,
+    ) -> str:
+        """Assemble a docs reference block for LLM grounding.
+
+        Includes the top-N most relevant pages (with body excerpts) followed by
+        a compact index of all discovered pages. Returns ``""`` when no docs
+        are available so callers can detect that and adjust the prompt.
+        """
+        pages = self.discover()
+        if not pages:
+            return ""
+
+        parts: list[str] = []
+        relevant = self.find_relevant(query, pages, top_n=top_n) if query else []
+
+        for page in relevant:
+            parts.append(f"=== docs/{page.relpath} (title: {page.title}) ===\n")
+            parts.append(_excerpt(page.body))
+            parts.append("\n\n")
+
+        index = build_docs_index(pages)
+        if index:
+            parts.append(index)
+            parts.append("\n")
+
+        text = "".join(parts).rstrip() + "\n"
+        if len(text) > max_chars:
+            return text[:max_chars] + "\n\n[... docs reference truncated ...]\n"
+        return text
+
+    def invalidate(self) -> None:
+        """Clear the bounded parse cache (tests, forced refresh)."""
+        self._parse_cache.clear()
+        self._hits = 0
+        self._misses = 0
+
+    def stats(self) -> dict[str, Any]:
+        """Debug metrics for docs grounding cache (hits/misses/size)."""
+        return {
+            "hits": self._hits,
+            "misses": self._misses,
+            "currsize": len(self._parse_cache),
+            "maxsize": _MAX_DOCS_FP_CACHE_ENTRIES,
+        }
+
+    def as_grounding_source(self) -> GroundingSource:
+        return GroundingSource(
+            name=self.name,
+            stats_fn=self.stats,
+            format_fn=lambda s: (
+                f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
+            ),
+        )
 
 
-_gd.register_grounding_source(
-    _gd.GroundingSource(
-        name="docs",
-        stats_fn=get_docs_cache_stats,
-        format_fn=lambda s: (
-            f"hits={s['hits']} misses={s['misses']} entries={s['currsize']}/{s['maxsize']}"
-        ),
-    )
-)
 __all__ = [
     "DocPage",
+    "DocsReference",
     "build_docs_index",
-    "build_docs_reference_text",
-    "discover_docs",
     "find_relevant_docs",
-    "get_docs_cache_stats",
-    "invalidate_docs_cache",
 ]

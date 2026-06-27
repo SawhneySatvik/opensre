@@ -29,7 +29,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
-from interactive_shell.harness.state.conversation_history import (
+from interactive_shell.harness.llm_context.conversation_history import (
     MAX_CONVERSATION_MESSAGES,
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,

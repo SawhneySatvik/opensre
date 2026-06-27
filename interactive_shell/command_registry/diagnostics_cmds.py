@@ -38,12 +38,6 @@ def _status_provider_display() -> str:
 
 
 def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> bool:
-    import interactive_shell.harness.llm_context.grounding.cli_reference  # noqa: F401
-    import interactive_shell.harness.llm_context.grounding.docs_reference  # noqa: F401
-    from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
-        iter_grounding_sources,
-    )
-
     table = repl_table(title="Session status\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
@@ -62,7 +56,7 @@ def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> boo
     table.add_row("trust mode", "on" if session.trust_mode else "off")
     table.add_row("reasoning effort", display_reasoning_effort(session.reasoning_effort))
     table.add_row("provider", _status_provider_display())
-    for source in iter_grounding_sources():
+    for source in session.grounding.iter_sources():
         stats = source.stats_fn()
         table.add_row(f"grounding {source.name} cache", source.format_fn(stats))
     acc = session.accumulated_context

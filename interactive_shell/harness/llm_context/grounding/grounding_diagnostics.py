@@ -4,18 +4,16 @@ from __future__ import annotations
 
 import logging
 import os
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
 _logger = logging.getLogger(__name__)
 
-_registry: dict[str, GroundingSource] = {}
-
 
 @dataclass
 class GroundingSource:
-    """A single grounding cache source that can self-register."""
+    """A single grounding cache source exposing stats for diagnostics."""
 
     name: str
     stats_fn: Callable[[], dict[str, Any]]
@@ -24,28 +22,16 @@ class GroundingSource:
     )
 
 
-def register_grounding_source(source: GroundingSource) -> None:
-    """Register a grounding source. Idempotent — same name updates in place."""
-    _registry[source.name] = source
-
-
-def iter_grounding_sources() -> list[GroundingSource]:
-    """Return a snapshot of registered grounding sources in insertion order."""
-    return list(_registry.values())
-
-
-def log_grounding_cache_diagnostics(reason: str) -> None:
-    """Log all registered grounding cache stats when ``TRACER_VERBOSE=1``."""
+def log_grounding_cache_diagnostics(sources: Iterable[GroundingSource], reason: str) -> None:
+    """Log the provided grounding cache stats when ``TRACER_VERBOSE=1``."""
     if os.environ.get("TRACER_VERBOSE") != "1":
         return
-    for source in iter_grounding_sources():
+    for source in sources:
         stats = source.stats_fn()
         _logger.debug("grounding cache [%s] %s=%s", reason, source.name, stats)
 
 
 __all__ = [
     "GroundingSource",
-    "register_grounding_source",
-    "iter_grounding_sources",
     "log_grounding_cache_diagnostics",
 ]
