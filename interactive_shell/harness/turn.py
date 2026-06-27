@@ -10,7 +10,7 @@ module is the imperative shell around it.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Literal
+from typing import Literal, assert_never
 
 from rich.console import Console
 
@@ -129,7 +129,8 @@ def handle_message_with_agent(
 
     observation = session.agent.last_observation
 
-    match _route_turn(action_result, observation):
+    route = _route_turn(action_result, observation)
+    match route:
         case "summarize_observation":
             with apply_reasoning_effort(turn_ctx.reasoning_effort):
                 run = response_generator(
@@ -173,6 +174,9 @@ def handle_message_with_agent(
                 assistant_response_text=_response_text(run),
                 llm_run=run,
             )
+
+        case _:
+            assert_never(route)
 
     return accounting.finalize(result)
 
