@@ -1262,7 +1262,7 @@ class TestRequestConfirmationViaPrompt:
         """
         state = loop_state.ReplState()
         # Active dispatch must have a cancel event parked; in production
-        # ``interactive_shell.harness.agent.AgentTurnRunner.run_agent_turn`` allocates this before invoking the
+        # ``interactive_shell.harness.agent.AgentTurnCoordinator.run_turn`` allocates this before invoking the
         # confirm_fn. Never set in this test.
         state.current_cancel_event = threading.Event()
 

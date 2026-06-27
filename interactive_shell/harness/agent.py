@@ -6,7 +6,7 @@ import asyncio
 import contextlib
 import logging
 import threading
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from typing import Any
 
 from rich.console import Console
@@ -47,7 +47,7 @@ _AGENT_TURN_KIND = "agent"
 
 
 @contextlib.contextmanager
-def _bound_cli_session(session_id: str):
+def _bound_cli_session(session_id: str) -> Iterator[None]:
     """Temporarily bind the CLI session ID for the current turn."""
     token = bind_cli_session_id(session_id)
     try:
@@ -58,7 +58,7 @@ def _bound_cli_session(session_id: str):
 
 def _setup_turn_presentation(
     runner: AgentTurnCoordinator, user_input: str
-) -> tuple[StreamingConsole, AgentEventSink, PromptRecorder, threading.Event]:
+) -> tuple[StreamingConsole, AgentEventSink, PromptRecorder | None, threading.Event]:
     """Create console, event emitter, recorder, and cancellation primitive for a turn."""
     cancel_event = threading.Event()
 
@@ -136,7 +136,11 @@ class AgentTurnCoordinator:
         cancel_event: threading.Event,
     ) -> None:
         """Manage turn lifecycle: dispatch tracking, execution, and final events."""
-        self._register_dispatch(cancel_event)
+        task = asyncio.current_task()
+        if task is not None:
+            self.state.start_dispatch(task=task, cancel_event=cancel_event)
+        else:
+            self.state.attach_cancel_event(cancel_event)
 
         await event_sink(AgentEvent(type="turn_start", text=user_input))
 
@@ -154,21 +158,13 @@ class AgentTurnCoordinator:
             self.state.finish_dispatch(cancel_event)
             await event_sink(AgentEvent(type="turn_end"))
 
-    def _register_dispatch(self, cancel_event: threading.Event) -> None:
-        """Register current task with the REPL state for cancellation support."""
-        task = asyncio.current_task()
-        if task is not None:
-            self.state.start_dispatch(task=task, cancel_event=cancel_event)
-        else:
-            self.state.attach_cancel_event(cancel_event)
-
     async def _run_agent_handler(
         self, user_input: str, output: StreamingConsole, recorder: PromptRecorder | None
     ) -> None:
         """Execute the core agent logic in a thread with proper session context."""
-        confirm_fn: Callable[[str], str] = lambda prompt: request_confirmation_via_prompt(
-            self.state, prompt
-        )
+
+        def confirm_fn(prompt: str) -> str:
+            return request_confirmation_via_prompt(self.state, prompt)
 
         with _bound_cli_session(self.session.session_id):
             await asyncio.to_thread(

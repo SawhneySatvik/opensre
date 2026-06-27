@@ -9,8 +9,8 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness.response import generate_response
 from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.response import generate_response
 from interactive_shell.runtime.core.token_accounting import (
     build_llm_run_info,
     estimate_tokens,
