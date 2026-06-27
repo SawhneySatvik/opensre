@@ -8,10 +8,8 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.execution_policy import (
-    plan_investigation_execution,
-)
 from interactive_shell.runtime import ReplSession
+from interactive_shell.tools.shared import plan_foreground_tool
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -34,7 +32,7 @@ def run_text_investigation(
 ) -> None:
     from cli.investigation import run_investigation_for_session
 
-    plan = plan_investigation_execution(action_type="investigation", user_initiated=True)
+    plan = plan_foreground_tool("investigation", "investigation_launch")
     if not execution_allowed(
         plan.policy,
         session=session,

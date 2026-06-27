@@ -2,7 +2,7 @@
 
 These cover the terminal-facing half of the execution gate: console output and
 the confirmation prompt. The pure decision is tested in
-``interactive_shell/harness/tests/orchestration/test_execution_policy.py``.
+``tests/interactive_shell/tools/shared/test_execution_policy.py``.
 """
 
 from __future__ import annotations
@@ -11,11 +11,11 @@ import io
 
 from rich.console import Console
 
-from interactive_shell.harness.execution_policy import (
-    ExecutionPolicyResult,
-    evaluate_slash_command,
-)
 from interactive_shell.session import ReplSession
+from interactive_shell.tools.shared import (
+    ExecutionPolicyResult,
+    allow_tool,
+)
 from interactive_shell.ui.execution_confirm import execution_allowed
 
 
@@ -39,7 +39,7 @@ def test_allow_verdict_runs_without_prompt() -> None:
     def _confirm(_: str) -> str:  # pragma: no cover - must never be called
         raise AssertionError("default-allow must not prompt for confirmation")
 
-    r = evaluate_slash_command()
+    r = allow_tool("slash")
     assert execution_allowed(
         r,
         session=session,
@@ -56,7 +56,7 @@ def test_non_tty_allows_default_policy() -> None:
     session = ReplSession()
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
-    r = evaluate_slash_command()
+    r = allow_tool("slash")
     assert execution_allowed(
         r,
         session=session,

@@ -1,4 +1,4 @@
-"""Central execution policy (allow / ask / deny) for interactive REPL actions.
+"""Central execution policy (allow / ask / deny) for interactive REPL tools.
 
 Alpha mode: allow everything
 ----------------------------
@@ -27,6 +27,10 @@ no console dependency. The decision is computed by :func:`resolve_confirmation`,
 and the interaction layer (printing the reason/hint, the ``Proceed? [Y/n]``
 prompt, and analytics emission) lives in
 ``interactive_shell.ui.execution_confirm.execution_allowed``.
+
+Shell-specific evaluation (empty-input rejection, ``plan_shell_execution``)
+lives next to the rest of the shell machinery in
+``interactive_shell.tools.shell.policy`` and reuses the contracts defined here.
 """
 
 from __future__ import annotations
@@ -38,7 +42,7 @@ from typing import Literal
 ExecutionVerdict = Literal["allow", "ask", "deny"]
 
 
-class ActionExecutionMode(StrEnum):
+class ToolExecutionMode(StrEnum):
     FOREGROUND = "foreground"
     BACKGROUND = "background"
     FOREGROUND_STREAMING = "foreground_streaming"
@@ -46,7 +50,7 @@ class ActionExecutionMode(StrEnum):
 
 @dataclass(frozen=True)
 class ExecutionPolicyResult:
-    """Result of evaluating whether an action may run."""
+    """Result of evaluating whether a tool may run."""
 
     verdict: ExecutionVerdict
     action_type: str
@@ -56,12 +60,12 @@ class ExecutionPolicyResult:
 
 
 @dataclass(frozen=True)
-class ActionExecutionPlan:
-    """Unified execution plan contract shared across action executors."""
+class ToolExecutionPlan:
+    """Unified execution plan contract shared across tool executors."""
 
     action_type: str
     classification: str
-    execution_mode: ActionExecutionMode
+    execution_mode: ToolExecutionMode
     policy: ExecutionPolicyResult
 
 
@@ -141,93 +145,38 @@ def resolve_confirmation(
     )
 
 
-def evaluate_slash_command() -> ExecutionPolicyResult:
-    """Slash execution verdict.
+def allow_tool(tool_type: str) -> ExecutionPolicyResult:
+    """Default-allow verdict for a tool launch.
 
-    Default-allow: every slash command resolves to ``allow``.
+    Under alpha the policy never denies a tool launch (slash commands,
+    investigations, synthetic tests, code-agent launches, LLM runtime switches),
+    so every caller resolves to ``allow``. ``tool_type`` is carried through for
+    analytics and confirmation UX.
     """
-    return ExecutionPolicyResult(verdict="allow", action_type="slash", reason=None)
+    return ExecutionPolicyResult(verdict="allow", action_type=tool_type, reason=None)
 
 
-def plan_slash_execution() -> ActionExecutionPlan:
-    policy = evaluate_slash_command()
-    return ActionExecutionPlan(
-        action_type="slash",
-        classification="slash",
-        execution_mode=ActionExecutionMode.FOREGROUND,
-        policy=policy,
-    )
-
-
-def evaluate_investigation_launch(
-    *,
-    action_type: Literal["investigation", "sample_alert"],
-    user_initiated: bool = False,
-) -> ExecutionPolicyResult:
-    """Policy for starting an RCA / investigation pipeline from the REPL.
-
-    Default-allow: investigations run without confirmation whether or not the
-    launch was ``user_initiated``.
-    """
-    del user_initiated  # default-allow: launches never require confirmation
-    return ExecutionPolicyResult(
-        verdict="allow",
-        action_type=action_type,
-        reason=None,
-    )
-
-
-def plan_investigation_execution(
-    *,
-    action_type: Literal["investigation", "sample_alert"],
-    user_initiated: bool = False,
-) -> ActionExecutionPlan:
-    policy = evaluate_investigation_launch(action_type=action_type, user_initiated=user_initiated)
-    return ActionExecutionPlan(
-        action_type=action_type,
-        classification="investigation_launch",
-        execution_mode=ActionExecutionMode.FOREGROUND,
-        policy=policy,
-    )
-
-
-def evaluate_synthetic_test_launch() -> ExecutionPolicyResult:
-    return ExecutionPolicyResult(
-        verdict="allow",
-        action_type="synthetic_test",
-        reason=None,
-    )
-
-
-def evaluate_code_agent_launch() -> ExecutionPolicyResult:
-    return ExecutionPolicyResult(
-        verdict="allow",
-        action_type="code_agent",
-        reason=None,
-    )
-
-
-def evaluate_llm_runtime_switch(*, action_type: str) -> ExecutionPolicyResult:
-    return ExecutionPolicyResult(
-        verdict="allow",
-        action_type=action_type,
-        reason=None,
+def plan_foreground_tool(
+    tool_type: str,
+    classification: str | None = None,
+) -> ToolExecutionPlan:
+    """Build a FOREGROUND execution plan around a default-allow verdict."""
+    return ToolExecutionPlan(
+        action_type=tool_type,
+        classification=classification or tool_type,
+        execution_mode=ToolExecutionMode.FOREGROUND,
+        policy=allow_tool(tool_type),
     )
 
 
 __all__ = [
-    "ActionExecutionMode",
-    "ActionExecutionPlan",
     "ConfirmationOutcome",
     "ConfirmationPlan",
     "ExecutionPolicyResult",
     "ExecutionVerdict",
-    "evaluate_code_agent_launch",
-    "evaluate_investigation_launch",
-    "evaluate_llm_runtime_switch",
-    "evaluate_slash_command",
-    "evaluate_synthetic_test_launch",
-    "plan_investigation_execution",
-    "plan_slash_execution",
+    "ToolExecutionMode",
+    "ToolExecutionPlan",
+    "allow_tool",
+    "plan_foreground_tool",
     "resolve_confirmation",
 ]

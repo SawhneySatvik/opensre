@@ -143,7 +143,7 @@ owning area rather than adding more logic to the caller.
   question that embedded a quoted, list-style directive) with no safety upside.
   Details and rationale live in `interactive_shell/harness/AGENTS.md`. If
   mutating actions are ever introduced, gate them with the
-  execution-stage confirmation policy (`harness/execution_policy.py`), not a
+  execution-stage confirmation policy (`tools/shared/execution_policy.py`), not a
   planner-stage denial.
 - Keep deterministic command detection in `orchestration/` for terminal UI
   policy only; use the action agent for slash/tool action selection.

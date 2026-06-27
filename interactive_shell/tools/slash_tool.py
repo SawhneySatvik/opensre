@@ -11,9 +11,7 @@ from interactive_shell.command_registry.slash_catalog import (
     slash_invoke_input_schema,
     slash_invoke_tool_description,
 )
-from interactive_shell.harness.execution_policy import (
-    plan_slash_execution,
-)
+from interactive_shell.tools.shared import plan_foreground_tool
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -94,7 +92,7 @@ def execute_slash_action(args: dict[str, Any], ctx: ToolContext) -> bool:
         ctx.session.queue_auto_command(stripped)
         return True
 
-    plan = plan_slash_execution()
+    plan = plan_foreground_tool("slash", "slash")
     if not execution_allowed(
         plan.policy,
         session=ctx.session,

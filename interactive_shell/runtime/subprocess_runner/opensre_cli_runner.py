@@ -12,12 +12,12 @@ from enum import StrEnum
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.execution_policy import (
-    ActionExecutionMode,
-    ActionExecutionPlan,
-    ExecutionPolicyResult,
-)
 from interactive_shell.runtime import ReplSession
+from interactive_shell.tools.shared import (
+    ExecutionPolicyResult,
+    ToolExecutionMode,
+    ToolExecutionPlan,
+)
 from interactive_shell.ui import DIM, ERROR, WARNING, print_command_output
 from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -192,12 +192,12 @@ def _build_opensre_execution_plan(tokens: list[str]) -> OpensreExecutionPlan:
     )
 
 
-def _to_action_execution_plan(plan: OpensreExecutionPlan) -> ActionExecutionPlan:
-    mode = ActionExecutionMode.BACKGROUND
+def _to_tool_execution_plan(plan: OpensreExecutionPlan) -> ToolExecutionPlan:
+    mode = ToolExecutionMode.BACKGROUND
     if plan.execution_mode is OpensreExecutionMode.FOREGROUND:
-        mode = ActionExecutionMode.FOREGROUND
+        mode = ToolExecutionMode.FOREGROUND
     elif plan.execution_mode is OpensreExecutionMode.FOREGROUND_STREAMING:
-        mode = ActionExecutionMode.FOREGROUND_STREAMING
+        mode = ToolExecutionMode.FOREGROUND_STREAMING
     if not plan.requires_confirmation:
         policy = ExecutionPolicyResult(
             verdict="allow",
@@ -214,7 +214,7 @@ def _to_action_execution_plan(plan: OpensreExecutionPlan) -> ActionExecutionPlan
             hint="Use a read-only subcommand (health, version, list, status, show)",
             shell_classification=plan.classification.value,
         )
-    return ActionExecutionPlan(
+    return ToolExecutionPlan(
         action_type="cli_command",
         classification=plan.classification.value,
         execution_mode=mode,
@@ -352,7 +352,7 @@ def run_opensre_cli_command_result(
         )
 
     plan = _build_opensre_execution_plan(tokens)
-    execution_plan = _to_action_execution_plan(plan)
+    execution_plan = _to_tool_execution_plan(plan)
 
     if not execution_allowed(
         execution_plan.policy,
@@ -373,10 +373,10 @@ def run_opensre_cli_command_result(
     argv_list = [sys.executable, "-m", "cli"] + tokens
     display_command = f"opensre {' '.join(tokens)}"
     if execution_plan.execution_mode in {
-        ActionExecutionMode.FOREGROUND,
-        ActionExecutionMode.FOREGROUND_STREAMING,
+        ToolExecutionMode.FOREGROUND,
+        ToolExecutionMode.FOREGROUND_STREAMING,
     }:
-        if execution_plan.execution_mode is ActionExecutionMode.FOREGROUND_STREAMING:
+        if execution_plan.execution_mode is ToolExecutionMode.FOREGROUND_STREAMING:
             _run_opensre_foreground_streaming(argv_list, display_command, session, console)
             return OpensreRunResult(
                 outcome=OpensreRunOutcome.EXECUTED_FOREGROUND,

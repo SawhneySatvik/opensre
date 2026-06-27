@@ -7,9 +7,7 @@ from typing import Any
 from rich.markup import escape
 
 from interactive_shell.command_registry import switch_llm_provider, switch_reasoning_model
-from interactive_shell.harness.execution_policy import (
-    evaluate_llm_runtime_switch,
-)
+from interactive_shell.tools.shared import allow_tool
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -54,7 +52,7 @@ def execute_llm_provider_action(args: dict[str, Any], ctx: ToolContext) -> bool:
     target = str(args.get("target", args.get("provider", ""))).strip()
     if not target:
         return False
-    policy = evaluate_llm_runtime_switch(action_type="switch_llm_provider")
+    policy = allow_tool("switch_llm_provider")
     if not execution_allowed(
         policy,
         session=ctx.session,

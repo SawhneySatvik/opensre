@@ -1,19 +1,20 @@
 """Shell-specific execution policy for the interactive REPL.
 
 Alpha mode allows every shell command; the only rejected case is genuinely
-empty input. These helpers live next to the rest of the shell machinery so the
-shared ``execution_policy`` module is not imported for shell-only concerns by
-other tools. They reuse the shared policy contracts
-(``ExecutionPolicyResult`` / ``ActionExecutionPlan``) from ``execution_policy``.
+empty input. These helpers live next to the rest of the shell machinery so the shared
+execution-policy module is not imported for shell-only concerns by other tools.
+They reuse the shared policy contracts
+(``ExecutionPolicyResult`` / ``ToolExecutionPlan``) from
+``interactive_shell.tools.shared``.
 """
 
 from __future__ import annotations
 
 import config.constants.platform as _platform
-from interactive_shell.harness.execution_policy import (
-    ActionExecutionMode,
-    ActionExecutionPlan,
+from interactive_shell.tools.shared import (
     ExecutionPolicyResult,
+    ToolExecutionMode,
+    ToolExecutionPlan,
 )
 from interactive_shell.tools.shell.parsing import (
     ParsedShellCommand,
@@ -46,13 +47,13 @@ def evaluate_shell_from_parsed(parsed: ParsedShellCommand) -> ExecutionPolicyRes
     )
 
 
-def plan_shell_execution(parsed: ParsedShellCommand) -> ActionExecutionPlan:
+def plan_shell_execution(parsed: ParsedShellCommand) -> ToolExecutionPlan:
     policy = evaluate_shell_from_parsed(parsed)
     classification = policy.shell_classification or "unrestricted"
-    return ActionExecutionPlan(
+    return ToolExecutionPlan(
         action_type="shell",
         classification=classification,
-        execution_mode=ActionExecutionMode.FOREGROUND,
+        execution_mode=ToolExecutionMode.FOREGROUND,
         policy=policy,
     )
 

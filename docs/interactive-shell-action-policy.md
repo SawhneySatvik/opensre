@@ -76,7 +76,7 @@ answered without adding keyword/regex rules. Two complementary mechanisms:
    `slash_invoke("/integrations", ["list"])` or `["verify"]`) to discover the
    answer instead of deflecting. There is no keyword mapping for this — the LLM
    decides. Under the alpha allow-all policy every discovery action runs without
-   confirmation (`execution_policy.evaluate_slash_command` returns `allow`); the
+   confirmation (`execution_policy.allow_tool("slash")` returns `allow`); the
    former `ExecutionTier`/`resolve_slash_execution_tier` classification was
    removed because it gated nothing. No fail-closed regex rule is involved; the
    action agent decides whether to emit a discovery action.
@@ -164,7 +164,7 @@ them; the fixture `policy` block now carries a single `executes_terminal_action`
 `boolean` (true only when a shell action AgentTool is expected to run).
 
 If write/mutating actions are introduced later, gate them with the
-execution-stage confirmation policy (`interactive_shell/harness/execution_policy.py`), **not**
+execution-stage confirmation policy (`interactive_shell/tools/shared/execution_policy.py`), **not**
 an action-selection denial.
 
 ### Removal of the shell-command safety policy (alpha)
@@ -196,7 +196,7 @@ What changed:
 
 The `ask`/confirmation machinery (`trust_mode` plus the confirmation UX) is
 retained as an unused hook, split across two layers: the pure decision lives in
-`interactive_shell/harness/execution_policy.py` (`resolve_confirmation`), and the terminal
+`interactive_shell/tools/shared/execution_policy.py` (`resolve_confirmation`), and the terminal
 interaction (`execution_allowed` — console output, the `Proceed? [Y/n]` prompt,
 analytics) lives in `interactive_shell/ui/execution_confirm.py`. If command
 guardrails are reintroduced after alpha, gate them here at the execution stage —

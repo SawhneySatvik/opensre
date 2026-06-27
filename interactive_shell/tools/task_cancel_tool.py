@@ -8,10 +8,8 @@ from typing import Any
 from rich.markup import escape
 
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.harness.execution_policy import (
-    plan_slash_execution,
-)
 from interactive_shell.runtime import TaskKind, TaskStatus
+from interactive_shell.tools.shared import plan_foreground_tool
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -75,7 +73,7 @@ def execute_task_cancel_action(args: dict[str, Any], ctx: ToolContext) -> bool:
     if task_id is None:
         return True
     command = f"/cancel {task_id}"
-    plan = plan_slash_execution()
+    plan = plan_foreground_tool("slash", "slash")
     if not execution_allowed(
         plan.policy,
         session=ctx.session,

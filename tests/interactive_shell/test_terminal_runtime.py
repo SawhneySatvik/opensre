@@ -1432,7 +1432,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
     ) -> None:
         from rich.console import Console
 
-        from interactive_shell.harness.execution_policy import (
+        from interactive_shell.tools.shared import (
             ExecutionPolicyResult,
         )
         from interactive_shell.ui.execution_confirm import execution_allowed
@@ -1474,7 +1474,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
         """
         from rich.console import Console
 
-        from interactive_shell.harness.execution_policy import (
+        from interactive_shell.tools.shared import (
             ExecutionPolicyResult,
         )
         from interactive_shell.ui.execution_confirm import execution_allowed

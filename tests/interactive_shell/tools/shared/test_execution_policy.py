@@ -1,7 +1,7 @@
-"""Unit tests for the pure REPL execution policy.
+"""Unit tests for the shared REPL execution policy.
 
-Alpha mode: policy functions resolve to ``allow`` with no confirmation prompt
-and there is no command guardrail. The ``ask`` verdict is retained for
+Alpha mode: policy helpers resolve to ``allow`` with no confirmation prompt and
+there is no command guardrail. The ``ask`` verdict is retained for
 ``trust_mode`` / future opt-in stricter policy, so those paths are covered here
 by exercising :func:`resolve_confirmation` with explicitly-constructed ``ask`` /
 ``deny`` results.
@@ -15,14 +15,13 @@ lives in ``interactive_shell.tools.shell.policy`` and is covered by
 
 from __future__ import annotations
 
-from interactive_shell.harness.execution_policy import (
+from interactive_shell.tools.shared import (
     ConfirmationOutcome,
     ExecutionPolicyResult,
-    evaluate_code_agent_launch,
-    evaluate_investigation_launch,
-    evaluate_llm_runtime_switch,
-    evaluate_slash_command,
-    evaluate_synthetic_test_launch,
+    ToolExecutionMode,
+    ToolExecutionPlan,
+    allow_tool,
+    plan_foreground_tool,
     resolve_confirmation,
 )
 
@@ -39,50 +38,45 @@ def _ask_result() -> ExecutionPolicyResult:
 # --- Default-allow policy decisions -----------------------------------------
 
 
-def test_slash_command_is_allow() -> None:
-    r = evaluate_slash_command()
+def test_allow_tool_is_allow() -> None:
+    r = allow_tool("slash")
     assert r.verdict == "allow"
     assert r.action_type == "slash"
+    assert r.reason is None
 
 
-def test_investigation_launch_is_allow() -> None:
-    r = evaluate_investigation_launch(action_type="investigation")
-    assert r.verdict == "allow"
-    assert r.action_type == "investigation"
+def test_allow_tool_carries_arbitrary_tool_type() -> None:
+    for tool_type in ("investigation", "sample_alert", "synthetic_test", "code_agent"):
+        r = allow_tool(tool_type)
+        assert r.verdict == "allow"
+        assert r.action_type == tool_type
 
 
-def test_investigation_launch_user_initiated_is_allow() -> None:
-    r = evaluate_investigation_launch(action_type="investigation", user_initiated=True)
-    assert r.verdict == "allow"
-    assert r.action_type == "investigation"
+# --- plan_foreground_tool ---------------------------------------------------
 
 
-def test_sample_alert_user_initiated_is_allow() -> None:
-    r = evaluate_investigation_launch(action_type="sample_alert", user_initiated=True)
-    assert r.verdict == "allow"
-    assert r.action_type == "sample_alert"
+def test_plan_foreground_tool_defaults_classification_to_tool_type() -> None:
+    plan = plan_foreground_tool("slash")
+    assert isinstance(plan, ToolExecutionPlan)
+    assert plan.action_type == "slash"
+    assert plan.classification == "slash"
+    assert plan.execution_mode is ToolExecutionMode.FOREGROUND
+    assert plan.policy.verdict == "allow"
 
 
-def test_synthetic_is_allow() -> None:
-    r = evaluate_synthetic_test_launch()
-    assert r.verdict == "allow"
-
-
-def test_code_agent_is_allow() -> None:
-    r = evaluate_code_agent_launch()
-    assert r.verdict == "allow"
-
-
-def test_llm_runtime_switch_is_allow() -> None:
-    r = evaluate_llm_runtime_switch(action_type="llm_runtime")
-    assert r.verdict == "allow"
+def test_plan_foreground_tool_accepts_explicit_classification() -> None:
+    plan = plan_foreground_tool("investigation", "investigation_launch")
+    assert plan.action_type == "investigation"
+    assert plan.classification == "investigation_launch"
+    assert plan.execution_mode is ToolExecutionMode.FOREGROUND
+    assert plan.policy.verdict == "allow"
 
 
 # --- resolve_confirmation: pure decision (no side effects) ------------------
 
 
 def test_resolve_allow_verdict_proceeds() -> None:
-    plan = resolve_confirmation(evaluate_slash_command(), trust_mode=False, is_tty=True)
+    plan = resolve_confirmation(allow_tool("slash"), trust_mode=False, is_tty=True)
     assert plan.outcome == ConfirmationOutcome.ALLOW
     assert plan.analytics_outcome == "allowed"
 

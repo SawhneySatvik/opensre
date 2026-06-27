@@ -105,10 +105,7 @@ def _execute_action_plan(
         switch_llm_provider,
         switch_toolcall_model,
     )
-    from interactive_shell.harness.execution_policy import (
-        evaluate_llm_runtime_switch,
-        evaluate_slash_command,
-    )
+    from interactive_shell.tools.shared import allow_tool
     from interactive_shell.ui.execution_confirm import execution_allowed
 
     console.print()
@@ -157,7 +154,7 @@ def _execute_action_plan(
                 slash_label += f" {requested_model}"
             if requested_toolcall:
                 slash_label += f" --toolcall-model {requested_toolcall}"
-            pol = evaluate_llm_runtime_switch(action_type="switch_llm_provider")
+            pol = allow_tool("switch_llm_provider")
             if not execution_allowed(
                 pol,
                 session=session,
@@ -183,7 +180,7 @@ def _execute_action_plan(
             if not requested_model:
                 console.print(f"[{ERROR}]missing model for switch_toolcall_model action[/]")
                 continue
-            pol = evaluate_llm_runtime_switch(action_type="switch_toolcall_model")
+            pol = allow_tool("switch_toolcall_model")
             if not execution_allowed(
                 pol,
                 session=session,
@@ -217,7 +214,7 @@ def _execute_action_plan(
                     is_tty=is_tty,
                 )
                 continue
-            policy = evaluate_slash_command()
+            policy = allow_tool("slash")
             if not execution_allowed(
                 policy,
                 session=session,

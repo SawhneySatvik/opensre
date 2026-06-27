@@ -14,9 +14,6 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.execution_policy import (
-    evaluate_synthetic_test_launch,
-)
 from interactive_shell.runtime import ReplSession, TaskKind, TaskRecord
 from interactive_shell.runtime.subprocess_runner.task_streaming import (
     _SYNTHETIC_DIAG_CHARS,
@@ -28,6 +25,7 @@ from interactive_shell.runtime.subprocess_runner.task_streaming import (
     read_diag,
     terminate_child_process,
 )
+from interactive_shell.tools.shared import allow_tool
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT
 from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -166,7 +164,7 @@ def run_synthetic_test(
         session.record("synthetic_test", suite_name, ok=False)
         return
 
-    policy = evaluate_synthetic_test_launch()
+    policy = allow_tool("synthetic_test")
     if not execution_allowed(
         policy,
         session=session,

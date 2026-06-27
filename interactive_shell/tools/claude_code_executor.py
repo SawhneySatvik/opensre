@@ -27,9 +27,6 @@ from rich.markup import escape
 
 from integrations.llm_cli.claude_code import ClaudeCodeAdapter
 from integrations.llm_cli.subprocess_env import build_cli_subprocess_env
-from interactive_shell.harness.execution_policy import (
-    evaluate_code_agent_launch,
-)
 from interactive_shell.runtime import ReplSession, TaskKind
 from interactive_shell.runtime.subprocess_runner.task_streaming import (
     _MAX_COMMAND_OUTPUT_CHARS,
@@ -37,6 +34,7 @@ from interactive_shell.runtime.subprocess_runner.task_streaming import (
     CLAUDE_CODE_IMPLEMENTATION_TIMEOUT_SECONDS,
     terminate_child_process,
 )
+from interactive_shell.tools.shared import allow_tool
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT, WARNING, print_command_output
 from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -103,7 +101,7 @@ def run_claude_code_implementation(
     is_tty: bool | None = None,
     action_already_listed: bool = False,
 ) -> None:
-    policy = evaluate_code_agent_launch()
+    policy = allow_tool("code_agent")
     if not execution_allowed(
         policy,
         session=session,
