@@ -1,7 +1,7 @@
 """Characterization snapshot for llm_context prompt assembly.
 
 This is the safety net for the typed/DRY/functional refactor of
-``interactive_shell/harness/llm_context``: the action-agent system prompt, the
+``context``: the action-agent system prompt, the
 action user message, and the conversational ``build_cli_agent_prompt`` output
 are heavily relied upon by the locked live turn-scenario suite and MUST stay
 byte-for-byte identical across the refactor.

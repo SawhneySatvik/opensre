@@ -2,7 +2,7 @@
 
 ## Human summary
 
-`interactive_shell/harness/llm_context/session/` is the single, canonical home for everything about a
+`context/session/` is the single, canonical home for everything about a
 REPL session: the in-memory domain object, the runtime context bundle assembled
 for the controller, and all session persistence. Before this package existed,
 session state lived in `runtime/core/session.py` + `runtime/core/context.py`

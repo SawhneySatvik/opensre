@@ -47,9 +47,9 @@ from context.grounding._cache import FingerprintCache, excerpt
 from context.grounding.reference import GroundingReference
 from context.models import CacheStats, PromptSection
 
-# Repo root is five levels above this file
-# (.../interactive_shell/harness/llm_context/grounding/agents_md_reference.py -> repo root).
-_REPO_ROOT = Path(__file__).resolve().parents[4]
+# Repo root is two levels above this file
+# (.../context/grounding/agents_md_reference.py -> repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 
 _AGENTS_MD_FILENAME = "AGENTS.md"
 

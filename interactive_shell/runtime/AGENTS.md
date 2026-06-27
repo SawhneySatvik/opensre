@@ -31,7 +31,7 @@ In simple terms:
   `/cancel`.
 - Per-REPL-process session state (`ReplSession`) and runtime context assembly
   (`ReplRuntimeContext`, `create_repl_runtime_context`) live in the
-  `interactive_shell/harness/llm_context/session/` package, not in `core/`. `runtime/__init__.py`
+  `context/session/` package, not in `core/`. `runtime/__init__.py`
   lazily re-exports those names (see compatibility surface policy below).
 
 These instructions apply to `interactive_shell/runtime/` and all

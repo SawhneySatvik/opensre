@@ -48,9 +48,9 @@ from context.grounding._cache import FingerprintCache, excerpt
 from context.grounding.reference import GroundingReference
 from context.models import CacheStats, PromptSection
 
-# Docs live at the repository root, five levels above this file
-# (.../interactive_shell/harness/llm_context/grounding/docs_reference.py -> repo root).
-_DOCS_ROOT = Path(__file__).resolve().parents[4] / "docs"
+# Docs live at the repository root, two levels above this file
+# (.../context/grounding/docs_reference.py -> repo root).
+_DOCS_ROOT = Path(__file__).resolve().parents[2] / "docs"
 
 # Extensions we read for grounding. Mintlify content is .mdx; .md is included
 # for any plain-Markdown page the project may add later.
