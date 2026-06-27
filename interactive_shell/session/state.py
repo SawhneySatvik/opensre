@@ -92,7 +92,7 @@ class ReplSession:
     last_assistant_intent: str | None = None
     """Intent label set by the runtime after each handled turn.
 
-    Values: "slash", "cli_help", "investigation", "follow_up", and the three
+    Values: "slash", "investigation", "follow_up", and the three
     shell action-agent turn paths: "cli_agent_summarized" (a successful action's
     discovery output was summarized into an answer), "cli_agent_handled" (the
     action fully handled the turn; no LLM answer), and "cli_agent_fallback"
@@ -145,13 +145,6 @@ class ReplSession:
 
     cli_agent_messages: list[tuple[str, str]] = field(default_factory=list)
     """Assistant conversation history: alternating (\"user\"|\"assistant\", text)."""
-
-    follow_up_messages: list[tuple[str, str]] = field(default_factory=list)
-    """Follow-up Q&A pairs for the current investigation, separate from cli_agent_messages.
-
-    Scoped to the most recent investigation: reset by apply_investigation_result()
-    so that CLI-agent turns never bleed into follow-up grounding context.
-    """
 
     prompt_history_backend: History | None = None
     """The live ``prompt_toolkit.History`` object backing the input prompt.
@@ -527,16 +520,13 @@ class ReplSession:
         *,
         trigger: str = "",
     ) -> None:
-        """Record a completed investigation result and reset follow-up context.
+        """Record a completed investigation result.
 
         Replaces the inline ``session.last_state = …`` +
-        ``session.accumulate_from_state(…)`` pattern at every call site so that
-        follow_up_messages is always cleared atomically with the state update.
-        This prevents CLI-agent turns from an earlier interaction from bleeding
-        into the follow-up grounding context of a new investigation.
+        ``session.accumulate_from_state(…)`` pattern at every call site so the
+        last-state update and accumulated-context update stay in one place.
         """
         self.last_state = state
-        self.follow_up_messages.clear()
         self.accumulate_from_state(state)
         self.storage.append_investigation_result(self.session_id, state, trigger=trigger)
 
@@ -562,7 +552,6 @@ class ReplSession:
         self.token_usage.clear()
         self.llm_call_count = 0
         self.cli_agent_messages.clear()
-        self.follow_up_messages.clear()
         self.incoming_alerts.clear()
         # Keep persisted cross-session task history on disk intact.
         # /new is session-scoped, so swap in a fresh in-memory registry

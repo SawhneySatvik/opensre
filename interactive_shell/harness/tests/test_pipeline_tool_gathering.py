@@ -9,18 +9,18 @@ from typing import Any
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.session import ReplSession
+from interactive_shell.turn_accounting import (
+    ToolCallingTurnResult,
+)
 
 
 def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False, color_system=None, width=80)
 
 
-def _unhandled_turn(*_args: object, **_kwargs: object) -> TerminalActionExecutionResult:
-    return TerminalActionExecutionResult(
+def _unhandled_turn(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+    return ToolCallingTurnResult(
         planned_count=0,
         executed_count=0,
         executed_success_count=0,
@@ -86,9 +86,9 @@ def test_existing_command_observation_skips_gather() -> None:
         session: ReplSession,
         _console: Console,
         **_kwargs: object,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         session.last_command_observation = "already gathered"
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=1,

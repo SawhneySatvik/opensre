@@ -13,10 +13,10 @@ import io
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.harness.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.session import ReplSession
+from interactive_shell.turn_accounting import (
+    ToolCallingTurnResult,
+)
 from interactive_shell.utils.telemetry.recorder import LlmRunInfo
 
 _OBSERVATION = "Integration status from `/integrations`:\n- sentry: missing (Not configured.)"
@@ -36,9 +36,9 @@ def test_discovery_output_is_summarized_into_a_direct_answer() -> None:
         *,
         confirm_fn=None,
         is_tty=None,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         session.last_command_observation = _OBSERVATION
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=1,
@@ -85,9 +85,9 @@ def test_no_observation_keeps_silent_handled_turn() -> None:
         *,
         confirm_fn=None,
         is_tty=None,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         # No discovery observation recorded this turn.
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=1,
@@ -124,9 +124,9 @@ def test_failed_discovery_is_not_summarized() -> None:
         *,
         confirm_fn=None,
         is_tty=None,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         session.last_command_observation = _OBSERVATION
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=0,  # nothing succeeded
@@ -163,9 +163,9 @@ def test_observation_is_reset_each_turn() -> None:
         *,
         confirm_fn=None,
         is_tty=None,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         # Does not set an observation this turn.
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=1,

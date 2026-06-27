@@ -17,26 +17,26 @@ from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
 from platform.analytics.cli import capture_terminal_turn_summarized
 
 # Distinguishes the two zero-count outcomes that need different analytics:
-# a normal action-agent run that completed without planning actions ("completed"),
+# a normal tool-calling run that completed without planning actions ("completed"),
 # versus a run that never produced actions because it failed/overflowed ("not_run").
-ActionAccountingStatus = Literal["completed", "not_run"]
+ToolCallingAccountingStatus = Literal["completed", "not_run"]
 
 
 @dataclass(frozen=True)
-class TerminalActionExecutionResult:
+class ToolCallingTurnResult:
     planned_count: int
     executed_count: int
     executed_success_count: int
     has_unhandled_clause: bool
     handled: bool
     response_text: str = ""
-    accounting_status: ActionAccountingStatus = "completed"
+    accounting_status: ToolCallingAccountingStatus = "completed"
 
 
 @dataclass(frozen=True)
 class ShellTurnResult:
     final_intent: str
-    action_result: TerminalActionExecutionResult
+    action_result: ToolCallingTurnResult
     assistant_response_text: str = ""
     llm_run: LlmRunInfo | None = None
 
@@ -60,7 +60,7 @@ class ShellTurnAccounting:
     text: str
     recorder: PromptRecorder | None
 
-    def record_action_result(self, action_result: TerminalActionExecutionResult) -> None:
+    def record_action_result(self, action_result: ToolCallingTurnResult) -> None:
         """Emit action-agent analytics and update terminal-turn aggregates."""
         self._record_action_analytics(action_result)
         self._record_terminal_turn(action_result)
@@ -73,7 +73,7 @@ class ShellTurnAccounting:
         self.session.last_assistant_intent = result.final_intent
         return result
 
-    def _record_action_analytics(self, action_result: TerminalActionExecutionResult) -> None:
+    def _record_action_analytics(self, action_result: ToolCallingTurnResult) -> None:
         from platform.analytics.cli import (
             capture_repl_execution_policy_decision,
             capture_terminal_actions_executed,
@@ -108,7 +108,7 @@ class ShellTurnAccounting:
             executed_success_count=action_result.executed_success_count,
         )
 
-    def _record_terminal_turn(self, action_result: TerminalActionExecutionResult) -> None:
+    def _record_terminal_turn(self, action_result: ToolCallingTurnResult) -> None:
         fallback_to_llm = not action_result.handled
         snapshot = self.session.record_terminal_turn(
             executed_count=action_result.executed_count,
@@ -134,8 +134,8 @@ class ShellTurnAccounting:
 
 
 __all__ = [
-    "ActionAccountingStatus",
     "ShellTurnAccounting",
     "ShellTurnResult",
-    "TerminalActionExecutionResult",
+    "ToolCallingAccountingStatus",
+    "ToolCallingTurnResult",
 ]

@@ -21,7 +21,7 @@ def test_prompt_recorder_start_respects_supported_turns(monkeypatch, tmp_path: P
     )
     session = ReplSession()
     assert PromptRecorder.start(session=session, text="hello", turn_kind="slash") is None
-    assert PromptRecorder.start(session=session, text="hello", turn_kind="cli_help") is not None
+    assert PromptRecorder.start(session=session, text="hello", turn_kind="agent") is not None
 
 
 def test_prompt_recorder_for_background_task_uses_task_id_as_trace(
@@ -83,7 +83,7 @@ def test_prompt_recorder_flush_writes_and_redacts(monkeypatch, tmp_path: Path) -
     recorder = PromptRecorder.start(
         session=session,
         text="Bearer token-value-12345678901234567890",
-        turn_kind="cli_help",
+        turn_kind="agent",
     )
     assert recorder is not None
     recorder.set_response(

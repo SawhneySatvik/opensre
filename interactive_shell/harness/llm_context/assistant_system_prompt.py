@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from interactive_shell.chat.prompt_rules import (
+from interactive_shell.harness.llm_context.prompt_rules import (
     CLI_ASSISTANT_MARKDOWN_RULE,
     INTERACTIVE_SHELL_TERMINOLOGY_RULE,
 )

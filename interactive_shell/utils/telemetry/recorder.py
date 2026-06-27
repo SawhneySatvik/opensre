@@ -18,14 +18,11 @@ from interactive_shell.utils.telemetry.integration_snapshot import (
 from interactive_shell.utils.telemetry.sinks.local_jsonl import append_prompt_log_record
 from interactive_shell.utils.telemetry.sinks.posthog_ai import capture_ai_generation
 
-_SUPPORTED_TURN_KINDS = frozenset(
-    {"agent", "cli_help", "follow_up", "new_alert", "background_task"}
-)
+_SUPPORTED_TURN_KINDS = frozenset({"agent", "follow_up", "new_alert", "background_task"})
 
 # Maps PromptRecorder turn_kind to session turn kind stored in turn_detail records.
 _TURN_TO_SESSION_KIND: dict[str, str] = {
     "agent": "chat",
-    "cli_help": "chat",
     "follow_up": "follow_up",
     "new_alert": "alert",
     "background_task": "cli_command",

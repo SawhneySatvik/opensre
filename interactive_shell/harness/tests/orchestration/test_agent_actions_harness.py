@@ -5,15 +5,15 @@ from __future__ import annotations
 from rich.console import Console
 
 import interactive_shell.tools.slash_tool as slash_tool
-from interactive_shell.harness.harness import (
-    ActionExecutionDeps,
-    execute_cli_actions,
-)
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     ActionExecutionHarness,
     FakeActionLLM,
     no_tool_response,
     tool_response,
+)
+from interactive_shell.harness.tool_calling import (
+    ToolCallingDeps,
+    run_tool_calling_turn,
 )
 from interactive_shell.session import ReplSession
 
@@ -38,7 +38,7 @@ def test_execute_with_harness_runs_slash_tool_call(monkeypatch) -> None:
     )
     session = ReplSession()
 
-    result = execute_cli_actions(
+    result = run_tool_calling_turn(
         "check health",
         session,
         harness.console,
@@ -61,7 +61,7 @@ def test_literal_slash_command_does_not_short_circuit_without_agent_tool_call(
     monkeypatch.setattr(slash_tool, "dispatch_slash", _unexpected_dispatch)
     harness = ActionExecutionHarness(llm=FakeActionLLM([no_tool_response()]))
 
-    result = execute_cli_actions(
+    result = run_tool_calling_turn(
         "/sessions",
         ReplSession(),
         harness.console,
@@ -79,7 +79,7 @@ def test_execute_with_harness_hands_off_handoff_only_tool_call() -> None:
         )
     )
 
-    result = execute_cli_actions(
+    result = run_tool_calling_turn(
         "half actionable prompt",
         ReplSession(),
         harness.console,
@@ -97,11 +97,11 @@ def test_execute_with_harness_handles_llm_unavailable() -> None:
         raise RuntimeError("action agent unavailable")
 
     session = ReplSession()
-    result = execute_cli_actions(
+    result = run_tool_calling_turn(
         "action agent outage",
         session,
         Console(force_terminal=False),
-        deps=ActionExecutionDeps(llm_factory=_raise),
+        deps=ToolCallingDeps(llm_factory=_raise),
     )
 
     assert result.handled is True

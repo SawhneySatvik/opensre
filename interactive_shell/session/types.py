@@ -18,7 +18,7 @@ from typing import Any, Protocol, runtime_checkable
 # Turn kinds that represent user-initiated chat messages. ReplSession.record()
 # is called with the turn kind, not a normalized "chat" label, so this set must
 # cover all kinds that produce conversational turns.
-CHAT_KINDS: frozenset[str] = frozenset({"chat", "cli_agent", "cli_help", "follow_up"})
+CHAT_KINDS: frozenset[str] = frozenset({"chat", "cli_agent", "follow_up"})
 
 
 class SessionPersistenceSource(Protocol):

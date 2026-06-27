@@ -14,13 +14,14 @@ import pytest
 from rich.console import Console
 
 import config.constants.platform as platform_module
-import interactive_shell.harness.harness as agent_actions
+import interactive_shell.harness.tool_calling as tool_calling
 import interactive_shell.runtime.subprocess_runner as subprocess_runner
 import interactive_shell.tools.implementation_tool as implementation_tool
 import interactive_shell.tools.llm_provider_tool as llm_provider_tool
 import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
+from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
     default_target_surface,
@@ -35,7 +36,7 @@ from interactive_shell.tools.tool_registry import (
 )
 from platform.common.task_types import TaskKind, TaskStatus
 
-_ACTION_LLM_FACTORY_PATCH = "interactive_shell.harness.harness._default_llm_factory"
+_ACTION_LLM_FACTORY_PATCH = "interactive_shell.harness.tool_calling._default_llm_factory"
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -272,7 +273,7 @@ def test_execute_cli_actions_dispatches_planned_commands(monkeypatch: object) ->
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "check the health of my opensre and then show me all connected services",
         session,
         console,
@@ -345,7 +346,7 @@ def test_execute_cli_actions_skips_remaining_actions_when_cancelled(
     session = ReplSession()
     inner_console, buf = _capture()
     console = _CancelAfterFirst(inner_console, dispatched)
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "check the health of my opensre and then show me all connected services",
         session,
         console,  # type: ignore[arg-type]
@@ -381,7 +382,7 @@ def test_execute_cli_actions_falls_through_for_local_llama_request(monkeypatch: 
 
     session = ReplSession()
     console, _ = _capture()
-    handled = agent_actions.execute_cli_actions("please connect to local llama", session, console)
+    handled = tool_calling.run_tool_calling_turn("please connect to local llama", session, console)
 
     assert handled.handled is False
     assert dispatched == []
@@ -401,7 +402,7 @@ def test_execute_cli_actions_switches_llm_provider(monkeypatch: object) -> None:
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "switch from the current ollama model to setting the model to anthropic",
         session,
         console,
@@ -433,7 +434,7 @@ def test_execute_cli_actions_records_llm_provider_failure(monkeypatch: object) -
 
     session = ReplSession()
     console, _ = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "switch from the current ollama model to setting the model to anthropic",
         session,
         console,
@@ -474,7 +475,7 @@ def test_execute_cli_actions_sets_bare_model_for_active_provider(
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions("switch model to gpt 5.5", session, console)
+    handled = tool_calling.run_tool_calling_turn("switch model to gpt 5.5", session, console)
 
     assert handled.handled is True
     assert reasoning_models == ["gpt-5.5"]
@@ -503,7 +504,7 @@ def test_execute_cli_actions_runs_implementation_action(monkeypatch: object) -> 
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "please implement /history search", session, console
     )
 
@@ -538,7 +539,7 @@ def test_execute_cli_actions_answers_discord_then_dispatches_datadog(
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         (
             "tell me about what the discord integration can do and then tell me what "
             "datadog services I have connections to"
@@ -585,7 +586,7 @@ def test_compound_prompt_executes_all_supported_tasks(monkeypatch: object) -> No
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         (
             "tell me how you are doing AND show me all the services we are connected to "
             "AND then deploy OpenSRE to EC2"
@@ -652,7 +653,7 @@ def test_nitro_prompt_executes_remote_then_investigation(monkeypatch: object) ->
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(_NITRO_PROMPT, session, console)
+    handled = tool_calling.run_tool_calling_turn(_NITRO_PROMPT, session, console)
 
     assert handled.handled is True
     assert dispatched == ["/remote"]
@@ -682,7 +683,7 @@ def test_services_version_deploy_prompt_executes_in_order(monkeypatch: object) -
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         (
             "tell me which services are connected AND then tell me the current CLI version "
             "AND then deploy to EC2 within 90 seconds"
@@ -727,7 +728,7 @@ def test_execute_cli_actions_runs_sample_alert(monkeypatch: object) -> None:
     console, buf = _capture()
 
     assert (
-        agent_actions.execute_cli_actions("okay launch a simple alert", session, console).handled
+        tool_calling.run_tool_calling_turn("okay launch a simple alert", session, console).handled
         is True
     )
     assert calls == ["generic"]
@@ -768,7 +769,7 @@ def test_execute_cli_actions_sample_alert_opensre_error_marks_task_failed(
     session = ReplSession()
     console, _ = _capture()
     assert (
-        agent_actions.execute_cli_actions("okay launch a simple alert", session, console).handled
+        tool_calling.run_tool_calling_turn("okay launch a simple alert", session, console).handled
         is True
     )
     inv_tasks = [
@@ -806,7 +807,7 @@ def test_execute_cli_actions_lists_all_actions_before_synthetic_rds(monkeypatch:
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "show me which services are connected and after that run a synthetic test RDS database",
         session,
         console,
@@ -874,7 +875,9 @@ def test_execute_cli_actions_runs_requested_synthetic_scenario(monkeypatch: obje
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions("run synthetic test 005-failover", session, console)
+    handled = tool_calling.run_tool_calling_turn(
+        "run synthetic test 005-failover", session, console
+    )
 
     assert handled.handled is True
     assert popen_calls[0][0][-2:] == ["--scenario", "005-failover"]
@@ -891,7 +894,7 @@ def test_execute_cli_actions_cancels_single_running_synthetic_task() -> None:
     task.attach_process(proc)
 
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions(
+    handled = tool_calling.run_tool_calling_turn(
         "kill the syntehtic_test because it is runnign way too long",
         session,
         console,
@@ -935,7 +938,7 @@ def test_partial_match_executes_matched_clause_and_drops_unhandled(monkeypatch: 
 
     # "sing a song" is chatty filler; v0.1 drops it and still runs the matched
     # "/integrations list" clause instead of failing the whole turn closed.
-    assert agent_actions.execute_cli_actions(
+    assert tool_calling.run_tool_calling_turn(
         "show me connected services and sing a song", session, console
     ).handled
     assert dispatched == ["/integrations list"]
@@ -948,7 +951,7 @@ def test_execute_cli_actions_falls_through_for_chat() -> None:
     session = ReplSession()
     console, _ = _capture()
 
-    assert agent_actions.execute_cli_actions("hey", session, console).handled is False
+    assert tool_calling.run_tool_calling_turn("hey", session, console).handled is False
     assert session.history == []
 
 
@@ -965,7 +968,7 @@ def test_execute_cli_actions_runs_shell_command(monkeypatch: object) -> None:
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("run `pwd`", session, console).handled is True
+    assert tool_calling.run_tool_calling_turn("run `pwd`", session, console).handled is True
     assert session.history == [
         {"type": "cli_agent", "text": "run `pwd`", "ok": True},
         {"type": "shell", "text": "pwd", "ok": True},
@@ -988,7 +991,7 @@ def test_execute_cli_actions_cd_preserves_windows_paths(monkeypatch: object) -> 
     console, _ = _capture()
 
     message = r"run `cd C:\Users\Alice`"
-    assert agent_actions.execute_cli_actions(message, session, console).handled is True
+    assert tool_calling.run_tool_calling_turn(message, session, console).handled is True
     assert changed_directories == [Path(r"C:\Users\Alice")]
     assert session.history == [
         {"type": "cli_agent", "text": message, "ok": True},
@@ -1013,7 +1016,7 @@ def test_execute_cli_actions_cd_dispatches_case_insensitively(monkeypatch: objec
     console, _ = _capture()
 
     message = r"run `CD C:\Users\Alice`"
-    assert agent_actions.execute_cli_actions(message, session, console).handled is True
+    assert tool_calling.run_tool_calling_turn(message, session, console).handled is True
     assert changed_directories == [Path(r"C:\Users\Alice")]
     assert session.history == [
         {"type": "cli_agent", "text": message, "ok": True},
@@ -1034,7 +1037,7 @@ def test_execute_cli_actions_cd_handles_trailing_backslash_on_windows(monkeypatc
     console, _ = _capture()
 
     message = r"run `cd C:\`"
-    assert agent_actions.execute_cli_actions(message, session, console).handled is True
+    assert tool_calling.run_tool_calling_turn(message, session, console).handled is True
     assert changed_directories == [Path("C:\\")]
     assert session.history == [
         {"type": "cli_agent", "text": message, "ok": True},
@@ -1055,7 +1058,7 @@ def test_execute_cli_actions_cd_strips_quotes_on_windows(monkeypatch: object) ->
     console, _ = _capture()
 
     message = r'run `cd "C:\Users\Alice"`'
-    assert agent_actions.execute_cli_actions(message, session, console).handled is True
+    assert tool_calling.run_tool_calling_turn(message, session, console).handled is True
     assert changed_directories == [Path(r"C:\Users\Alice")]
     assert session.history == [
         {"type": "cli_agent", "text": message, "ok": True},
@@ -1081,7 +1084,7 @@ def test_execute_cli_actions_records_shell_failure(monkeypatch: object) -> None:
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("execute false", session, console).handled is True
+    assert tool_calling.run_tool_calling_turn("execute false", session, console).handled is True
     assert calls == [
         (
             ["false"],
@@ -1121,7 +1124,7 @@ def test_execute_cli_actions_shell_command_times_out(monkeypatch: object) -> Non
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("run `true`", session, console).handled is True
+    assert tool_calling.run_tool_calling_turn("run `true`", session, console).handled is True
     assert session.history[-1] == {
         "type": "shell",
         "text": "true",
@@ -1151,7 +1154,7 @@ def test_execute_cli_actions_runs_passthrough_with_shell_true(monkeypatch: objec
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("run `!echo hello`", session, console).handled is True
+    assert tool_calling.run_tool_calling_turn("run `!echo hello`", session, console).handled is True
     assert calls == [
         (
             "echo hello",
@@ -1189,7 +1192,7 @@ def test_execute_cli_actions_dispatches_bang_cd_through_builtin(monkeypatch: obj
     console, buf = _capture()
 
     message = "run `!cd /tmp`"
-    assert agent_actions.execute_cli_actions(message, session, console).handled is True
+    assert tool_calling.run_tool_calling_turn(message, session, console).handled is True
     assert dirs == [Path("/tmp")]
     assert session.history[-1] == {"type": "shell", "text": "cd /tmp", "ok": True}
     captured = buf.getvalue()
@@ -1209,7 +1212,7 @@ def test_execute_cli_actions_dispatches_bang_pwd_through_builtin(monkeypatch: ob
     session = ReplSession()
     console, buf = _capture()
 
-    assert agent_actions.execute_cli_actions("run `!pwd`", session, console).handled is True
+    assert tool_calling.run_tool_calling_turn("run `!pwd`", session, console).handled is True
     assert session.history[-1] == {"type": "shell", "text": "pwd", "ok": True}
     captured = buf.getvalue()
     assert "/shown" in captured
@@ -1219,7 +1222,7 @@ def test_execute_cli_actions_dispatches_bang_pwd_through_builtin(monkeypatch: ob
 def test_execute_cli_actions_handles_path_with_spaces_run_phrase() -> None:
     session = ReplSession()
     console, buf = _capture()
-    result = agent_actions.execute_cli_actions(
+    result = tool_calling.run_tool_calling_turn(
         'run cat "/tmp/file with spaces.txt"', session, console
     )
     assert result.handled is True
@@ -1246,7 +1249,7 @@ def test_execute_cli_actions_backtick_shell_preserves_space_path_token(monkeypat
     console, _ = _capture()
 
     assert (
-        agent_actions.execute_cli_actions(
+        tool_calling.run_tool_calling_turn(
             'run `cat "/tmp/file with spaces.txt"`', session, console
         ).handled
         is True
@@ -1278,9 +1281,9 @@ def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) ->
     session = ReplSession()
     console, _ = _capture()
     # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent,
-    # not from execute_cli_actions directly. Drive the full turn with a no-op
+    # not from run_tool_calling_turn directly. Drive the full turn with a no-op
     # answer agent so no real LLM is invoked.
-    result = agent_actions.handle_message_with_agent(
+    result = handle_message_with_agent(
         "run `pwd`",
         session,
         console,
@@ -1307,7 +1310,7 @@ def test_execute_cli_actions_persists_action_agent_llm_unavailable(
 
     session = ReplSession()
     console, buf = _capture()
-    handled = agent_actions.execute_cli_actions("check health", session, console)
+    handled = tool_calling.run_tool_calling_turn("check health", session, console)
 
     assert handled.handled is True
     assert handled.has_unhandled_clause is True
@@ -1356,7 +1359,7 @@ def test_execute_cli_actions_executes_matched_clause_ignoring_unhandled(
     session = ReplSession()
     console, _ = _capture()
     # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent.
-    result = agent_actions.handle_message_with_agent(
+    result = handle_message_with_agent(
         "check health",
         session,
         console,
@@ -1399,7 +1402,7 @@ def test_execute_cli_actions_bang_prefix_uses_only_explicit_shell_escape(
     console, buf = _capture()
 
     # Multiline !cmd with internal whitespace — the exact shape the user types.
-    handled = agent_actions.execute_cli_actions("!curl\n      wttr.in/London", session, console)
+    handled = tool_calling.run_tool_calling_turn("!curl\n      wttr.in/London", session, console)
 
     assert handled.handled is True
     assert llm_called == []
@@ -1433,7 +1436,7 @@ def test_execute_cli_actions_bang_prefix_single_line_dispatches_to_shell(
     session = ReplSession()
     console, _ = _capture()
 
-    handled = agent_actions.execute_cli_actions("!echo hello world", session, console)
+    handled = tool_calling.run_tool_calling_turn("!echo hello world", session, console)
 
     assert handled.handled is True
     assert llm_called == []
@@ -1471,7 +1474,7 @@ def test_execute_cli_actions_handoff_only_plan_falls_through_silently(
 
     session = ReplSession()
     console, buf = _capture()
-    result = agent_actions.execute_cli_actions("what is our current model?", session, console)
+    result = tool_calling.run_tool_calling_turn("what is our current model?", session, console)
 
     # Must fall through (not handled) so the caller invokes the LLM for the real reply.
     assert result.handled is False

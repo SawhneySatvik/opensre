@@ -8,10 +8,10 @@ from typing import Any
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.session import ReplSession
+from interactive_shell.turn_accounting import (
+    ToolCallingTurnResult,
+)
 from interactive_shell.utils.telemetry.recorder import LlmRunInfo
 
 
@@ -31,8 +31,8 @@ def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False, color_system=None, width=80)
 
 
-def _unhandled_turn(*_args: object, **_kwargs: object) -> TerminalActionExecutionResult:
-    return TerminalActionExecutionResult(
+def _unhandled_turn(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+    return ToolCallingTurnResult(
         planned_count=0,
         executed_count=0,
         executed_success_count=0,
@@ -67,8 +67,8 @@ def test_recorder_flushes_once_for_chat_fallback() -> None:
 def test_recorder_flushes_once_for_silent_handled_turn() -> None:
     recorder = _Recorder()
 
-    def _handled(*_args: object, **_kwargs: object) -> TerminalActionExecutionResult:
-        return TerminalActionExecutionResult(
+    def _handled(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+        return ToolCallingTurnResult(
             planned_count=1,
             executed_count=1,
             executed_success_count=1,

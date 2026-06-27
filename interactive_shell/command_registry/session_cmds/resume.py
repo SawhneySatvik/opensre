@@ -63,7 +63,7 @@ def _interactive_resume_menu(session: ReplSession, console: Console) -> bool:
 
 
 _HISTORY_DISPLAY_CHAT_KINDS: frozenset[str] = frozenset(
-    {"chat", "cli_agent", "cli_help", "follow_up", "alert", "incoming_alert"}
+    {"chat", "cli_agent", "follow_up", "alert", "incoming_alert"}
 )
 
 

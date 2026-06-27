@@ -1,7 +1,7 @@
 """Shared Rich loaders for interactive-shell LLM calls.
 
 A quiet, dim spinner shows that an LLM call is in flight.  Centralised so
-every LLM-backed surface in the interactive shell (``cli_agent``, ``cli_help``,
+every LLM-backed surface in the interactive shell (``cli_agent``,
 ``follow_up``) shares the same look.
 """
 

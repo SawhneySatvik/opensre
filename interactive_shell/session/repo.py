@@ -21,7 +21,7 @@ _ROOT_CAUSE_PREVIEW_CHARS = 80
 _DEFAULT_RCA_HISTORY_LIMIT = 50
 
 # Turn kinds counted as conversational when computing per-session stats.
-_CHAT_KINDS: frozenset[str] = frozenset({"chat", "cli_agent", "cli_help", "follow_up"})
+_CHAT_KINDS: frozenset[str] = frozenset({"chat", "cli_agent", "follow_up"})
 
 
 class JsonlSessionRepo:

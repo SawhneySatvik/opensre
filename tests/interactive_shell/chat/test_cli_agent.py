@@ -21,7 +21,7 @@ from rich.console import Console
 from interactive_shell.chat import cli_agent
 from interactive_shell.chat.action_plan import _parse_action_plan
 from interactive_shell.chat.cli_agent import answer_cli_agent
-from interactive_shell.chat.system_prompt import (
+from interactive_shell.harness.llm_context.assistant_system_prompt import (
     _ACTION_RULE,
     _MARKDOWN_RULE,
     _TERMINOLOGY_RULE,
@@ -123,12 +123,7 @@ class TestSystemPromptTerminology:
 
 
 class TestSystemPromptAgentsMdGrounding:
-    """The conversational shell wires AGENTS.md repo-map content (#1442).
-
-    The strict reference_only docs-aware path (``cli_help._build_grounded_prompt``)
-    intentionally does NOT include AGENTS.md so it stays grounded only on the
-    public docs and CLI reference.
-    """
+    """The conversational shell wires AGENTS.md repo-map content (#1442)."""
 
     def test_section_present_in_conversational_prompt_when_agents_md_provided(self) -> None:
         prompt = _build_system_prompt(
@@ -145,18 +140,6 @@ class TestSystemPromptAgentsMdGrounding:
 
     def test_section_omitted_by_default_for_callers_that_dont_pass_it(self) -> None:
         prompt = _build_system_prompt(reference="(ref)", history="(hist)")
-        assert "--- Repo map (AGENTS.md) ---" not in prompt
-
-    def test_section_absent_in_reference_only_grounded_prompt(self) -> None:
-        from interactive_shell.chat.cli_help import _build_grounded_prompt
-
-        # The reference_only path stays strict — even if AGENTS.md grounding is
-        # available elsewhere in the shell, this prompt must not include it.
-        prompt = _build_grounded_prompt(
-            question="how do I configure datadog?",
-            cli_reference="(ref)",
-            docs_reference="(docs)",
-        )
         assert "--- Repo map (AGENTS.md) ---" not in prompt
 
 

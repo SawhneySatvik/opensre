@@ -64,7 +64,7 @@ STREAM_LABEL_ANSWER = "answer"
 def render_response_header(console: Console, label: str) -> None:
     """Print the ``●`` bullet row marker that opens every assistant
     response (Claude Code-style row layout). Shared with
-    ``agent_actions.execute_cli_actions`` so the planned-actions path
+    ``tool_calling.run_tool_calling_turn`` so the planned-actions path
     and the streaming response path use the exact same prefix.
     """
     console.print(f"[{ui_theme.BOLD_BRAND}]●[/] [{ui_theme.DIM}]{label}[/]")

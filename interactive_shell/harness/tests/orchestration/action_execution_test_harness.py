@@ -9,7 +9,7 @@ from typing import Any
 from rich.console import Console
 
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.harness import ActionExecutionDeps
+from interactive_shell.harness.tool_calling import ToolCallingDeps
 
 
 @dataclass
@@ -66,8 +66,8 @@ class ActionExecutionHarness:
         return Console(file=self.console_buffer, force_terminal=False, highlight=False, width=100)
 
     @property
-    def deps(self) -> ActionExecutionDeps:
-        return ActionExecutionDeps(llm_factory=lambda: self.llm)
+    def deps(self) -> ToolCallingDeps:
+        return ToolCallingDeps(llm_factory=lambda: self.llm)
 
 
 def tool_response(name: str, args: dict[str, Any] | None = None) -> AgentLLMResponse:

@@ -249,7 +249,7 @@ def test_flush_counts_cli_agent_turns_as_chat(tmp_path: Path) -> None:
     with _patch_dir(tmp_path):
         SessionStore.open_session(session)
         SessionStore.append_turn(session, "cli_agent", "why is redis slow?")
-        SessionStore.append_turn(session, "cli_help", "how do I use /resume?")
+        SessionStore.append_turn(session, "chat", "how do I use /resume?")
         SessionStore.append_turn(session, "follow_up", "what else?")
         SessionStore.flush(session)
 

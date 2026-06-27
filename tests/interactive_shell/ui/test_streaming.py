@@ -637,7 +637,7 @@ class TestTimingFooter:
 
 class TestRenderResponseHeader:
     """``render_response_header`` is the bullet-row marker shared with
-    ``agent_actions.execute_cli_actions`` — three call sites collapsed
+    ``tool_calling.run_tool_calling_turn`` — three call sites collapsed
     to one helper, so we lock in the visible output here.
     """
 

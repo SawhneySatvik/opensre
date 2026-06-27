@@ -18,13 +18,13 @@ import core.orchestration.node.investigate.tools as investigate_tools
 import core.runtime as runtime_module
 import core.runtime.agent as runtime_agent_module
 import core.runtime.llm.agent_llm_client as agent_llm_client
-from interactive_shell.chat.tool_gathering import (
+from interactive_shell.session import ReplSession
+from interactive_shell.tools.tool_gathering import (
     _format_gathering_progress_line,
     _resolve_gather_integrations,
     _tool_input_hint,
     gather_tool_evidence,
 )
-from interactive_shell.session import ReplSession
 
 
 def _console() -> Console:
@@ -173,11 +173,11 @@ def test_format_gathering_progress_line_escapes_display_and_hint_markup(
     monkeypatch: Any,
 ) -> None:
     monkeypatch.setattr(
-        "interactive_shell.chat.tool_gathering.tool_source_label",
+        "interactive_shell.tools.tool_gathering.tool_source_label",
         lambda _name: "Grafana [prod]",
     )
     monkeypatch.setattr(
-        "interactive_shell.chat.tool_gathering.tool_short_label",
+        "interactive_shell.tools.tool_gathering.tool_short_label",
         lambda _name, _source: "Mimir",
     )
 

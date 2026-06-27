@@ -12,9 +12,6 @@ from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.harness.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
 from interactive_shell.session import ReplSession
 from interactive_shell.tools import (
@@ -22,6 +19,9 @@ from interactive_shell.tools import (
 )
 from interactive_shell.tools import (
     slash_tool as _slash_tool,
+)
+from interactive_shell.turn_accounting import (
+    ToolCallingTurnResult,
 )
 
 
@@ -171,10 +171,10 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
         _console: Console,
         confirm_fn=None,
         is_tty=None,
-    ) -> TerminalActionExecutionResult:
+    ) -> ToolCallingTurnResult:
         _ = confirm_fn, is_tty
         action_calls.append(text)
-        return TerminalActionExecutionResult(
+        return ToolCallingTurnResult(
             planned_count=2,
             executed_count=2,
             executed_success_count=2,
@@ -241,7 +241,7 @@ def test_handle_message_with_agent_nitro_prompt_executes_remote_then_investigati
         call_order.append(f"investigation:{alert_text}")
 
     monkeypatch.setattr(
-        "interactive_shell.harness.harness._default_llm_factory",
+        "interactive_shell.harness.tool_calling._default_llm_factory",
         lambda: FakeActionLLM(
             [
                 AgentLLMResponse(

@@ -41,7 +41,7 @@ def derive_name(lines: list[str]) -> str:
                 text = (rec.get("prompt") or "").strip().replace("\n", " ")
                 if text:
                     return text[:_NAME_MAX_CHARS] + ("…" if len(text) > _NAME_MAX_CHARS else "")
-    # Fall back to turn stub text (covers cli_agent/cli_help/follow_up/alert kinds)
+    # Fall back to turn stub text (covers cli_agent/follow_up/alert kinds)
     for line in lines[1:]:
         with contextlib.suppress(json.JSONDecodeError):
             rec = json.loads(line)

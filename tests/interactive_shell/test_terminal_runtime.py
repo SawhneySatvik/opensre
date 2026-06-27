@@ -1490,7 +1490,7 @@ class TestExecutionAllowedRespectsDispatchCancelled:
     new contract: the confirm callable raises ``DispatchCancelled`` and
     the exception propagates out of ``execution_allowed`` *without*
     silently confirming the action. The action loop in
-    ``execute_cli_actions`` therefore exits via the exception, the
+    ``run_tool_calling_turn`` therefore exits via the exception, the
     in-flight action never runs, and any further actions in the same
     plan are skipped.
     """

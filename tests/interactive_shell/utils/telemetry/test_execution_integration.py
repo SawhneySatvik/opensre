@@ -5,10 +5,10 @@ import io
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.harness.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.session import ReplSession
+from interactive_shell.turn_accounting import (
+    ToolCallingTurnResult,
+)
 from interactive_shell.utils.telemetry import LlmRunInfo
 
 
@@ -31,8 +31,8 @@ def _console() -> Console:
 def test_handle_message_with_agent_cli_agent_empty_response_is_recorded_empty() -> None:
     recorder = _FakeRecorder()
 
-    def fake_execute(*_args: object, **_kwargs: object) -> TerminalActionExecutionResult:
-        return TerminalActionExecutionResult(
+    def fake_execute(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
+        return ToolCallingTurnResult(
             planned_count=0,
             executed_count=0,
             executed_success_count=0,
