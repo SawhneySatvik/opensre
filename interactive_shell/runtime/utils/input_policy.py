@@ -16,6 +16,7 @@ def _literal_slash_command_text(text: str) -> str | None:
     stripped = text.strip()
     return stripped if stripped.startswith("/") else None
 
+
 _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
     {
         "/history",

@@ -35,9 +35,7 @@ from interactive_shell.tools.tool_registry import (
 )
 from platform.common.task_types import TaskKind, TaskStatus
 
-_ACTION_LLM_FACTORY_PATCH = (
-    "interactive_shell.harness.agent_actions._default_llm_factory"
-)
+_ACTION_LLM_FACTORY_PATCH = "interactive_shell.harness.agent_actions._default_llm_factory"
 
 
 def _capture() -> tuple[Console, io.StringIO]:
