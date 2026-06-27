@@ -121,22 +121,31 @@ You may run `make check` as a final pass, but it is heavier (`test-full`) than t
 
 Interactive-shell live turn tests always run with live coverage enabled. Do not use deselection filters like `-k "not live_llm"`. Fix failures by improving planner/tool correctness or updating fixtures only when behavior changes are explicitly approved.
 
-For fast **local** iteration only, you can narrow the live suite with `--turn-select` (or the `TURN_SELECT` env var) without disabling live coverage:
+The live suite is **downsampled by default everywhere** (local and CI): a small, deterministic, behaviour-class-stratified representative subset (`select_representative`), then sharded via `TURN_SHARD_TOTAL` / `TURN_SHARD_INDEX`. This downsampled gate — not the full suite — is the required validation pass. The default command runs the gate live:
 
+```bash
+uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py
+```
+
+`TURN_MAX_RUNS` caps each scenario's majority-vote `runs`: it defaults to `1` (a single LLM call per test) for fast local runs, and CI sets `TURN_MAX_RUNS=0` (uncapped) to keep full majority voting. `0`/`all`/`off` mean uncapped.
+
+Change the subset (or run everything) with `--turn-select` (or the `TURN_SELECT` env var), still live:
+
+- `--turn-select=all` runs the **FULL** suite (use this when you need complete coverage).
 - `--turn-select=complex:N` runs the N most complex scenarios (multi-step plans, `runs > 1`, gather contracts, and `@live` integrations score highest).
 - `--turn-select=sample:N` runs a random N; add `--turn-select-seed` (or `TURN_SELECT_SEED`) for reproducibility.
 - `N` may be a count (`5`), a fraction (`0.1`), or a percentage (`10%`); a bare `complex`/`sample` defaults to 5%.
 
 ```bash
+# FULL suite, uncapped majority voting (mirrors CI's coverage)
+TURN_SELECT=all TURN_MAX_RUNS=0 uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py
 # Most complex five scenarios
 uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py --turn-select=complex:5
-# Random ~5% sample, reproducible
-TURN_SELECT=sample:5% TURN_SELECT_SEED=7 uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py
 ```
 
-This is an iteration aid, not a substitute for full coverage: leave it unset for the pre-push/PR validation run, and never set it in CI (the sharded `turn-live` job runs every scenario).
+Never use a narrower selection to skip a scenario that is failing.
 
-In CI, [`.github/workflows/interactive-shell-live.yml`](.github/workflows/interactive-shell-live.yml) runs two jobs on same-repo PRs and post-merge `main` pushes: a no-LLM `turn-checks` gate (deterministic command detection + fixture integrity, `-m "not live_llm"`) and the sharded `turn-live` job (8 shards, live coverage). The no-LLM gate is a fast guardrail, not a substitute for live coverage.
+In CI, [`.github/workflows/interactive-shell-live.yml`](.github/workflows/interactive-shell-live.yml) runs two jobs on same-repo PRs and post-merge `main` pushes: a no-LLM `turn-checks` gate (deterministic command detection + fixture integrity, `-m "not live_llm"`) and the sharded `turn-live` job (8 shards over the representative gate, uncapped majority voting via `TURN_MAX_RUNS=0`). A manual `workflow_dispatch` can set `turn_select=all` to run the full suite on demand. The no-LLM gate is a fast guardrail, not a substitute for live coverage.
 
 `@live` gather scenarios **fail** (not skip) in GitHub Actions when integration credentials are missing; locally they may still skip. Natural-language investigation dispatch is **enabled** by default (`INTERACTIVE_SHELL_INVESTIGATION_ENABLED = True`). Investigation dispatch scenarios run in `turn-live`; if the flag is set to `False` for emergency rollback, those scenarios **skip** in live shards and `turn-checks` stays green. Require all `turn-checks` and `turn-live shard *` checks on `main` branch protection.
 

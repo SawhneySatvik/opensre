@@ -18,10 +18,10 @@ import core.orchestration.node.investigate.tools as investigate_tools
 import core.runtime as runtime_module
 import core.runtime.agent as runtime_agent_module
 import core.runtime.llm.agent_llm_client as agent_llm_client
+from agent.gather import _resolve_gather_integrations
 from interactive_shell.session import ReplSession
 from interactive_shell.tools.tool_gathering import (
     _format_gathering_progress_line,
-    _resolve_gather_integrations,
     _tool_input_hint,
     gather_tool_evidence,
 )

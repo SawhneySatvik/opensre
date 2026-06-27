@@ -11,13 +11,13 @@ from typing import Any, NotRequired, TypedDict, cast
 import pytest
 from rich.console import Console
 
-from core.runtime import Agent, AgentTool, AgentToolContext
-from core.runtime.llm.agent_llm_client import ToolCall
-from interactive_shell.command_registry import SLASH_COMMANDS
-from interactive_shell.harness.llm_context import (
+from agent.prompts import (
     build_action_system_prompt,
     build_action_user_message,
 )
+from core.runtime import Agent, AgentTool, AgentToolContext
+from core.runtime.llm.agent_llm_client import ToolCall
+from interactive_shell.command_registry import SLASH_COMMANDS
 from interactive_shell.harness.tests._ci_gates import (
     skip_or_fail,
 )
@@ -33,10 +33,13 @@ from interactive_shell.harness.tests._oracle_runtime import (
 from interactive_shell.harness.tests._planned_action import default_target_surface
 from interactive_shell.harness.tests.scenario_loader import (
     ScenarioCase,
+    effective_runs,
+    is_full_selection,
     iter_scenarios_for_shard,
     load_all_scenarios,
     read_shard_config,
     select_cases,
+    select_representative,
 )
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import (
@@ -60,7 +63,12 @@ class ExpectedAction(TypedDict):
 
 
 _ALL_CASES = load_all_scenarios()
-_LIVE_CASES = iter_scenarios_for_shard(_ALL_CASES)
+# Default gate: a small, representative downsample applied everywhere (local and
+# CI) unless an explicit selection (``--turn-select`` / ``TURN_SELECT``) opts in
+# to a different subset or the full suite (``TURN_SELECT=all``). The gate is then
+# sharded so each CI piece stays tiny.
+_DEFAULT_GATE_CASES = select_representative(_ALL_CASES)
+_LIVE_CASES = iter_scenarios_for_shard(_DEFAULT_GATE_CASES)
 _NAME_TO_TOOL_KIND = {tool: kind for kind, tool in TOOL_KIND_TO_NAME.items()}
 _LIVE_PLANNING_MAX_ITERATIONS = 3
 
@@ -328,16 +336,30 @@ def test_planning_match_collapses_handoff_only_retries() -> None:
 
 
 def _resolve_selected_cases(config: pytest.Config) -> list[ScenarioCase]:
-    """Apply the opt-in ``--turn-select`` / ``TURN_SELECT`` subset to the shard.
+    """Resolve which scenarios run, then shard them.
 
-    Defaults to the full sharded suite (``_LIVE_CASES``) so CI and unflagged
-    local runs are unchanged; the flag/env only narrows it for fast iteration.
+    The live suite is downsampled by default (everywhere, including CI) to a
+    small representative subset. Selection precedence:
+
+    * ``--turn-select=all`` / ``TURN_SELECT=all`` -> the FULL suite.
+    * ``--turn-select=<mode>:<n>`` / ``TURN_SELECT`` -> that explicit subset.
+    * unset -> the default representative gate.
+
+    The chosen set is then sharded via ``TURN_SHARD_TOTAL`` / ``TURN_SHARD_INDEX``
+    so each CI piece stays small.
     """
     spec = config.getoption("--turn-select", default=None) or os.getenv("TURN_SELECT")
     seed_raw = config.getoption("--turn-select-seed", default=None) or os.getenv("TURN_SELECT_SEED")
     seed = int(str(seed_raw)) if seed_raw else 1337
     spec_text = str(spec) if spec else None
-    return select_cases(_LIVE_CASES, spec=spec_text, seed=seed)
+
+    if spec_text is None:
+        selected = _DEFAULT_GATE_CASES
+    elif is_full_selection(spec_text):
+        selected = _ALL_CASES
+    else:
+        selected = select_cases(_ALL_CASES, spec=spec_text, seed=seed)
+    return iter_scenarios_for_shard(selected)
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
@@ -378,7 +400,7 @@ def _assert_live_action_planning_once(case: ScenarioCase) -> None:
     from core.runtime.llm import agent_llm_client
 
     llm = agent_llm_client.get_agent_llm()
-    from interactive_shell.harness.turn_context import TurnContext
+    from agent.context import TurnContext
 
     result = Agent(
         llm=llm,
@@ -433,7 +455,7 @@ def test_live_action_planning(
     here we only validate the planner's action list, with majority voting when a
     fixture sets ``runs > 1`` (same flake tolerance as the execution oracle).
     """
-    runs = max(1, live_planning_case.answer.runs)
+    runs = effective_runs(live_planning_case.answer.runs)
     failures: list[str] = []
     passed_count = 0
 
@@ -470,7 +492,7 @@ def test_live_turn_execution_oracle(
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
     _skip_if_live_integrations_unavailable(live_oracle_case)
-    runs = max(1, live_oracle_case.answer.runs)
+    runs = effective_runs(live_oracle_case.answer.runs)
     run_results: list[OracleRunResult] = []
     passed_count = 0
 

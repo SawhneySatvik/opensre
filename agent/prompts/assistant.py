@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.llm_context.prompt_rules import (
+from agent.prompts.rules import (
     CLI_ASSISTANT_MARKDOWN_RULE,
     INTERACTIVE_SHELL_TERMINOLOGY_RULE,
 )
-from interactive_shell.runtime import ReplSession
 
 _TERMINOLOGY_RULE = INTERACTIVE_SHELL_TERMINOLOGY_RULE
 _MARKDOWN_RULE = CLI_ASSISTANT_MARKDOWN_RULE
@@ -60,12 +59,16 @@ _SETUP_GUIDANCE_RULE = (
 )
 
 
-def _build_environment_block(session: ReplSession) -> str:
-    """Render configured-integration facts so the assistant can answer directly."""
-    if not session.configured_integrations_known:
+def build_environment_block(*, integrations: tuple[str, ...], known: bool) -> str:
+    """Render configured-integration facts so the assistant can answer directly.
+
+    Decoupled from any session type: the caller (a ``PromptContextProvider``
+    adapter) supplies the integration names and whether they are known.
+    """
+    if not known:
         return ""
-    if session.configured_integrations:
-        connected = ", ".join(session.configured_integrations)
+    if integrations:
+        connected = ", ".join(integrations)
         body = (
             f"Configured integrations in this session: {connected}. "
             "Any integration not in that list is NOT configured. When the user asks "
@@ -174,7 +177,7 @@ __all__ = [
     "_SOURCE_SCOPED_INVESTIGATION_RULE",
     "_SETUP_GUIDANCE_RULE",
     "_TERMINOLOGY_RULE",
-    "_build_environment_block",
     "_build_observation_block",
     "_build_system_prompt",
+    "build_environment_block",
 ]

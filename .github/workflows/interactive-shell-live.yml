@@ -35,6 +35,10 @@ on:
         description: "Comma-separated shard indexes to run (0-7)"
         required: false
         default: "0,1,2,3,4,5,6,7"
+      turn_select:
+        description: "Scenario selection: 'all' for the full suite, or a '<mode>:<n>' subset (blank = default representative downsample)"
+        required: false
+        default: ""
 
 permissions:
   contents: read
@@ -100,6 +104,12 @@ jobs:
       OPENSRE_DISABLE_KEYRING: "1"
       TURN_SHARD_TOTAL: "8"
       TURN_SHARD_INDEX: ${{ matrix.shard_index }}
+      # CI runs the default representative downsample (blank) unless a manual
+      # dispatch overrides it (e.g. 'all' for the full suite).
+      TURN_SELECT: ${{ github.event.inputs.turn_select }}
+      # Keep full majority voting in CI (honour each fixture's `runs`); local
+      # runs cap to a single run by default. 0 = uncapped.
+      TURN_MAX_RUNS: "0"
       PYTHONUTF8: "1"
       # @live gather scenarios (316, 333–335, 337) require these secrets in CI.
       # Missing values fail the job in preflight and via skip_or_fail in tests.

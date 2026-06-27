@@ -5,16 +5,20 @@ alwaysApply: true
 
 # Live Turn Test Policy
 
-- When validating interactive-shell turn scenarios, run the live suite by default.
-- Do not exclude live turn tests with deselection filters like `-k "not live_llm"`.
-- Never "fix" turn scenario failures by forcing deterministic command paths, bypassing live
-  planner decisions, or disabling fail-closed/live checks.
-- Scenario failures should be resolved by correcting planner/tool behavior or by intentional
-  fixture updates approved as behavior changes.
-- Prefer full live turn commands such as:
+- When validating interactive-shell turn scenarios, run them LIVE. Never exclude live turn
+  tests with deselection filters like `-k "not live_llm"`, and never "fix" a scenario failure
+  by forcing deterministic command paths, bypassing live planner decisions, or disabling
+  fail-closed/live checks. Failures are resolved by correcting planner/tool behavior or by an
+  intentional, approved fixture update.
+- The live suite is DOWNSAMPLED by default everywhere (local and CI): a small, deterministic,
+  behaviour-class-stratified representative subset (`select_representative`), then sharded via
+  `TURN_SHARD_TOTAL`/`TURN_SHARD_INDEX`. This downsampled gate — not the full suite — is the
+  required validation pass. The default command runs the gate live:
   - `uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py`
-- For fast local iteration you MAY narrow the suite with the opt-in `--turn-select`
-  flag / `TURN_SELECT` env var (`complex:N` for the most complex scenarios, `sample:N`
-  for a random sample). This still runs live — it is not a `-k "not live_llm"`-style
-  bypass. The full suite remains the default and the required validation pass; never
-  set the selection in CI, and never use it to skip a scenario that is failing.
+- `TURN_MAX_RUNS` caps each scenario's majority-vote `runs`. It defaults to `1` (a single LLM
+  call per test) for fast local runs; CI sets `TURN_MAX_RUNS=0` (uncapped) to keep full
+  majority voting. `0`/`all`/`off` mean uncapped.
+- Run a different subset or the full suite via the `--turn-select` flag / `TURN_SELECT` env:
+  `all` (FULL suite), `complex:N` (most complex), or `sample:N` (random). This still runs live
+  — it is not a `-k "not live_llm"`-style bypass. Use `TURN_SELECT=all` when you need complete
+  coverage; never use a narrower selection to skip a scenario that is failing.

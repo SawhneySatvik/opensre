@@ -4,11 +4,9 @@ from __future__ import annotations
 
 import re
 
-from interactive_shell.harness.llm_context.system_prompt import (
-    _SYSTEM_PROMPT_BASE,
-)
-from interactive_shell.harness.llm_context.conversation_history import format_recent_conversation
-from interactive_shell.harness.turn_context import TurnContext
+from agent.context import TurnContext
+from agent.conversation_history import format_recent_conversation
+from agent.prompts.system_prompt import _SYSTEM_PROMPT_BASE
 
 _MAX_TEXT_LEN = 512
 _USER_TEMPLATE = "USER MESSAGE (literal): <<<{text}>>>"

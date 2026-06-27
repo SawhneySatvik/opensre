@@ -42,10 +42,12 @@ _TURN_TEST_DEFAULT_ENV = {
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:
-    """Register opt-in selection flags for the live turn scenario suite.
+    """Register selection flags for the live turn scenario suite.
 
-    These shrink the suite for fast LOCAL iteration only. Default is the full
-    sharded suite; CI must not set them (see CI.md section 6).
+    The suite is downsampled by default (everywhere, including CI) to a small
+    representative subset, then sharded. Use these to change the subset or run
+    the full suite on demand. ``TURN_MAX_RUNS`` separately caps each scenario's
+    majority-vote ``runs`` (default 1; set ``0``/``all`` to honour fixtures).
     """
     group = parser.getgroup("turn scenarios")
     group.addoption(
@@ -53,11 +55,11 @@ def pytest_addoption(parser: pytest.Parser) -> None:
         action="store",
         default=None,
         help=(
-            "Run a subset of live turn scenarios for fast local iteration. "
-            "Format '<mode>:<n>' where mode is 'complex' (most complex) or "
-            "'sample' (random), and n is a count, a fraction, or a percentage "
-            "(e.g. 'complex:5', 'sample:0.1', 'sample:10' followed by a percent "
-            "sign). Defaults to the full sharded suite; also settable via the "
+            "Choose which live turn scenarios run. Use 'all' to run the FULL "
+            "suite (the default is a small representative downsample). Otherwise "
+            "'<mode>:<n>' where mode is 'complex' (most complex) or 'sample' "
+            "(random), and n is a count, a fraction, or a percentage (e.g. "
+            "'complex:5', 'sample:0.1', 'sample:10%'). Also settable via the "
             "TURN_SELECT env var."
         ),
     )

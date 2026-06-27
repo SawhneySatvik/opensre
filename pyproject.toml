@@ -137,6 +137,7 @@ azure_sql = [
 
 [tool.setuptools.packages.find]
 include = [
+  "agent*",
   "cli*",
   "config*",
   "core*",
@@ -158,6 +159,7 @@ data_file = ".pytest_cache/.coverage"
 
 [tool.vulture]
 paths = [
+  "agent",
   "cli",
   "core",
   "infra/deployment",

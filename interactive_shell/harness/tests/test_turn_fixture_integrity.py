@@ -10,13 +10,18 @@ import pytest
 import yaml
 
 from interactive_shell.harness.tests.scenario_loader import (
+    DEFAULT_GATE_PER_CLASS,
     INTENT_TO_BEHAVIOR_CLASS,
     SCENARIOS_DIR,
     SelectionSpec,
+    effective_runs,
+    is_full_selection,
     load_all_scenarios,
+    max_runs_cap,
     parse_selection_spec,
     scenario_complexity,
     select_cases,
+    select_representative,
     validate_action_shape,
 )
 from interactive_shell.tools.tool_registry import (
@@ -293,6 +298,70 @@ def test_select_cases_percentage_rounds_up() -> None:
     cases = load_all_scenarios()
     # 5% of 61 scenarios rounds up to 4.
     assert len(select_cases(cases, spec="complex:5%")) == 4
+
+
+def test_select_representative_covers_every_behavior_class() -> None:
+    cases = load_all_scenarios()
+    selected = select_representative(cases)
+    by_class: dict[str, int] = {}
+    for case in selected:
+        by_class[case.scenario.behavior_class] = by_class.get(case.scenario.behavior_class, 0) + 1
+    all_classes = {case.scenario.behavior_class for case in cases}
+    # Every class is represented, capped at DEFAULT_GATE_PER_CLASS per class.
+    assert set(by_class) == all_classes
+    assert all(count <= DEFAULT_GATE_PER_CLASS for count in by_class.values())
+    # The gate is a strict, much smaller subset of the full suite.
+    assert 0 < len(selected) < len(cases)
+
+
+def test_select_representative_is_deterministic_and_order_preserving() -> None:
+    cases = load_all_scenarios()
+    first = select_representative(cases)
+    second = select_representative(cases)
+    assert [c.scenario.id for c in first] == [c.scenario.id for c in second]
+    order = {c.scenario.id: i for i, c in enumerate(cases)}
+    positions = [order[c.scenario.id] for c in first]
+    assert positions == sorted(positions)
+
+
+def test_select_representative_picks_most_complex_within_class() -> None:
+    cases = load_all_scenarios()
+    selected_ids = {c.scenario.id for c in select_representative(cases, per_class=1)}
+    by_class: dict[str, list] = {}
+    for case in cases:
+        by_class.setdefault(case.scenario.behavior_class, []).append(case)
+    for behavior_class, class_cases in by_class.items():
+        chosen = [c for c in class_cases if c.scenario.id in selected_ids]
+        assert len(chosen) == 1, behavior_class
+        top = max(class_cases, key=lambda c: (scenario_complexity(c), c.scenario.id))
+        assert chosen[0].scenario.id == top.scenario.id
+
+
+def test_is_full_selection_recognizes_full_aliases() -> None:
+    for spec in ("all", "ALL", "full", "everything", "*", "  all  "):
+        assert is_full_selection(spec)
+    for spec in (None, "", "complex:5", "sample:3"):
+        assert not is_full_selection(spec)
+
+
+def test_max_runs_cap_defaults_to_one_and_honors_uncapped_tokens() -> None:
+    assert max_runs_cap(None) == 1
+    assert max_runs_cap("3") == 3
+    for uncapped in ("0", "all", "off", "none", ""):
+        assert max_runs_cap(uncapped) is None
+
+
+def test_effective_runs_caps_via_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("TURN_MAX_RUNS", raising=False)
+    # Default cap of 1 collapses majority voting to a single run.
+    assert effective_runs(5) == 1
+    assert effective_runs(1) == 1
+    monkeypatch.setenv("TURN_MAX_RUNS", "0")
+    # Uncapped honours the fixture runs.
+    assert effective_runs(5) == 5
+    monkeypatch.setenv("TURN_MAX_RUNS", "3")
+    assert effective_runs(5) == 3
+    assert effective_runs(2) == 2
 
 
 def test_scenario_complexity_ranks_compound_above_chat_handoff() -> None:

@@ -787,6 +787,87 @@ _LIVE_INTEGRATION_SENTINEL = "@live"
 _SELECT_MODES = frozenset({"sample", "complex"})
 _DEFAULT_SELECT_FRACTION = 0.05
 
+# Spec values that explicitly request the FULL suite (opt out of the default
+# representative downsample). Accepted by ``--turn-select`` / ``TURN_SELECT``.
+FULL_SELECT_SENTINELS = frozenset({"all", "full", "everything", "*"})
+
+# Default gate: the live suite is downsampled everywhere (local AND CI) to a
+# small, stratified, representative subset so a run stays fast and cheap. Pick
+# this many of the most complex scenarios per behaviour class; classes with
+# fewer scenarios contribute all of theirs. Override with ``TURN_SELECT=all``
+# to run the complete suite, or ``--turn-select`` for a different subset.
+DEFAULT_GATE_PER_CLASS = 2
+
+# Env var capping the majority-vote ``runs`` of each scenario. Defaults to 1 so
+# a downsampled run does a single LLM call per test; set ``TURN_MAX_RUNS=0`` (or
+# ``all``/``off``) to honour each fixture's ``runs`` (CI keeps full majority
+# voting this way).
+_TURN_MAX_RUNS_ENV = "TURN_MAX_RUNS"
+_DEFAULT_MAX_RUNS_CAP = 1
+_UNCAPPED_RUNS_TOKENS = frozenset({"", "0", "all", "none", "off", "uncapped"})
+
+
+def is_full_selection(spec: str | None) -> bool:
+    """True when ``spec`` explicitly requests the full (non-downsampled) suite."""
+    return spec is not None and spec.strip().lower() in FULL_SELECT_SENTINELS
+
+
+def select_representative(
+    cases: list[ScenarioCase],
+    *,
+    per_class: int = DEFAULT_GATE_PER_CLASS,
+) -> list[ScenarioCase]:
+    """Return a small, deterministic, behaviour-class-stratified subset.
+
+    For each behaviour class, keep the ``per_class`` most complex scenarios
+    (ties broken by id), so every intent class stays represented while the total
+    stays tiny. Selected cases keep their original ordering for stable test ids.
+    This is the default gate applied when no explicit selection is requested.
+    """
+    if per_class < 1:
+        msg = "per_class must be >= 1"
+        raise ValueError(msg)
+    if not cases:
+        return []
+    by_class: dict[str, list[ScenarioCase]] = {}
+    for case in cases:
+        by_class.setdefault(case.scenario.behavior_class, []).append(case)
+    chosen_ids: set[str] = set()
+    for behavior_class in sorted(by_class):
+        ranked = sorted(
+            by_class[behavior_class],
+            key=lambda case: (scenario_complexity(case), case.scenario.id),
+        )
+        for case in ranked[max(0, len(ranked) - per_class) :]:
+            chosen_ids.add(case.scenario.id)
+    return [case for case in cases if case.scenario.id in chosen_ids]
+
+
+def max_runs_cap(value: str | None = None) -> int | None:
+    """Resolve the majority-vote ``runs`` cap from ``TURN_MAX_RUNS``.
+
+    Returns ``None`` when uncapped (honour each fixture's ``runs``) and a
+    positive int otherwise. Defaults to ``_DEFAULT_MAX_RUNS_CAP`` (1) when the
+    env var is unset, so downsampled runs do a single LLM call per test.
+    """
+    raw = value if value is not None else os.getenv(_TURN_MAX_RUNS_ENV)
+    if raw is None:
+        return _DEFAULT_MAX_RUNS_CAP
+    text = raw.strip().lower()
+    if text in _UNCAPPED_RUNS_TOKENS:
+        return None
+    parsed = int(text)
+    if parsed < 1:
+        return None
+    return parsed
+
+
+def effective_runs(answer_runs: int) -> int:
+    """Apply the ``TURN_MAX_RUNS`` cap to a fixture's ``runs`` value."""
+    base = max(1, answer_runs)
+    cap = max_runs_cap()
+    return base if cap is None else min(base, cap)
+
 
 def scenario_complexity(case: ScenarioCase) -> float:
     """Heuristic difficulty/cost score for ranking live turn scenarios.
@@ -913,13 +994,19 @@ __all__ = [
     "ScenarioInput",
     "ScenarioSession",
     "SelectionSpec",
+    "DEFAULT_GATE_PER_CLASS",
+    "FULL_SELECT_SENTINELS",
+    "effective_runs",
+    "is_full_selection",
     "load_all_scenarios",
     "load_scenario_case",
     "load_scenarios_for_class",
     "iter_scenarios_for_shard",
+    "max_runs_cap",
     "parse_selection_spec",
     "read_shard_config",
     "scenario_complexity",
     "select_cases",
+    "select_representative",
     "validate_action_shape",
 ]

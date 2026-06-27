@@ -18,21 +18,28 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness import agent as cli_agent
-from interactive_shell.harness.agent import (
-    ActionPlanAction,
-    _parse_action_plan,
-    answer_cli_agent,
-)
-from interactive_shell.harness.llm_context.assistant_system_prompt import (
+from agent.action_plan import ActionPlanAction
+from agent.action_plan import parse_action_plan as _parse_action_plan
+from agent.prompts.assistant import (
     _ACTION_RULE,
     _MARKDOWN_RULE,
     _TERMINOLOGY_RULE,
-    _build_environment_block,
     _build_observation_block,
     _build_system_prompt,
+    build_environment_block,
 )
+from interactive_shell.harness import adapters as shell_adapters
+from interactive_shell.harness import agent as cli_agent
+from interactive_shell.harness.agent import answer_cli_agent
 from interactive_shell.session import ReplSession
+
+
+def _build_environment_block(session: ReplSession) -> str:
+    """Adapter for the relocated, signature-changed environment-block builder."""
+    return build_environment_block(
+        integrations=tuple(session.configured_integrations),
+        known=session.configured_integrations_known,
+    )
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -81,6 +88,26 @@ def _patch_llm(monkeypatch: Any, content: Any) -> _FakeLLMClient:
 
     monkeypatch.setattr(llm_module, "get_llm_for_reasoning", lambda: client)
     return client
+
+
+def _patch_grounding(
+    monkeypatch: Any,
+    *,
+    cli_reference: str = "(ref)",
+    agents_md: str = "",
+    investigation_flow: str = "",
+) -> None:
+    """Pin the shell grounding caches the prompt provider reads from.
+
+    The conversational assistant now sources grounding text through
+    ``ShellPromptContextProvider`` (over ``session.grounding`` + the
+    investigation-flow reference), so tests patch the provider methods rather
+    than module-level builders.
+    """
+    provider = shell_adapters.ShellPromptContextProvider
+    monkeypatch.setattr(provider, "cli_reference", lambda _self: cli_reference)
+    monkeypatch.setattr(provider, "agents_md", lambda _self: agents_md)
+    monkeypatch.setattr(provider, "investigation_flow", lambda _self: investigation_flow)
 
 
 class TestSystemPromptTerminology:
@@ -167,12 +194,9 @@ class TestSystemPromptInvestigationFlowGrounding:
 
     def test_answer_cli_agent_injects_investigation_flow_reference(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "Yes, I can describe the pipeline.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
-        monkeypatch.setattr(
-            cli_agent,
-            "build_investigation_flow_reference_text",
-            lambda: "resolve → extract → investigate → deliver",
+        _patch_grounding(
+            monkeypatch,
+            investigation_flow="resolve → extract → investigate → deliver",
         )
 
         console, _ = _capture()
@@ -210,9 +234,7 @@ class TestEnvironmentIntegrationGrounding:
 
     def test_answer_cli_agent_injects_configured_integrations(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "No, Sentry is not configured.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
-        monkeypatch.setattr(cli_agent, "build_investigation_flow_reference_text", lambda: "")
+        _patch_grounding(monkeypatch)
 
         session = ReplSession()
         session.configured_integrations_known = True
@@ -242,9 +264,7 @@ class TestObservationSummaryBlock:
 
     def test_answer_cli_agent_injects_observation(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "No — Sentry is not configured.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
-        monkeypatch.setattr(cli_agent, "build_investigation_flow_reference_text", lambda: "")
+        _patch_grounding(monkeypatch)
 
         session = ReplSession()
         console, _ = _capture()

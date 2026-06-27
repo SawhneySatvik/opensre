@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.llm_context import (
+from agent.context import TurnContext
+from agent.conversation_history import NO_HISTORY_PLACEHOLDER
+from agent.prompts import (
     _SYSTEM_PROMPT_BASE,
     build_action_system_prompt,
     connected_integrations_block,
     recent_conversation_block,
 )
-from interactive_shell.harness.llm_context.conversation_history import NO_HISTORY_PLACEHOLDER
-from interactive_shell.harness.turn_context import TurnContext
 
 
 def _ctx(
