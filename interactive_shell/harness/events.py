@@ -1,6 +1,6 @@
 """Shell-agent event contracts.
 
-This module is intentionally UI-free. The shell turn agent emits these events;
+This module is intentionally UI-free. The shell agent emits these events;
 runtime presentation code decides how to render them.
 """
 
@@ -10,12 +10,19 @@ from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from typing import Any, Literal
 
-AgentEventType = Literal["turn_start", "turn_interrupted", "turn_error", "turn_end"]
+AgentEventType = Literal[
+    "agent_start",
+    "agent_stop",
+    "prompt_start",
+    "prompt_interrupted",
+    "prompt_error",
+    "prompt_end",
+]
 
 
 @dataclass(frozen=True)
 class AgentEvent:
-    """Lifecycle event emitted during one submitted shell turn."""
+    """Lifecycle event emitted by the shell agent."""
 
     type: AgentEventType
     text: str | None = None

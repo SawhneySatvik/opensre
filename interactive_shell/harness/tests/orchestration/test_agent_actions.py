@@ -22,7 +22,7 @@ import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from context.session import ReplSession
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.agent import ShellTurnAgent
+from interactive_shell.harness.agent_loop import run_agent_prompt
 from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
     default_target_surface,
@@ -1280,16 +1280,15 @@ def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) ->
 
     session = ReplSession()
     console, _ = _capture()
-    # Analytics now fire from ShellTurnAccounting inside ShellTurnAgent,
+    # Analytics now fire from ShellTurnAccounting inside run_agent_prompt,
     # not from run_tool_calling_turn directly. Drive the full turn with a no-op
     # answer agent so no real LLM is invoked.
-    result = ShellTurnAgent(
-        session,
-        response_generator=lambda *_a, **_k: None,
-    ).run_turn(
+    result = run_agent_prompt(
         "run `pwd`",
-        console=console,
+        session,
+        console,
         recorder=None,
+        response_generator=lambda *_a, **_k: None,
     )
 
     action_result = result.action_result
@@ -1359,14 +1358,13 @@ def test_execute_cli_actions_executes_matched_clause_ignoring_unhandled(
 
     session = ReplSession()
     console, _ = _capture()
-    # Analytics now fire from ShellTurnAccounting inside ShellTurnAgent.
-    result = ShellTurnAgent(
-        session,
-        response_generator=lambda *_a, **_k: None,
-    ).run_turn(
+    # Analytics now fire from ShellTurnAccounting inside run_agent_prompt.
+    result = run_agent_prompt(
         "check health",
-        console=console,
+        session,
+        console,
         recorder=None,
+        response_generator=lambda *_a, **_k: None,
     )
 
     # The unhandled flag no longer denies the turn: the matched /health runs.

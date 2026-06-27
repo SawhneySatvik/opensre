@@ -1,97 +1,39 @@
-"""Stateful shell agent for interactive-shell turns.
+"""Durable shell agent for interactive-shell prompts.
 
-Decides, from the tool-calling action result and any left-over discovery
-observation, which of three paths a turn takes (summarize an observation,
-finish without the LLM, or gather evidence and answer), then performs the
-chosen path's effects. The path choice is the pure :func:`_route_turn`; this
-module is the shell-owned agent boundary around it.
+``ShellAgent`` is the shell-facing agent object. It owns the live session,
+lifecycle state, active-prompt guard, event subscribers, and injected runtime
+primitives. Per-prompt action/answer mechanics live in ``agent_loop.py``.
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from contextlib import suppress
-from typing import Literal, assert_never
 
 from rich.console import Console
 
-from config.llm_reasoning_effort import apply_reasoning_effort
-from context.agent_context import AgentContext
 from context.session import ReplSession
 from context.state import MutableAgentState
-from interactive_shell.harness.events import AgentEvent, AgentEventSink
-from interactive_shell.harness.response import generate_response
-from interactive_shell.harness.tool_calling import run_tool_calling_turn
-from interactive_shell.runtime.core.confirmation import DispatchCancelled
-from interactive_shell.runtime.core.turn_accounting import (
-    ShellTurnAccounting,
-    ShellTurnResult,
-    ToolCallingTurnResult,
+from interactive_shell.harness.agent_loop import (
+    GatherEvidence,
+    ResponseGenerator,
+    RunToolCallingTurn,
+    run_agent_prompt,
 )
-from interactive_shell.tools.tool_gathering import gather_tool_evidence
-from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
-
-RunToolCallingTurn = Callable[..., ToolCallingTurnResult]
-GatherEvidence = Callable[..., str | None]
-ResponseGenerator = Callable[..., LlmRunInfo | None]
+from interactive_shell.harness.events import AgentEvent, AgentEventSink
+from interactive_shell.runtime.core.confirmation import DispatchCancelled
+from interactive_shell.runtime.core.turn_accounting import ShellTurnResult
+from interactive_shell.utils.telemetry import PromptRecorder
 
 
-def _response_text(run: LlmRunInfo | None) -> str:
-    return run.response_text if run is not None and run.response_text else ""
+class ShellAgent:
+    """Stateful owner of the interactive-shell agent lifecycle.
 
-
-def _route_turn(
-    action_result: ToolCallingTurnResult, observation: str | None
-) -> Literal["summarize_observation", "handled_without_llm", "gather_and_answer"]:
-    """Decide the turn path from the action result and any left-over observation."""
-    if (
-        action_result.handled
-        and observation is not None
-        and action_result.executed_success_count > 0
-    ):
-        return "summarize_observation"
-    if action_result.handled:
-        return "handled_without_llm"
-    return "gather_and_answer"
-
-
-def _gather_and_answer(
-    *,
-    text: str,
-    session: ReplSession,
-    console: Console,
-    gather_evidence: GatherEvidence,
-    response_generator: ResponseGenerator,
-    confirm_fn: Callable[[str], str] | None,
-    is_tty: bool | None,
-    agent_ctx: AgentContext,
-) -> LlmRunInfo | None:
-    gathered = gather_evidence(text, session, console, is_tty=is_tty)
-
-    # When evidence was gathered, mark it off-screen so the prompt builder
-    # includes it. When nothing was gathered, omit the flag entirely so the
-    # call shape matches the plain conversational (no-observation) path.
-    on_screen: dict[str, bool] = {"tool_observation_on_screen": False} if gathered else {}
-
-    return response_generator(
-        text,
-        session,
-        console,
-        confirm_fn=confirm_fn,
-        is_tty=is_tty,
-        tool_observation=gathered or None,
-        agent_ctx=agent_ctx,
-        **on_screen,
-    )
-
-
-class ShellTurnAgent:
-    """Stateful owner of the interactive-shell turn lifecycle.
-
-    The shell agent owns shell/session state, turn snapshots, route selection,
-    observation handling, accounting, and lifecycle events. It delegates the
-    inner tool-calling loop to ``run_tool_calling_turn``, which may use
-    ``core.runtime.agent.Agent`` as a disposable primitive.
+    The shell agent owns shell/session state, event subscribers, lifecycle
+    state, and active prompt execution. It delegates one prompt's action/answer
+    loop to ``run_agent_prompt``. That loop may use ``core.runtime.agent.Agent``
+    through ``tool_calling.py`` as a disposable tool-calling primitive.
     """
 
     def __init__(
@@ -104,10 +46,12 @@ class ShellTurnAgent:
         event_sink: AgentEventSink | None = None,
     ) -> None:
         self.session = session
-        self._execute_actions = execute_actions or run_tool_calling_turn
-        self._gather_evidence = gather_evidence or gather_tool_evidence
-        self._response_generator = response_generator or generate_response
+        self._execute_actions = execute_actions
+        self._gather_evidence = gather_evidence
+        self._response_generator = response_generator
         self._event_sinks: list[AgentEventSink] = []
+        self._started = False
+        self._active_prompt: asyncio.Task[ShellTurnResult] | None = None
         if event_sink is not None:
             self.subscribe(event_sink)
 
@@ -115,6 +59,16 @@ class ShellTurnAgent:
     def state(self) -> MutableAgentState:
         """Return the shell-owned conversational state for this session."""
         return self.session.agent
+
+    @property
+    def started(self) -> bool:
+        """Whether the shell agent has been started and not yet stopped."""
+        return self._started
+
+    @property
+    def active(self) -> bool:
+        """Whether a prompt is currently running."""
+        return self._active_prompt is not None and not self._active_prompt.done()
 
     def subscribe(self, sink: AgentEventSink) -> Callable[[], None]:
         """Subscribe to lifecycle events and return an unsubscribe callback."""
@@ -126,7 +80,14 @@ class ShellTurnAgent:
 
         return _unsubscribe
 
-    def run_turn(
+    def start(self) -> None:
+        """Start the shell agent lifecycle."""
+        if self._started:
+            return
+        self._started = True
+        self._emit(AgentEvent(type="agent_start"))
+
+    async def prompt(
         self,
         text: str,
         *,
@@ -135,26 +96,51 @@ class ShellTurnAgent:
         confirm_fn: Callable[[str], str] | None = None,
         is_tty: bool | None = None,
     ) -> ShellTurnResult:
-        """Run one interactive-shell turn through the shell agent lifecycle."""
-        self._emit(AgentEvent(type="turn_start", text=text))
+        """Run one submitted user prompt through the shell agent."""
+        if not self._started:
+            raise RuntimeError("ShellAgent.start() must be called before prompt().")
+        if self.active:
+            raise RuntimeError("ShellAgent is already processing a prompt.")
+
+        task = asyncio.current_task()
+        if task is None:
+            raise RuntimeError("ShellAgent.prompt() requires a running asyncio task.")
+        self._active_prompt = task  # type: ignore[assignment]
+
         try:
-            return self._run_turn_body(
+            return await asyncio.to_thread(
+                self._run_prompt_lifecycle,
                 text,
                 console=console,
                 recorder=recorder,
                 confirm_fn=confirm_fn,
                 is_tty=is_tty,
             )
-        except DispatchCancelled:
-            self._emit(AgentEvent(type="turn_interrupted"))
-            raise
-        except Exception as exc:
-            self._emit(AgentEvent(type="turn_error", error=exc))
-            raise
         finally:
-            self._emit(AgentEvent(type="turn_end"))
+            self._active_prompt = None
 
-    def _run_turn_body(
+    def abort(self) -> None:
+        """Cancel the active prompt task, if one is running."""
+        if self._active_prompt is not None and not self._active_prompt.done():
+            self._active_prompt.cancel()
+
+    async def wait_idle(self) -> None:
+        """Wait until the active prompt task finishes."""
+        task = self._active_prompt
+        if task is None or task is asyncio.current_task():
+            return
+        with suppress(asyncio.CancelledError):
+            await task
+
+    async def stop(self) -> None:
+        """Stop the shell agent lifecycle after any active prompt settles."""
+        await self.wait_idle()
+        if not self._started:
+            return
+        self._started = False
+        self._emit(AgentEvent(type="agent_stop"))
+
+    def _run_prompt_lifecycle(
         self,
         text: str,
         *,
@@ -163,80 +149,28 @@ class ShellTurnAgent:
         confirm_fn: Callable[[str], str] | None,
         is_tty: bool | None,
     ) -> ShellTurnResult:
-        """Perform the chosen turn path after lifecycle setup."""
-        # Snapshot session state before any turn mutations. Both the action
-        # agent and the conversational assistant read from this frozen context
-        # so prompts reflect a consistent turn-start view rather than live
-        # session state.
-        agent_ctx = AgentContext.from_session(text, self.session)
-        accounting = ShellTurnAccounting(session=self.session, text=text, recorder=recorder)
-
-        # Clear any observation left by a prior turn so only this turn's
-        # discovery output can trigger a summary pass.
-        self.session.agent.reset_observation()
-
-        action_result = self._execute_actions(
-            text,
-            self.session,
-            console,
-            confirm_fn=confirm_fn,
-            is_tty=is_tty,
-            agent_ctx=agent_ctx,
-        )
-        accounting.record_action_result(action_result)
-
-        observation = self.session.agent.last_observation
-
-        route = _route_turn(action_result, observation)
-        match route:
-            case "summarize_observation":
-                with apply_reasoning_effort(agent_ctx.reasoning_effort):
-                    run = self._response_generator(
-                        text,
-                        self.session,
-                        console,
-                        confirm_fn=confirm_fn,
-                        is_tty=is_tty,
-                        tool_observation=observation,
-                        agent_ctx=agent_ctx,
-                    )
-                result = ShellTurnResult(
-                    final_intent="cli_agent_summarized",
-                    action_result=action_result,
-                    assistant_response_text=_response_text(run),
-                    llm_run=run,
-                )
-
-            case "handled_without_llm":
-                result = ShellTurnResult(
-                    final_intent="cli_agent_handled",
-                    action_result=action_result,
-                    assistant_response_text=action_result.response_text,
-                )
-
-            case "gather_and_answer":
-                with apply_reasoning_effort(agent_ctx.reasoning_effort):
-                    run = _gather_and_answer(
-                        text=text,
-                        session=self.session,
-                        console=console,
-                        gather_evidence=self._gather_evidence,
-                        response_generator=self._response_generator,
-                        confirm_fn=confirm_fn,
-                        is_tty=is_tty,
-                        agent_ctx=agent_ctx,
-                    )
-                result = ShellTurnResult(
-                    final_intent="cli_agent_fallback",
-                    action_result=action_result,
-                    assistant_response_text=_response_text(run),
-                    llm_run=run,
-                )
-
-            case _:
-                assert_never(route)
-
-        return accounting.finalize(result)
+        """Run the sync prompt loop and emit lifecycle events."""
+        self._emit(AgentEvent(type="prompt_start", text=text))
+        try:
+            return run_agent_prompt(
+                text,
+                session=self.session,
+                console=console,
+                recorder=recorder,
+                confirm_fn=confirm_fn,
+                is_tty=is_tty,
+                execute_actions=self._execute_actions,
+                gather_evidence=self._gather_evidence,
+                response_generator=self._response_generator,
+            )
+        except DispatchCancelled:
+            self._emit(AgentEvent(type="prompt_interrupted"))
+            raise
+        except Exception as exc:
+            self._emit(AgentEvent(type="prompt_error", error=exc))
+            raise
+        finally:
+            self._emit(AgentEvent(type="prompt_end"))
 
     def _emit(self, event: AgentEvent) -> None:
         for sink in tuple(self._event_sinks):
@@ -244,8 +178,5 @@ class ShellTurnAgent:
 
 
 __all__ = [
-    "GatherEvidence",
-    "ResponseGenerator",
-    "RunToolCallingTurn",
-    "ShellTurnAgent",
+    "ShellAgent",
 ]

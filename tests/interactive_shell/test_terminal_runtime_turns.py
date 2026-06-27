@@ -9,7 +9,7 @@ from rich.console import Console
 
 from context.session import ReplSession
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.agent import ShellTurnAgent
+from interactive_shell.harness.agent_loop import run_agent_prompt
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
@@ -155,7 +155,7 @@ def test_turn_needs_exclusive_stdin_for_config(
     )
 
 
-def test_shell_turn_agent_nitro_prompt_uses_cli_agent_actions(
+def test_run_agent_prompt_nitro_prompt_uses_cli_agent_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     nitro_prompt = (
@@ -190,23 +190,22 @@ def test_shell_turn_agent_nitro_prompt_uses_cli_agent_actions(
 
     session = ReplSession()
     console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
-    ShellTurnAgent(
-        session,
-        execute_actions=_fake_execute_cli_actions,
-        response_generator=_fake_generate_response,
-    ).run_turn(
+    run_agent_prompt(
         nitro_prompt,
-        console=console,
+        session,
+        console,
         recorder=None,
         confirm_fn=None,
         is_tty=None,
+        execute_actions=_fake_execute_cli_actions,
+        response_generator=_fake_generate_response,
     )
 
     assert action_calls == [nitro_prompt]
     assert llm_calls == []
 
 
-def test_shell_turn_agent_nitro_prompt_executes_remote_then_investigation(
+def test_run_agent_prompt_nitro_prompt_executes_remote_then_investigation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     nitro_prompt = (
@@ -262,9 +261,10 @@ def test_shell_turn_agent_nitro_prompt_executes_remote_then_investigation(
 
     session = ReplSession()
     console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
-    ShellTurnAgent(session).run_turn(
+    run_agent_prompt(
         nitro_prompt,
-        console=console,
+        session,
+        console,
         recorder=None,
         confirm_fn=None,
         is_tty=None,

@@ -20,7 +20,7 @@ from rich.console import Console
 LIVE_INTEGRATION_SENTINEL = "@live"
 
 from context.session import ReplSession
-from interactive_shell.harness.agent import ShellTurnAgent
+from interactive_shell.harness.agent_loop import run_agent_prompt
 from interactive_shell.harness.tests._oracle_normalize import (
     normalize_history_entry,
     normalize_response_text,
@@ -409,9 +409,10 @@ def run_oracle_once(case: ScenarioCase, monkeypatch: pytest.MonkeyPatch) -> Orac
     session_token = bind_cli_session_id(session.session_id)
     try:
         recorder = PromptRecorder.start(session=session, text=prompt, turn_kind=_AGENT_TURN_KIND)
-        ShellTurnAgent(session).run_turn(
+        run_agent_prompt(
             prompt,
-            console=console,
+            session,
+            console,
             recorder=recorder,
             confirm_fn=lambda _prompt: "y",
             is_tty=None,

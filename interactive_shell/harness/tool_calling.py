@@ -14,7 +14,7 @@ from __future__ import annotations
 import json
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from typing import Any
 
 from rich.console import Console
@@ -161,9 +161,9 @@ def run_tool_calling_turn(
 ) -> ToolCallingTurnResult:
     """Run one shell tool-calling turn through the shared agent harness.
 
-    ``agent_ctx`` is the immutable per-turn snapshot assembled at turn start
-    in ``ShellTurnAgent``. When present it is used to build the
-    action-agent system prompt so the prompt reflects turn-start state rather
+    ``agent_ctx`` is the immutable per-prompt snapshot assembled at prompt start
+    in ``run_agent_prompt``. When present it is used to build the
+    action-agent system prompt so the prompt reflects prompt-start state rather
     than the live (potentially mid-mutation) session.
     """
     history_start = len(session.history)
@@ -198,20 +198,8 @@ def run_tool_calling_turn(
         user_message = build_action_user_message(message)
         effective_ctx = agent_ctx or AgentContext.from_session(message, session)
         system_prompt = build_action_system_prompt(effective_ctx)
-    action_ctx = replace(
-        effective_ctx
-        if bang_command is None
-        else agent_ctx or AgentContext.from_session(message, session),
-        text=user_message,
-        system_prompt=system_prompt,
-        available_tools=tuple(tools),
-        active_tools=tuple(tools),
-        resolved_integrations={},
-        max_iterations=_MAX_TOOL_CALLING_ITERATIONS,
-    )
 
     try:
-        session.agent.begin_run()
         result = Agent(
             llm=llm_factory(),
             system=system_prompt,
@@ -219,7 +207,7 @@ def run_tool_calling_turn(
             resolved_integrations={},
             max_iterations=_MAX_TOOL_CALLING_ITERATIONS,
             on_event=observer,
-        ).run(agent_context=action_ctx)
+        ).run([{"role": "user", "content": user_message}])
     except Exception as exc:
         if is_context_length_overflow(str(exc)):
             log.debug("shell action prompt overflow; falling through to assistant", exc_info=True)
@@ -233,9 +221,6 @@ def run_tool_calling_turn(
         return ToolCallingTurnResult(
             0, 0, 0, True, True, response_text=error_text, accounting_status="not_run"
         )
-    finally:
-        if session.agent.run_status == "running":
-            session.agent.end_run()
 
     executed_entries = [
         item

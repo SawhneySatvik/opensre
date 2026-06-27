@@ -94,10 +94,10 @@ def generate_response(
 ) -> LlmRunInfo | None:
     """Generate one turn's final assistant response (guidance only; no investigation run).
 
-    ``agent_ctx`` is the immutable per-turn snapshot assembled at turn start.
+    ``agent_ctx`` is the immutable per-prompt snapshot assembled at prompt start.
     When present, snapshot fields (conversation history, integration state,
     prior investigation, synthetic-run path) are read from it rather than from
-    the live session, so prompt construction reflects a stable turn-start view.
+    the live session, so prompt construction reflects a stable prompt-start view.
     """
     client = _load_reasoning_client(console)
     if client is None:

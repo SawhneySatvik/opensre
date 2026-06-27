@@ -1,4 +1,4 @@
-"""Runtime host for interactive OpenSRE shell turns."""
+"""Runtime host for interactive OpenSRE shell prompts."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from typing import Any
 from rich.console import Console
 
 from context.session import ReplSession
-from interactive_shell.harness.agent import ShellTurnAgent
+from interactive_shell.harness.agent import ShellAgent
 from interactive_shell.harness.events import (
     AgentEvent,
     AgentEventSink,
@@ -43,13 +43,13 @@ from platform.analytics.repl_context import bind_cli_session_id, reset_cli_sessi
 _logger = logging.getLogger(__name__)
 _AGENT_TURN_KIND = "agent"
 _ONCE_EVENTS: frozenset[AgentEventType] = frozenset(
-    {"turn_start", "turn_interrupted", "turn_error", "turn_end"}
+    {"prompt_start", "prompt_interrupted", "prompt_error", "prompt_end"}
 )
 
 
 @contextlib.contextmanager
 def _bound_cli_session(session_id: str) -> Iterator[None]:
-    """Temporarily bind the CLI session ID for the current turn."""
+    """Temporarily bind the CLI session ID for the current prompt."""
     token = bind_cli_session_id(session_id)
     try:
         yield
@@ -68,11 +68,15 @@ class _ThreadedAgentEventBridge:
     ) -> None:
         self._loop = loop
         self._sink = sink
+        self._loop_thread_id = threading.get_ident()
         self._lock = threading.Lock()
         self._emitted: set[AgentEventType] = set()
 
     def __call__(self, event: AgentEvent) -> None:
         if not self._claim(event):
+            return
+        if threading.get_ident() == self._loop_thread_id:
+            self._loop.create_task(self._sink(event))
             return
         future: Future[None] = asyncio.run_coroutine_threadsafe(self._sink(event), self._loop)
         future.result()
@@ -92,10 +96,10 @@ class _ThreadedAgentEventBridge:
             return True
 
 
-def _setup_turn_presentation(
+def _setup_prompt_presentation(
     runner: ShellTurnHost, user_input: str
 ) -> tuple[StreamingConsole, AsyncAgentEventSink, PromptRecorder | None, threading.Event]:
-    """Create console, event sink, recorder, and cancellation primitive for a turn."""
+    """Create console, event sink, recorder, and cancellation primitive for a prompt."""
     cancel_event = threading.Event()
 
     console = StreamingConsole(
@@ -124,7 +128,7 @@ def _setup_turn_presentation(
 
 
 class ShellTurnHost:
-    """Terminal/runtime host for a stateful shell turn agent."""
+    """Terminal/runtime host for a stateful shell agent."""
 
     def __init__(
         self,
@@ -133,17 +137,17 @@ class ShellTurnHost:
         state: ReplState,
         spinner: SpinnerState,
         invalidate_prompt: Callable[[], None],
-        agent: ShellTurnAgent | None = None,
+        agent: ShellAgent | None = None,
     ) -> None:
         self.session = session
         self.state = state
         self.spinner = spinner
         self.invalidate_prompt = invalidate_prompt
-        self.agent = agent or ShellTurnAgent(session)
+        self.agent = agent or ShellAgent(session)
 
-    async def run_turn(self, user_input: str) -> None:
-        """Execute a complete agent turn with presentation and runtime state."""
-        console, event_sink, recorder, cancel_event = _setup_turn_presentation(self, user_input)
+    async def run_prompt(self, user_input: str) -> None:
+        """Execute a complete agent prompt with presentation and runtime state."""
+        console, event_sink, recorder, cancel_event = _setup_prompt_presentation(self, user_input)
 
         progress_scope = (
             contextlib.nullcontext()
@@ -152,7 +156,7 @@ class ShellTurnHost:
         )
 
         with progress_scope:
-            await self._execute_turn_lifecycle(
+            await self._execute_prompt_lifecycle(
                 user_input=user_input,
                 console=console,
                 recorder=recorder,
@@ -160,7 +164,11 @@ class ShellTurnHost:
                 cancel_event=cancel_event,
             )
 
-    async def _execute_turn_lifecycle(
+    async def stop(self) -> None:
+        """Stop the hosted shell agent."""
+        await self.agent.stop()
+
+    async def _execute_prompt_lifecycle(
         self,
         user_input: str,
         console: StreamingConsole,
@@ -168,7 +176,7 @@ class ShellTurnHost:
         event_sink: AsyncAgentEventSink,
         cancel_event: threading.Event,
     ) -> None:
-        """Manage dispatch tracking around the shell-owned turn agent."""
+        """Manage dispatch tracking around the shell-owned agent."""
         task = asyncio.current_task()
         if task is not None:
             self.state.start_dispatch(task=task, cancel_event=cancel_event)
@@ -180,31 +188,31 @@ class ShellTurnHost:
         unsubscribe = self.agent.subscribe(event_bridge)
 
         try:
-            await self._run_agent_turn(user_input, console, recorder)
+            self.agent.start()
+            await self._run_agent_prompt(user_input, console, recorder)
         except asyncio.CancelledError:
-            await event_bridge.emit_async(AgentEvent(type="turn_interrupted"))
+            await event_bridge.emit_async(AgentEvent(type="prompt_interrupted"))
             raise
         except DispatchCancelled:
-            await event_bridge.emit_async(AgentEvent(type="turn_interrupted"))
+            await event_bridge.emit_async(AgentEvent(type="prompt_interrupted"))
         except Exception as exc:
-            report_exception(exc, context="interactive_shell.turn")
-            await event_bridge.emit_async(AgentEvent(type="turn_error", error=exc))
+            report_exception(exc, context="interactive_shell.prompt")
+            await event_bridge.emit_async(AgentEvent(type="prompt_error", error=exc))
         finally:
             self.state.finish_dispatch(cancel_event)
-            await event_bridge.emit_async(AgentEvent(type="turn_end"))
+            await event_bridge.emit_async(AgentEvent(type="prompt_end"))
             unsubscribe()
 
-    async def _run_agent_turn(
+    async def _run_agent_prompt(
         self, user_input: str, output: StreamingConsole, recorder: PromptRecorder | None
     ) -> None:
-        """Execute the shell agent in a thread with proper session context."""
+        """Execute the shell agent prompt with proper session context."""
 
         def confirm_fn(prompt: str) -> str:
             return request_confirmation_via_prompt(self.state, prompt)
 
         with _bound_cli_session(self.session.session_id):
-            await asyncio.to_thread(
-                self.agent.run_turn,
+            await self.agent.prompt(
                 user_input,
                 console=output,
                 recorder=recorder,
@@ -243,12 +251,12 @@ async def run_input_loop(
             return
 
 
-async def run_agent_turn_queue(
+async def run_agent_prompt_queue(
     *,
     state: ReplState,
-    run_turn: Callable[[str], Coroutine[Any, Any, None]],
+    run_prompt: Callable[[str], Coroutine[Any, Any, None]],
 ) -> None:
-    """Process turns from the queue until the REPL is shutting down."""
+    """Process prompts from the queue until the REPL is shutting down."""
     while not state.exit_requested:
         try:
             user_input = await state.queue.get()
@@ -259,15 +267,15 @@ async def run_agent_turn_queue(
             state.queue.task_done()
             return
 
-        turn_task = asyncio.create_task(run_turn(user_input))
-        state.attach_turn_task(turn_task)
+        prompt_task = asyncio.create_task(run_prompt(user_input))
+        state.attach_turn_task(prompt_task)
 
         try:
-            await turn_task
+            await prompt_task
         except asyncio.CancelledError:
-            _logger.debug("Queued agent turn was cancelled")
+            _logger.debug("Queued agent prompt was cancelled")
         except Exception as exc:
-            _logger.debug("Queued agent turn failed: %s", exc)
+            _logger.debug("Queued agent prompt failed: %s", exc)
         finally:
             state.clear_current_task()
             state.queue.task_done()
@@ -277,6 +285,6 @@ __all__ = [
     "AgentEvent",
     "AgentEventSink",
     "ShellTurnHost",
-    "run_agent_turn_queue",
+    "run_agent_prompt_queue",
     "run_input_loop",
 ]

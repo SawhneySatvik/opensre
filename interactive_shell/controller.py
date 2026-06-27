@@ -34,7 +34,7 @@ from interactive_shell.runtime.input.actions import (
 )
 from interactive_shell.runtime.turn_host import (
     ShellTurnHost,
-    run_agent_turn_queue,
+    run_agent_prompt_queue,
     run_input_loop,
 )
 
@@ -139,9 +139,9 @@ class InteractiveShellController:
             self.prompt.invalidate_prompt,
         )
         self.tasks = self.background.start_all(
-            lambda: run_agent_turn_queue(
+            lambda: run_agent_prompt_queue(
                 state=self.state,
-                run_turn=self.turn_host.run_turn,
+                run_prompt=self.turn_host.run_prompt,
             )
         )
 
@@ -172,6 +172,7 @@ class InteractiveShellController:
     async def _shutdown_runtime(self) -> None:
         self.state.request_exit()
         self.state.cancel_current_dispatch()
+        await self.turn_host.stop()
 
         for _label, task in self.tasks:
             task.cancel()
