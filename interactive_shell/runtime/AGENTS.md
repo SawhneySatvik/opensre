@@ -76,15 +76,17 @@ The interactive runtime must keep this shape:
 3. `InteractiveShellController.start_interactive_shell` owns prompt lifecycle,
    submitted input handling, queued-turn consumption, and per-turn task
    scheduling.
-4. The module-level `interactive_shell.controller.run_agent_turn_queue` runs each turn via an
-   injected `run_turn` callable, which in production is `AgentTurnCoordinator.run_turn` (in
-   `harness/agent.py`). `AgentTurnCoordinator` holds the turn dependencies (`session`, `state`,
-   `spinner`, `invalidate_prompt`) directly; `run_turn` owns shell presentation (console,
-   spinner, recorder, progress scope) and delegates to `_execute_turn_lifecycle`
-   (dispatch state + lifecycle phases via `AgentEvent` emissions), which performs the one-turn
-   shell pipeline handoff through `_run_agent_handler`. The terminal presentation for those
-   `AgentEvent` emissions lives in `runtime/agent_presentation.py` (`AgentEvent`, `AgentEventSink`,
-   `AgentPresentationState`, `_reduce_agent_presentation`, `_render_agent_presentation_transition`,
+4. `runtime.turn_host.run_agent_turn_queue` runs each turn via an injected
+   `run_turn` callable, which in production is `ShellTurnHost.run_turn`.
+   `ShellTurnHost` holds the terminal/runtime dependencies (`session`, `state`,
+   `spinner`, `invalidate_prompt`) directly; it owns shell presentation
+   (console, spinner, recorder, progress scope), dispatch state, cancellation,
+   and the thread-safe bridge from shell-agent events to terminal presentation.
+   The persistent shell turn lifecycle lives in `harness/turn.py`
+   (`ShellTurnAgent`), which emits `AgentEvent` objects from
+   `harness/events.py`. Terminal presentation for those events lives in
+   `runtime/agent_presentation.py` (`AgentPresentationState`,
+   `_reduce_agent_presentation`, `_render_agent_presentation_transition`,
    `ConsoleAgentEventSink`, `render_json_like_response`).
 
 Do not invert this dependency direction.
@@ -95,10 +97,9 @@ Do not invert this dependency direction.
 flowchart TD
   runRepl["interactive_shell.entrypoint.run_repl"] --> replMain["interactive_shell.entrypoint.repl_main"]
   replMain --> controller["interactive_shell.controller.InteractiveShellController"]
-  controller --> shellTurn["AgentTurnCoordinator.run_turn"]
-  shellTurn --> executeTurn["_execute_turn_lifecycle"]
-  executeTurn --> dispatchTurn["_run_agent_handler"]
-  dispatchTurn --> sideEffects["slash/help/agent/follow-up/investigation side effects"]
+  controller --> shellTurn["ShellTurnHost.run_turn"]
+  shellTurn --> shellAgent["ShellTurnAgent.run_turn"]
+  shellAgent --> sideEffects["slash/help/agent/follow-up/investigation side effects"]
   controller --> replState["core.state.ReplState"]
   controller --> spinnerState["core.state.SpinnerState"]
   controller --> inputReader["input.PromptInputReader"]
@@ -134,26 +135,25 @@ flowchart TD
 ## Turn execution rules
 
 - Do not reintroduce `dispatch.py` or any compatibility-only forwarding module.
-- The turn execution lives in `harness/agent.py`: `AgentTurnCoordinator.run_turn` owns shell
-  presentation (StreamingConsole, spinner, recorder, progress scope) and constructs a
-  `ConsoleAgentEventSink`; `_execute_turn_lifecycle` owns dispatch state and emits
-  `AgentEvent` objects; `_run_agent_handler` owns the `handle_message_with_agent` handoff.
-  `AgentTurnCoordinator` holds its turn dependencies (`session`, `state`, `spinner`,
-  `invalidate_prompt`) directly. The module-level
-  `interactive_shell.controller.run_agent_turn_queue` takes an injected `run_turn` callable
-  (production: `AgentTurnCoordinator.run_turn`). Keep terminal side effects (spinner, prompt
-  suppression, `console.print`, CPR drain) in `ConsoleAgentEventSink` — defined in
-  `runtime/agent_presentation.py`, its imperative shell routes each event through the pure
-  `_reduce_agent_presentation` and the effectful `_render_agent_presentation_transition` — not in
-  `_execute_turn_lifecycle`. `harness/agent.py` imports the presentation surface (`AgentEvent`,
-  `AgentEventSink`, `ConsoleAgentEventSink`, `render_json_like_response`) from that module.
+- The terminal host lives in `runtime/turn_host.py`: `ShellTurnHost.run_turn`
+  owns shell presentation (StreamingConsole, spinner, recorder, progress scope),
+  dispatch state, cancellation, and prompt-mediated confirmation. It constructs
+  a `ConsoleAgentEventSink` and subscribes a thread-safe event bridge to
+  `ShellTurnAgent`. The shell turn lifecycle and route state live in
+  `harness/turn.py`: `ShellTurnAgent.run_turn` owns turn snapshots, observation
+  reset, action/response routing, accounting finalization, and lifecycle event
+  emission. Keep terminal side effects (spinner, prompt suppression,
+  `console.print`, CPR drain) in `ConsoleAgentEventSink` — defined in
+  `runtime/agent_presentation.py`, its imperative shell routes each event
+  through the pure `_reduce_agent_presentation` and the effectful
+  `_render_agent_presentation_transition`.
 - Put cancel/confirm/correction text classifiers in `core/turn_detection.py`.
 - Put stdin blocking and spinner decisions in `utils/input_policy.py`.
-- Keep prompt-mediated confirmation waiting in `controller.py`.
+- Keep prompt-mediated confirmation waiting in `runtime/turn_host.py`.
 - Turn accounting is consolidated behind `ShellTurnAccounting` in
   `interactive_shell/turn_accounting.py` (alongside the `ToolCallingTurnResult`
-  and `ShellTurnResult` turn data model), invoked from `handle_message_with_agent`
-  in `harness/agent.py`. It owns action-agent analytics, terminal-turn aggregate
+  and `ShellTurnResult` turn data model), invoked from `ShellTurnAgent`
+  in `harness/turn.py`. It owns action-agent analytics, terminal-turn aggregate
   telemetry, prompt-recorder flush, conversational-turn persistence, and the final
   assistant-intent stamp. `run_tool_calling_turn` (in `harness/tool_calling.py`)
   returns facts only (`ToolCallingTurnResult` with `accounting_status` of
@@ -165,19 +165,18 @@ flowchart TD
 - `../controller.py` owns:
   - `InteractiveShellController`
   - `start_interactive_shell` shell lifecycle orchestration
-  - `run_input_loop` (module-level) — read and handle user input until exit
-  - `run_agent_turn_queue` (module-level) — consume queued turns until exit (runs an injected `run_turn`)
-  - `AgentTurnCoordinator` (in `harness/agent.py`) — holds turn dependencies directly; `run_turn` drives presentation and delegates to `_execute_turn_lifecycle` / `_run_agent_handler`
-  - `ConsoleAgentEventSink` (in `runtime/agent_presentation.py`) — terminal presentation for agent lifecycle events over `_reduce_agent_presentation` / `_render_agent_presentation_transition`
   - prompt input acceptance until exit
   - submitted prompt rendering and cancel/confirm/queue handling
   - queued turn consumption
   - per-turn task lifecycle
-  - dispatch start/finish state transitions
-  - prompt-mediated confirmation waiting
-  - turn telemetry and `handle_message_with_agent` invocation
   - current turn cancellation helpers
   - coordination between prompt, background, and shutdown helpers
+- `turn_host.py` owns:
+  - `run_input_loop` — read and handle user input until exit
+  - `run_agent_turn_queue` — consume queued turns until exit (runs an injected `run_turn`)
+  - `ShellTurnHost` — terminal/runtime dependencies, presentation, dispatch state, prompt-mediated confirmation, and `ShellTurnAgent` invocation
+- `agent_presentation.py` owns:
+  - `ConsoleAgentEventSink` — terminal presentation for agent lifecycle events over `_reduce_agent_presentation` / `_render_agent_presentation_transition`
 - `core/prompt_manager.py` owns:
   - prompt-toolkit wiring
   - prompt rendering callbacks

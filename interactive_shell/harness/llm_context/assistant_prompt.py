@@ -2,7 +2,7 @@
 
 Builds the full docs-aware assistant prompt from grounding sources, prior
 investigation state, environment facts, synthetic-run observations, and recent
-conversation history. The turn runtime (``harness/agent.py``) calls
+conversation history. The turn agent (``harness/turn.py``) calls
 ``build_cli_agent_prompt`` and stays out of the business of assembling prompt
 text.
 

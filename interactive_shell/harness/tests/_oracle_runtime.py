@@ -30,7 +30,7 @@ from interactive_shell.harness.tests.scenario_loader import (
     ScenarioCapabilities,
     ScenarioCase,
 )
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.tools.tool_contracts import ToolExecutor
 from interactive_shell.tools.tool_registry import (
     REGISTRY,
@@ -409,10 +409,9 @@ def run_oracle_once(case: ScenarioCase, monkeypatch: pytest.MonkeyPatch) -> Orac
     session_token = bind_cli_session_id(session.session_id)
     try:
         recorder = PromptRecorder.start(session=session, text=prompt, turn_kind=_AGENT_TURN_KIND)
-        handle_message_with_agent(
+        ShellTurnAgent(session).run_turn(
             prompt,
-            session,
-            console,
+            console=console,
             recorder=recorder,
             confirm_fn=lambda _prompt: "y",
             is_tty=None,

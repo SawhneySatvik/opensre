@@ -13,7 +13,7 @@ import io
 from rich.console import Console
 
 from interactive_shell.harness.llm_context.session import ReplSession
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -54,13 +54,14 @@ def test_discovery_output_is_summarized_into_a_direct_answer() -> None:
         return LlmRunInfo(response_text="No — Sentry is not configured.")
 
     session = ReplSession()
-    handle_message_with_agent(
-        "is sentry installed?",
+    ShellTurnAgent(
         session,
-        _console(),
-        recorder=None,
         execute_actions=fake_execute,
         response_generator=fake_answer,
+    ).run_turn(
+        "is sentry installed?",
+        console=_console(),
+        recorder=None,
     )
 
     assert observed == [_OBSERVATION]
@@ -91,13 +92,14 @@ def test_no_observation_keeps_silent_handled_turn() -> None:
         return None
 
     session = ReplSession()
-    handle_message_with_agent(
-        "deploy the remote instance",
+    ShellTurnAgent(
         session,
-        _console(),
-        recorder=None,
         execute_actions=fake_execute,
         response_generator=fake_answer,
+    ).run_turn(
+        "deploy the remote instance",
+        console=_console(),
+        recorder=None,
     )
 
     assert answer_calls == []
@@ -128,13 +130,14 @@ def test_failed_discovery_is_not_summarized() -> None:
         return None
 
     session = ReplSession()
-    handle_message_with_agent(
-        "is sentry installed?",
+    ShellTurnAgent(
         session,
-        _console(),
-        recorder=None,
         execute_actions=fake_execute,
         response_generator=fake_answer,
+    ).run_turn(
+        "is sentry installed?",
+        console=_console(),
+        recorder=None,
     )
 
     assert answer_calls == []
@@ -166,13 +169,14 @@ def test_observation_is_reset_each_turn() -> None:
 
     session = ReplSession()
     session.agent.last_observation = "stale observation from a previous turn"
-    handle_message_with_agent(
-        "deploy the remote instance",
+    ShellTurnAgent(
         session,
-        _console(),
-        recorder=None,
         execute_actions=fake_execute,
         response_generator=fake_answer,
+    ).run_turn(
+        "deploy the remote instance",
+        console=_console(),
+        recorder=None,
     )
 
     assert answer_calls == []

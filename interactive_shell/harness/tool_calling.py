@@ -162,7 +162,7 @@ def run_tool_calling_turn(
     """Run one shell tool-calling turn through the shared agent harness.
 
     ``turn_ctx`` is the immutable per-turn snapshot assembled at turn start
-    in ``handle_message_with_agent``. When present it is used to build the
+    in ``ShellTurnAgent``. When present it is used to build the
     action-agent system prompt so the prompt reflects turn-start state rather
     than the live (potentially mid-mutation) session.
     """

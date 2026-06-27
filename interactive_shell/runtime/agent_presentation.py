@@ -1,26 +1,26 @@
 """Terminal presentation for the interactive shell agent turn.
 
 This module owns the **UI / presentation** side of one submitted shell turn: the
-agent lifecycle event contract, the pure presentation-state reducer, the
-effectful terminal transition renderer, the ``ConsoleAgentEventSink`` imperative
-shell that wires them together, and the JSON-like assistant response renderer.
+pure presentation-state reducer, the effectful terminal transition renderer,
+the ``ConsoleAgentEventSink`` imperative shell that wires them together, and
+the JSON-like assistant response renderer.
 
-Keeping this separate from ``harness/agent.py`` isolates spinner lifecycle,
-prompt suppression, markdown rendering, interruption/error messages, and stale
-CPR draining from the turn's action-routing and prompt-construction logic.
+Keeping this separate from ``runtime/turn_host.py`` and ``harness/turn.py``
+isolates spinner lifecycle, prompt suppression, markdown rendering,
+interruption/error messages, and stale CPR draining from the turn's
+action-routing and prompt-construction logic.
 """
 
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Literal
 
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.markup import escape
 
+from interactive_shell.harness.events import AgentEvent, AsyncAgentEventSink
 from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.runtime.core.state import SpinnerState
 from interactive_shell.runtime.utils.input_policy import turn_should_show_spinner
@@ -33,18 +33,6 @@ from interactive_shell.ui import (
 )
 from interactive_shell.ui.components.cpr_stdin import drain_stale_cpr_bytes
 from interactive_shell.ui.streaming.console import StreamingConsole
-
-
-@dataclass(frozen=True)
-class AgentEvent:
-    """Agent lifecycle event emitted during one submitted shell turn."""
-
-    type: Literal["turn_start", "turn_interrupted", "turn_error", "turn_end"]
-    text: str | None = None
-    error: Exception | None = None
-
-
-AgentEventSink = Callable[[AgentEvent], Awaitable[None]]
 
 
 @dataclass(frozen=True)
@@ -159,7 +147,7 @@ def render_json_like_response(console: Console, text: str) -> None:
 
 __all__ = [
     "AgentEvent",
-    "AgentEventSink",
+    "AsyncAgentEventSink",
     "AgentPresentationState",
     "ConsoleAgentEventSink",
     "render_json_like_response",

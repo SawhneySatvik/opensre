@@ -12,7 +12,7 @@ from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -155,7 +155,7 @@ def test_turn_needs_exclusive_stdin_for_config(
     )
 
 
-def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
+def test_shell_turn_agent_nitro_prompt_uses_cli_agent_actions(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     nitro_prompt = (
@@ -190,22 +190,23 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
 
     session = ReplSession()
     console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
-    handle_message_with_agent(
-        nitro_prompt,
+    ShellTurnAgent(
         session,
-        console,
+        execute_actions=_fake_execute_cli_actions,
+        response_generator=_fake_generate_response,
+    ).run_turn(
+        nitro_prompt,
+        console=console,
         recorder=None,
         confirm_fn=None,
         is_tty=None,
-        execute_actions=_fake_execute_cli_actions,
-        response_generator=_fake_generate_response,
     )
 
     assert action_calls == [nitro_prompt]
     assert llm_calls == []
 
 
-def test_handle_message_with_agent_nitro_prompt_executes_remote_then_investigation(
+def test_shell_turn_agent_nitro_prompt_executes_remote_then_investigation(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     nitro_prompt = (
@@ -261,10 +262,9 @@ def test_handle_message_with_agent_nitro_prompt_executes_remote_then_investigati
 
     session = ReplSession()
     console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
-    handle_message_with_agent(
+    ShellTurnAgent(session).run_turn(
         nitro_prompt,
-        session,
-        console,
+        console=console,
         recorder=None,
         confirm_fn=None,
         is_tty=None,

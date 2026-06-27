@@ -10,11 +10,6 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
 from core.domain.alerts import inbox as _alert_inbox
-from interactive_shell.harness.agent import (
-    AgentTurnCoordinator,
-    run_agent_turn_queue,
-    run_input_loop,
-)
 from interactive_shell.harness.llm_context.session import (
     ReplRuntimeContext,
     ReplSession,
@@ -36,6 +31,11 @@ from interactive_shell.runtime.input.actions import (
     IgnoreInput,
     InputAction,
     SubmitTurn,
+)
+from interactive_shell.runtime.turn_host import (
+    ShellTurnHost,
+    run_agent_turn_queue,
+    run_input_loop,
 )
 
 log = logging.getLogger(__name__)
@@ -97,7 +97,7 @@ class InteractiveShellController:
             self.spinner,
             self.runtime_context.pt_session,
         )
-        self.turn_coordinator = AgentTurnCoordinator(
+        self.turn_host = ShellTurnHost(
             session=self.session,
             state=self.state,
             spinner=self.spinner,
@@ -141,7 +141,7 @@ class InteractiveShellController:
         self.tasks = self.background.start_all(
             lambda: run_agent_turn_queue(
                 state=self.state,
-                run_turn=self.turn_coordinator.run_turn,
+                run_turn=self.turn_host.run_turn,
             )
         )
 

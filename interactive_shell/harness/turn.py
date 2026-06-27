@@ -10,15 +10,19 @@ module is the imperative shell around it.
 from __future__ import annotations
 
 from collections.abc import Callable
+from contextlib import suppress
 from typing import Literal, assert_never
 
 from rich.console import Console
 
 from config.llm_reasoning_effort import apply_reasoning_effort
+from interactive_shell.harness.events import AgentEvent, AgentEventSink
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.response import generate_response
+from interactive_shell.harness.state import ConversationState
 from interactive_shell.harness.tool_calling import run_tool_calling_turn
 from interactive_shell.harness.turn_context import TurnContext
-from interactive_shell.runtime import ReplSession
+from interactive_shell.runtime.core.confirmation import DispatchCancelled
 from interactive_shell.runtime.core.turn_accounting import (
     ShellTurnAccounting,
     ShellTurnResult,
@@ -81,109 +85,167 @@ def _gather_and_answer(
     )
 
 
-def handle_message_with_agent(
-    text: str,
-    session: ReplSession,
-    console: Console,
-    *,
-    recorder: PromptRecorder | None,
-    confirm_fn: Callable[[str], str] | None = None,
-    is_tty: bool | None = None,
-    execute_actions: RunToolCallingTurn | None = None,
-    gather_evidence: GatherEvidence | None = None,
-    response_generator: ResponseGenerator | None = None,
-) -> ShellTurnResult:
-    """Run one interactive-shell turn through three paths, in order:
+class ShellTurnAgent:
+    """Stateful owner of the interactive-shell turn lifecycle.
 
-    1. ``summarize_observation`` — a successful action left discovery output, so
-       summarize it into a direct answer.
-    2. ``handled_without_llm`` — the action fully handled the turn; stop without the LLM.
-    3. ``gather_and_answer`` — nothing was handled; gather evidence and answer.
-
-    The path choice is the pure ``_route_turn``; this function is the imperative
-    shell that performs the chosen path's effects.
+    The shell agent owns shell/session state, turn snapshots, route selection,
+    observation handling, accounting, and lifecycle events. It delegates the
+    inner tool-calling loop to ``run_tool_calling_turn``, which may use
+    ``core.runtime.agent.Agent`` as a disposable primitive.
     """
-    execute_actions = execute_actions or run_tool_calling_turn
-    gather_evidence = gather_evidence or gather_tool_evidence
-    response_generator = response_generator or generate_response
 
-    # Snapshot session state before any turn mutations. Both the action agent
-    # and the conversational assistant read from this frozen context so their
-    # prompts reflect a consistent turn-start view rather than live session state.
-    turn_ctx = TurnContext.from_session(text, session)
-    accounting = ShellTurnAccounting(session=session, text=text, recorder=recorder)
+    def __init__(
+        self,
+        session: ReplSession,
+        *,
+        execute_actions: RunToolCallingTurn | None = None,
+        gather_evidence: GatherEvidence | None = None,
+        response_generator: ResponseGenerator | None = None,
+        event_sink: AgentEventSink | None = None,
+    ) -> None:
+        self.session = session
+        self._execute_actions = execute_actions or run_tool_calling_turn
+        self._gather_evidence = gather_evidence or gather_tool_evidence
+        self._response_generator = response_generator or generate_response
+        self._event_sinks: list[AgentEventSink] = []
+        if event_sink is not None:
+            self.subscribe(event_sink)
 
-    # Clear any observation left by a prior turn so only this turn's discovery
-    # output can trigger a summary pass.
-    session.agent.reset_observation()
+    @property
+    def state(self) -> ConversationState:
+        """Return the shell-owned conversational state for this session."""
+        return self.session.agent
 
-    action_result = execute_actions(
-        text,
-        session,
-        console,
-        confirm_fn=confirm_fn,
-        is_tty=is_tty,
-        turn_ctx=turn_ctx,
-    )
-    accounting.record_action_result(action_result)
+    def subscribe(self, sink: AgentEventSink) -> Callable[[], None]:
+        """Subscribe to lifecycle events and return an unsubscribe callback."""
+        self._event_sinks.append(sink)
 
-    observation = session.agent.last_observation
+        def _unsubscribe() -> None:
+            with suppress(ValueError):
+                self._event_sinks.remove(sink)
 
-    route = _route_turn(action_result, observation)
-    match route:
-        case "summarize_observation":
-            with apply_reasoning_effort(turn_ctx.reasoning_effort):
-                run = response_generator(
-                    text,
-                    session,
-                    console,
-                    confirm_fn=confirm_fn,
-                    is_tty=is_tty,
-                    tool_observation=observation,
-                    turn_ctx=turn_ctx,
+        return _unsubscribe
+
+    def run_turn(
+        self,
+        text: str,
+        *,
+        console: Console,
+        recorder: PromptRecorder | None,
+        confirm_fn: Callable[[str], str] | None = None,
+        is_tty: bool | None = None,
+    ) -> ShellTurnResult:
+        """Run one interactive-shell turn through the shell agent lifecycle."""
+        self._emit(AgentEvent(type="turn_start", text=text))
+        try:
+            return self._run_turn_body(
+                text,
+                console=console,
+                recorder=recorder,
+                confirm_fn=confirm_fn,
+                is_tty=is_tty,
+            )
+        except DispatchCancelled:
+            self._emit(AgentEvent(type="turn_interrupted"))
+            raise
+        except Exception as exc:
+            self._emit(AgentEvent(type="turn_error", error=exc))
+            raise
+        finally:
+            self._emit(AgentEvent(type="turn_end"))
+
+    def _run_turn_body(
+        self,
+        text: str,
+        *,
+        console: Console,
+        recorder: PromptRecorder | None,
+        confirm_fn: Callable[[str], str] | None,
+        is_tty: bool | None,
+    ) -> ShellTurnResult:
+        """Perform the chosen turn path after lifecycle setup."""
+        # Snapshot session state before any turn mutations. Both the action
+        # agent and the conversational assistant read from this frozen context
+        # so prompts reflect a consistent turn-start view rather than live
+        # session state.
+        turn_ctx = TurnContext.from_session(text, self.session)
+        accounting = ShellTurnAccounting(session=self.session, text=text, recorder=recorder)
+
+        # Clear any observation left by a prior turn so only this turn's
+        # discovery output can trigger a summary pass.
+        self.session.agent.reset_observation()
+
+        action_result = self._execute_actions(
+            text,
+            self.session,
+            console,
+            confirm_fn=confirm_fn,
+            is_tty=is_tty,
+            turn_ctx=turn_ctx,
+        )
+        accounting.record_action_result(action_result)
+
+        observation = self.session.agent.last_observation
+
+        route = _route_turn(action_result, observation)
+        match route:
+            case "summarize_observation":
+                with apply_reasoning_effort(turn_ctx.reasoning_effort):
+                    run = self._response_generator(
+                        text,
+                        self.session,
+                        console,
+                        confirm_fn=confirm_fn,
+                        is_tty=is_tty,
+                        tool_observation=observation,
+                        turn_ctx=turn_ctx,
+                    )
+                result = ShellTurnResult(
+                    final_intent="cli_agent_summarized",
+                    action_result=action_result,
+                    assistant_response_text=_response_text(run),
+                    llm_run=run,
                 )
-            result = ShellTurnResult(
-                final_intent="cli_agent_summarized",
-                action_result=action_result,
-                assistant_response_text=_response_text(run),
-                llm_run=run,
-            )
 
-        case "handled_without_llm":
-            result = ShellTurnResult(
-                final_intent="cli_agent_handled",
-                action_result=action_result,
-                assistant_response_text=action_result.response_text,
-            )
-
-        case "gather_and_answer":
-            with apply_reasoning_effort(turn_ctx.reasoning_effort):
-                run = _gather_and_answer(
-                    text=text,
-                    session=session,
-                    console=console,
-                    gather_evidence=gather_evidence,
-                    response_generator=response_generator,
-                    confirm_fn=confirm_fn,
-                    is_tty=is_tty,
-                    turn_ctx=turn_ctx,
+            case "handled_without_llm":
+                result = ShellTurnResult(
+                    final_intent="cli_agent_handled",
+                    action_result=action_result,
+                    assistant_response_text=action_result.response_text,
                 )
-            result = ShellTurnResult(
-                final_intent="cli_agent_fallback",
-                action_result=action_result,
-                assistant_response_text=_response_text(run),
-                llm_run=run,
-            )
 
-        case _:
-            assert_never(route)
+            case "gather_and_answer":
+                with apply_reasoning_effort(turn_ctx.reasoning_effort):
+                    run = _gather_and_answer(
+                        text=text,
+                        session=self.session,
+                        console=console,
+                        gather_evidence=self._gather_evidence,
+                        response_generator=self._response_generator,
+                        confirm_fn=confirm_fn,
+                        is_tty=is_tty,
+                        turn_ctx=turn_ctx,
+                    )
+                result = ShellTurnResult(
+                    final_intent="cli_agent_fallback",
+                    action_result=action_result,
+                    assistant_response_text=_response_text(run),
+                    llm_run=run,
+                )
 
-    return accounting.finalize(result)
+            case _:
+                assert_never(route)
+
+        return accounting.finalize(result)
+
+    def _emit(self, event: AgentEvent) -> None:
+        for sink in tuple(self._event_sinks):
+            sink(event)
 
 
 __all__ = [
     "GatherEvidence",
     "ResponseGenerator",
     "RunToolCallingTurn",
-    "handle_message_with_agent",
+    "ShellTurnAgent",
 ]

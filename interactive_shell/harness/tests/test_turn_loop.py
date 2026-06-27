@@ -8,7 +8,7 @@ from typing import Any
 from rich.console import Console
 
 from interactive_shell.harness.llm_context.session import ReplSession
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -48,14 +48,16 @@ def test_recorder_flushes_once_for_chat_fallback() -> None:
     def _answer(*_args: Any, **_kwargs: Any) -> LlmRunInfo:
         return run_info
 
-    result = handle_message_with_agent(
-        "question",
-        ReplSession(),
-        _console(),
-        recorder=recorder,  # type: ignore[arg-type]
+    session = ReplSession()
+    result = ShellTurnAgent(
+        session,
         execute_actions=_unhandled_turn,
         gather_evidence=lambda *_a, **_k: None,
         response_generator=_answer,
+    ).run_turn(
+        "question",
+        console=_console(),
+        recorder=recorder,  # type: ignore[arg-type]
     )
 
     assert result.answered is True
@@ -77,14 +79,16 @@ def test_recorder_flushes_once_for_silent_handled_turn() -> None:
             response_text="command output",
         )
 
-    result = handle_message_with_agent(
-        "run something",
-        ReplSession(),
-        _console(),
-        recorder=recorder,  # type: ignore[arg-type]
+    session = ReplSession()
+    result = ShellTurnAgent(
+        session,
         execute_actions=_handled,
         gather_evidence=lambda *_a, **_k: None,
         response_generator=lambda *_a, **_k: None,
+    ).run_turn(
+        "run something",
+        console=_console(),
+        recorder=recorder,  # type: ignore[arg-type]
     )
 
     assert result.answered is False

@@ -5,7 +5,7 @@ import io
 from rich.console import Console
 
 from interactive_shell.harness.llm_context.session import ReplSession
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
@@ -28,7 +28,7 @@ def _console() -> Console:
     return Console(file=io.StringIO(), force_terminal=False, highlight=False)
 
 
-def test_handle_message_with_agent_cli_agent_empty_response_is_recorded_empty() -> None:
+def test_shell_turn_agent_cli_agent_empty_response_is_recorded_empty() -> None:
     recorder = _FakeRecorder()
 
     def fake_execute(*_args: object, **_kwargs: object) -> ToolCallingTurnResult:
@@ -45,15 +45,16 @@ def test_handle_message_with_agent_cli_agent_empty_response_is_recorded_empty() 
 
     session = ReplSession()
     output = io.StringIO()
-    handle_message_with_agent(
-        "show datadog integration details",
+    ShellTurnAgent(
         session,
-        Console(file=output, force_terminal=False, highlight=False),
+        execute_actions=fake_execute,
+        response_generator=fake_answer,
+    ).run_turn(
+        "show datadog integration details",
+        console=Console(file=output, force_terminal=False, highlight=False),
         recorder=recorder,
         confirm_fn=None,
         is_tty=None,
-        execute_actions=fake_execute,
-        response_generator=fake_answer,
     )
 
     assert output.getvalue() == ""

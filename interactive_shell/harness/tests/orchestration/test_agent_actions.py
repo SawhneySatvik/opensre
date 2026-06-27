@@ -29,7 +29,7 @@ from interactive_shell.harness.tests._planned_action import (
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.harness.turn import handle_message_with_agent
+from interactive_shell.harness.turn import ShellTurnAgent
 from interactive_shell.tools.tool_registry import (
     TOOL_KIND_TO_NAME,
     ToolKind,
@@ -1280,15 +1280,16 @@ def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) ->
 
     session = ReplSession()
     console, _ = _capture()
-    # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent,
+    # Analytics now fire from ShellTurnAccounting inside ShellTurnAgent,
     # not from run_tool_calling_turn directly. Drive the full turn with a no-op
     # answer agent so no real LLM is invoked.
-    result = handle_message_with_agent(
-        "run `pwd`",
+    result = ShellTurnAgent(
         session,
-        console,
-        recorder=None,
         response_generator=lambda *_a, **_k: None,
+    ).run_turn(
+        "run `pwd`",
+        console=console,
+        recorder=None,
     )
 
     action_result = result.action_result
@@ -1358,13 +1359,14 @@ def test_execute_cli_actions_executes_matched_clause_ignoring_unhandled(
 
     session = ReplSession()
     console, _ = _capture()
-    # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent.
-    result = handle_message_with_agent(
-        "check health",
+    # Analytics now fire from ShellTurnAccounting inside ShellTurnAgent.
+    result = ShellTurnAgent(
         session,
-        console,
-        recorder=None,
         response_generator=lambda *_a, **_k: None,
+    ).run_turn(
+        "check health",
+        console=console,
+        recorder=None,
     )
 
     # The unhandled flag no longer denies the turn: the matched /health runs.

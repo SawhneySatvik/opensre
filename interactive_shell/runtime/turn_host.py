@@ -1,4 +1,4 @@
-"""Runtime driver for interactive OpenSRE shell turns."""
+"""Runtime host for interactive OpenSRE shell turns."""
 
 from __future__ import annotations
 
@@ -7,17 +7,20 @@ import contextlib
 import logging
 import threading
 from collections.abc import Awaitable, Callable, Coroutine, Iterator
+from concurrent.futures import Future
 from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness.turn import handle_message_with_agent
-from interactive_shell.runtime import ReplSession
-from interactive_shell.runtime.agent_presentation import (
+from interactive_shell.harness.events import (
     AgentEvent,
     AgentEventSink,
-    ConsoleAgentEventSink,
+    AgentEventType,
+    AsyncAgentEventSink,
 )
+from interactive_shell.harness.llm_context.session import ReplSession
+from interactive_shell.harness.turn import ShellTurnAgent
+from interactive_shell.runtime.agent_presentation import ConsoleAgentEventSink
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.confirmation import (
     DispatchCancelled,
@@ -39,11 +42,9 @@ from platform.analytics.repl_context import bind_cli_session_id, reset_cli_sessi
 
 _logger = logging.getLogger(__name__)
 _AGENT_TURN_KIND = "agent"
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Core utilities
-# ─────────────────────────────────────────────────────────────────────────────
+_ONCE_EVENTS: frozenset[AgentEventType] = frozenset(
+    {"turn_start", "turn_interrupted", "turn_error", "turn_end"}
+)
 
 
 @contextlib.contextmanager
@@ -56,10 +57,45 @@ def _bound_cli_session(session_id: str) -> Iterator[None]:
         reset_cli_session_id(token)
 
 
+class _ThreadedAgentEventBridge:
+    """Bridge sync shell-agent events to the async terminal presentation sink."""
+
+    def __init__(
+        self,
+        *,
+        loop: asyncio.AbstractEventLoop,
+        sink: AsyncAgentEventSink,
+    ) -> None:
+        self._loop = loop
+        self._sink = sink
+        self._lock = threading.Lock()
+        self._emitted: set[AgentEventType] = set()
+
+    def __call__(self, event: AgentEvent) -> None:
+        if not self._claim(event):
+            return
+        future: Future[None] = asyncio.run_coroutine_threadsafe(self._sink(event), self._loop)
+        future.result()
+
+    async def emit_async(self, event: AgentEvent) -> None:
+        if not self._claim(event):
+            return
+        await self._sink(event)
+
+    def _claim(self, event: AgentEvent) -> bool:
+        if event.type not in _ONCE_EVENTS:
+            return True
+        with self._lock:
+            if event.type in self._emitted:
+                return False
+            self._emitted.add(event.type)
+            return True
+
+
 def _setup_turn_presentation(
-    runner: AgentTurnCoordinator, user_input: str
-) -> tuple[StreamingConsole, AgentEventSink, PromptRecorder | None, threading.Event]:
-    """Create console, event emitter, recorder, and cancellation primitive for a turn."""
+    runner: ShellTurnHost, user_input: str
+) -> tuple[StreamingConsole, AsyncAgentEventSink, PromptRecorder | None, threading.Event]:
+    """Create console, event sink, recorder, and cancellation primitive for a turn."""
     cancel_event = threading.Event()
 
     console = StreamingConsole(
@@ -87,13 +123,8 @@ def _setup_turn_presentation(
     return console, event_sink, recorder, cancel_event
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# Turn Coordinator
-# ─────────────────────────────────────────────────────────────────────────────
-
-
-class AgentTurnCoordinator:
-    """Orchestrates the full lifecycle of one agent turn."""
+class ShellTurnHost:
+    """Terminal/runtime host for a stateful shell turn agent."""
 
     def __init__(
         self,
@@ -102,14 +133,16 @@ class AgentTurnCoordinator:
         state: ReplState,
         spinner: SpinnerState,
         invalidate_prompt: Callable[[], None],
+        agent: ShellTurnAgent | None = None,
     ) -> None:
         self.session = session
         self.state = state
         self.spinner = spinner
         self.invalidate_prompt = invalidate_prompt
+        self.agent = agent or ShellTurnAgent(session)
 
     async def run_turn(self, user_input: str) -> None:
-        """Execute a complete agent turn with presentation and lifecycle management."""
+        """Execute a complete agent turn with presentation and runtime state."""
         console, event_sink, recorder, cancel_event = _setup_turn_presentation(self, user_input)
 
         progress_scope = (
@@ -132,55 +165,52 @@ class AgentTurnCoordinator:
         user_input: str,
         console: StreamingConsole,
         recorder: PromptRecorder | None,
-        event_sink: AgentEventSink,
+        event_sink: AsyncAgentEventSink,
         cancel_event: threading.Event,
     ) -> None:
-        """Manage turn lifecycle: dispatch tracking, execution, and final events."""
+        """Manage dispatch tracking around the shell-owned turn agent."""
         task = asyncio.current_task()
         if task is not None:
             self.state.start_dispatch(task=task, cancel_event=cancel_event)
         else:
             self.state.attach_cancel_event(cancel_event)
 
-        await event_sink(AgentEvent(type="turn_start", text=user_input))
+        loop = asyncio.get_running_loop()
+        event_bridge = _ThreadedAgentEventBridge(loop=loop, sink=event_sink)
+        unsubscribe = self.agent.subscribe(event_bridge)
 
         try:
-            await self._run_agent_handler(user_input, console, recorder)
+            await self._run_agent_turn(user_input, console, recorder)
         except asyncio.CancelledError:
-            await event_sink(AgentEvent(type="turn_interrupted"))
+            await event_bridge.emit_async(AgentEvent(type="turn_interrupted"))
             raise
         except DispatchCancelled:
-            await event_sink(AgentEvent(type="turn_interrupted"))
+            await event_bridge.emit_async(AgentEvent(type="turn_interrupted"))
         except Exception as exc:
             report_exception(exc, context="interactive_shell.turn")
-            await event_sink(AgentEvent(type="turn_error", error=exc))
+            await event_bridge.emit_async(AgentEvent(type="turn_error", error=exc))
         finally:
             self.state.finish_dispatch(cancel_event)
-            await event_sink(AgentEvent(type="turn_end"))
+            await event_bridge.emit_async(AgentEvent(type="turn_end"))
+            unsubscribe()
 
-    async def _run_agent_handler(
+    async def _run_agent_turn(
         self, user_input: str, output: StreamingConsole, recorder: PromptRecorder | None
     ) -> None:
-        """Execute the core agent logic in a thread with proper session context."""
+        """Execute the shell agent in a thread with proper session context."""
 
         def confirm_fn(prompt: str) -> str:
             return request_confirmation_via_prompt(self.state, prompt)
 
         with _bound_cli_session(self.session.session_id):
             await asyncio.to_thread(
-                handle_message_with_agent,
+                self.agent.run_turn,
                 user_input,
-                self.session,
-                output,
+                console=output,
                 recorder=recorder,
                 confirm_fn=confirm_fn,
                 is_tty=None,
             )
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Top-level loops
-# ─────────────────────────────────────────────────────────────────────────────
 
 
 async def run_input_loop(
@@ -246,7 +276,7 @@ async def run_agent_turn_queue(
 __all__ = [
     "AgentEvent",
     "AgentEventSink",
-    "AgentTurnCoordinator",
+    "ShellTurnHost",
     "run_agent_turn_queue",
     "run_input_loop",
 ]

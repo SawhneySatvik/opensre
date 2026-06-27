@@ -63,7 +63,7 @@ class TurnContext:
     def from_session(cls, text: str, session: ReplSession) -> TurnContext:
         """Snapshot the relevant session fields for one turn.
 
-        Call this once at the top of ``handle_message_with_agent`` before any
+        Call this once at the top of ``ShellTurnAgent.run_turn`` before any
         mutations happen, then pass the returned context downstream.
         """
         messages = session.agent.messages
