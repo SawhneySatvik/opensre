@@ -1,10 +1,11 @@
 """Turn-result data model and the single owner of shell-turn accounting.
 
-This module holds the "facts only" action-execution result, the final
-shell-turn result, and ``ShellTurnAccounting`` — the consolidated owner of a
-turn's accounting side effects (action-agent analytics, terminal-turn aggregate
-telemetry, prompt-recorder flushing, conversational-turn persistence, and the
-final assistant-intent stamp).
+Co-located with ``token_accounting.py`` since both are per-turn runtime
+concerns. This module holds the "facts only" action-execution result, the
+final shell-turn result, and ``ShellTurnAccounting`` — the consolidated owner
+of a turn's accounting side effects (action-agent analytics, terminal-turn
+aggregate telemetry, prompt-recorder flushing, conversational-turn
+persistence, and the final assistant-intent stamp).
 """
 
 from __future__ import annotations

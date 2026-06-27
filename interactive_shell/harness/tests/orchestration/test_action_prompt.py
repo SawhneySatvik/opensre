@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-
 from interactive_shell.harness.llm_context import (
     _SYSTEM_PROMPT_BASE,
     build_action_system_prompt,
@@ -11,30 +9,41 @@ from interactive_shell.harness.llm_context import (
     recent_conversation_block,
 )
 from interactive_shell.harness.state.conversation_history import NO_HISTORY_PLACEHOLDER
+from interactive_shell.harness.turn_context import TurnContext
 
 
-@dataclass
-class _FakeSession:
-    cli_agent_messages: list[tuple[str, str]] = field(default_factory=list)
-    configured_integrations: tuple[str, ...] = ()
-    configured_integrations_known: bool = False
+def _ctx(
+    *,
+    messages: list[tuple[str, str]] | None = None,
+    integrations: tuple[str, ...] = (),
+    integrations_known: bool = False,
+) -> TurnContext:
+    return TurnContext(
+        text="",
+        conversation_messages=tuple(messages or []),
+        configured_integrations=integrations,
+        configured_integrations_known=integrations_known,
+        last_state=None,
+        last_synthetic_observation_path=None,
+        reasoning_effort=None,
+    )
 
 
 def test_recent_conversation_block_contains_history_lines() -> None:
-    session = _FakeSession(
-        cli_agent_messages=[
+    ctx = _ctx(
+        messages=[
             ("user", "how can I remove github integration"),
             ("assistant", "Use /integrations remove github or /integrations list."),
         ]
     )
-    block = recent_conversation_block(session)
+    block = recent_conversation_block(ctx)
     assert "RECENT CONVERSATION" in block
     assert "User: how can I remove github integration" in block
     assert "Assistant: Use /integrations remove github or /integrations list." in block
 
 
 def test_recent_conversation_block_placeholder_without_history() -> None:
-    assert NO_HISTORY_PLACEHOLDER in recent_conversation_block(_FakeSession())
+    assert NO_HISTORY_PLACEHOLDER in recent_conversation_block(_ctx())
 
 
 def test_system_prompt_documents_followup_resolution() -> None:
@@ -68,19 +77,16 @@ def test_system_prompt_preserves_bare_numeric_synthetic_mapping() -> None:
 
 
 def test_connected_integrations_block_renders_state() -> None:
-    assert "unknown" in connected_integrations_block(None)
-    assert "unknown" in connected_integrations_block(_FakeSession())
+    assert "unknown" in connected_integrations_block(_ctx())
 
-    none_block = connected_integrations_block(
-        _FakeSession(configured_integrations=(), configured_integrations_known=True)
-    )
+    none_block = connected_integrations_block(_ctx(integrations=(), integrations_known=True))
     assert "none" in none_block
     assert "explicit investigate instructions still emit investigation_start" in none_block.lower()
 
     listed = connected_integrations_block(
-        _FakeSession(
-            configured_integrations=("sentry", "github", "posthog_mcp"),
-            configured_integrations_known=True,
+        _ctx(
+            integrations=("sentry", "github", "posthog_mcp"),
+            integrations_known=True,
         )
     )
     assert "github, posthog_mcp, sentry" in listed
@@ -88,10 +94,10 @@ def test_connected_integrations_block_renders_state() -> None:
 
 def test_action_system_prompt_includes_context_blocks() -> None:
     prompt = build_action_system_prompt(
-        _FakeSession(
-            cli_agent_messages=[("user", "hello")],
-            configured_integrations=("github",),
-            configured_integrations_known=True,
+        _ctx(
+            messages=[("user", "hello")],
+            integrations=("github",),
+            integrations_known=True,
         )
     )
     assert "CONNECTED INTEGRATIONS (this install, right now): github" in prompt

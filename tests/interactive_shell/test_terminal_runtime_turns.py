@@ -20,7 +20,7 @@ from interactive_shell.tools import (
 from interactive_shell.tools import (
     slash_tool as _slash_tool,
 )
-from interactive_shell.turn_accounting import (
+from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
 
@@ -169,10 +169,8 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
         text: str,
         _session: ReplSession,
         _console: Console,
-        confirm_fn=None,
-        is_tty=None,
+        **kwargs: object,
     ) -> ToolCallingTurnResult:
-        _ = confirm_fn, is_tty
         action_calls.append(text)
         return ToolCallingTurnResult(
             planned_count=2,
@@ -186,13 +184,8 @@ def test_handle_message_with_agent_nitro_prompt_uses_cli_agent_actions(
         text: str,
         _session: ReplSession,
         _console: Console,
-        *,
-        confirm_fn=None,
-        is_tty=None,
-        tool_observation: str | None = None,
-        tool_observation_on_screen: bool = True,
+        **kwargs: object,
     ) -> None:
-        _ = confirm_fn, is_tty, tool_observation, tool_observation_on_screen
         llm_calls.append(text)
 
     session = ReplSession()

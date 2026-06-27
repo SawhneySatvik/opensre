@@ -3,30 +3,30 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from interactive_shell.harness.llm_context.system_prompt import (
     _SYSTEM_PROMPT_BASE,
 )
 from interactive_shell.harness.state.conversation_history import format_recent_conversation
+from interactive_shell.harness.turn_context import TurnContext
 
 _MAX_TEXT_LEN = 512
 _USER_TEMPLATE = "USER MESSAGE (literal): <<<{text}>>>"
 
 
-def build_action_system_prompt(session: Any | None) -> str:
+def build_action_system_prompt(turn_ctx: TurnContext) -> str:
     return (
         _SYSTEM_PROMPT_BASE
         + "\n\n"
-        + connected_integrations_block(session)
-        + recent_conversation_block(session)
+        + connected_integrations_block(turn_ctx)
+        + recent_conversation_block(turn_ctx)
     )
 
 
-def connected_integrations_block(session: Any | None) -> str:
+def connected_integrations_block(turn_ctx: TurnContext) -> str:
     """Render which integrations are connected for this shell action turn."""
-    known = bool(getattr(session, "configured_integrations_known", False))
-    configured = tuple(getattr(session, "configured_integrations", ()) or ())
+    known = turn_ctx.configured_integrations_known
+    configured = turn_ctx.configured_integrations
     if known and configured:
         listing = ", ".join(sorted(str(name) for name in configured))
     elif known:
@@ -43,8 +43,8 @@ def connected_integrations_block(session: Any | None) -> str:
     return f"CONNECTED INTEGRATIONS (this install, right now): {listing}\n{gate_note}\n"
 
 
-def recent_conversation_block(session: Any | None) -> str:
-    history = format_recent_conversation(session)
+def recent_conversation_block(turn_ctx: TurnContext) -> str:
+    history = format_recent_conversation(list(turn_ctx.conversation_messages))
     return (
         "RECENT CONVERSATION (context only, oldest first; use it ONLY to resolve "
         "follow-up references in the USER MESSAGE below — do NOT re-run turns that "

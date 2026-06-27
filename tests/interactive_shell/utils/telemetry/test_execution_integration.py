@@ -6,7 +6,7 @@ from rich.console import Console
 
 from interactive_shell.harness.agent import handle_message_with_agent
 from interactive_shell.session import ReplSession
-from interactive_shell.turn_accounting import (
+from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
 from interactive_shell.utils.telemetry import LlmRunInfo

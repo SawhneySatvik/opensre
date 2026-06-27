@@ -6,7 +6,7 @@ tool-calling loop: it assembles the available agent tools, drives the loop while
 the executed tool calls into a facts-only :class:`ToolCallingTurnResult`.
 
 Accounting/analytics for the turn live in
-:mod:`interactive_shell.turn_accounting`; this module emits none itself.
+:mod:`interactive_shell.runtime.core.turn_accounting`; this module emits none itself.
 """
 
 from __future__ import annotations
@@ -28,10 +28,11 @@ from interactive_shell.harness.llm_context import (
     build_action_user_message,
 )
 from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
+from interactive_shell.harness.turn_context import TurnContext
+from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
 from interactive_shell.session import ReplSession
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
-from interactive_shell.turn_accounting import ToolCallingTurnResult
 from interactive_shell.ui.action_rendering import ActionRenderObserver
 from interactive_shell.ui.streaming import render_response_header
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -160,8 +161,15 @@ def run_tool_calling_turn(
     confirm_fn: Callable[[str], str] | None = None,
     is_tty: bool | None = None,
     deps: ToolCallingDeps | None = None,
+    turn_ctx: TurnContext | None = None,
 ) -> ToolCallingTurnResult:
-    """Run one shell tool-calling turn through the shared agent harness."""
+    """Run one shell tool-calling turn through the shared agent harness.
+
+    ``turn_ctx`` is the immutable per-turn snapshot assembled at turn start
+    in ``handle_message_with_agent``. When present it is used to build the
+    action-agent system prompt so the prompt reflects turn-start state rather
+    than the live (potentially mid-mutation) session.
+    """
     history_start = len(session.history)
     ctx = ToolContext(
         session=session,
@@ -192,7 +200,8 @@ def run_tool_calling_turn(
             deps.llm_factory if deps is not None and deps.llm_factory else _default_llm_factory
         )
         user_message = build_action_user_message(message)
-        system_prompt = build_action_system_prompt(session)
+        effective_ctx = turn_ctx or TurnContext.from_session(message, session)
+        system_prompt = build_action_system_prompt(effective_ctx)
 
     try:
         result = Agent(

@@ -30,6 +30,7 @@ from rich.markup import escape
 
 from core.domain.alerts.alert_source import SECONDARY_TOOL_SOURCES
 from interactive_shell.harness.state.conversation_history import (
+    MAX_CONVERSATION_MESSAGES,
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
 )
@@ -225,7 +226,8 @@ def _resolve_gather_integrations(session: ReplSession, message: str) -> dict[str
 
 
 def _build_gather_user_message(session: ReplSession, message: str) -> str:
-    history = format_recent_conversation(session, max_turns=3)
+    messages = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
+    history = format_recent_conversation(messages, max_turns=3)
     if history == NO_HISTORY_PLACEHOLDER:
         return message
     return f"Recent conversation:\n{history}\n\nCurrent question:\n{message}"

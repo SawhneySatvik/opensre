@@ -50,6 +50,7 @@ from interactive_shell.harness.state.conversation_history import (
     format_recent_conversation,
 )
 from interactive_shell.harness.tool_calling import run_tool_calling_turn
+from interactive_shell.harness.turn_context import TurnContext
 from interactive_shell.runtime import ReplSession
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.state import (
@@ -58,6 +59,11 @@ from interactive_shell.runtime.core.state import (
     SpinnerState,
 )
 from interactive_shell.runtime.core.token_accounting import build_llm_run_info
+from interactive_shell.runtime.core.turn_accounting import (
+    ShellTurnAccounting,
+    ShellTurnResult,
+    ToolCallingTurnResult,
+)
 from interactive_shell.runtime.input import (
     PromptInputReader,
 )
@@ -72,11 +78,6 @@ from interactive_shell.runtime.utils.input_policy import (
 )
 from interactive_shell.session import SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST
 from interactive_shell.tools.tool_gathering import gather_tool_evidence
-from interactive_shell.turn_accounting import (
-    ShellTurnAccounting,
-    ShellTurnResult,
-    ToolCallingTurnResult,
-)
 from interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -160,20 +161,88 @@ _ACTION_CAPABILITY: dict[str, str] = {
 }
 
 
+def _as_text(value: object) -> str:
+    return str(value or "").strip()
+
+
+@dataclass(frozen=True)
+class ActionPlanAction:
+    """Typed representation of a single action emitted by the CLI agent."""
+
+    kind: str
+    provider: str = ""
+    model: str = ""
+    toolcall_model: str = ""
+    command: str = ""
+    args: str = ""
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, object]) -> ActionPlanAction | None:
+        kind = _as_text(payload.get("action"))
+
+        if not kind and _as_text(payload.get("provider")):
+            kind = "switch_llm_provider"
+
+        if not kind and _as_text(payload.get("command")):
+            kind = "slash"
+
+        if not kind:
+            return None
+
+        return cls(
+            kind=kind,
+            provider=_as_text(payload.get("provider")),
+            model=_as_text(payload.get("model")),
+            toolcall_model=_as_text(payload.get("toolcall_model")),
+            command=_as_text(payload.get("command")),
+            args=_as_text(payload.get("args")),
+        )
+
+    @property
+    def capability(self) -> str | None:
+        return _ACTION_CAPABILITY.get(self.kind)
+
+    @property
+    def label(self) -> str:
+        if self.kind == "switch_llm_provider":
+            text = f"switch LLM provider to {self.provider}"
+            if self.model:
+                text += f" ({self.model})"
+            if self.toolcall_model:
+                text += f" + toolcall {self.toolcall_model}"
+            return text
+
+        if self.kind == "switch_toolcall_model":
+            return (
+                f"switch toolcall model to {self.model}" if self.model else "switch toolcall model"
+            )
+
+        if self.kind == "slash":
+            return self.command
+
+        if self.kind == "run_cli_command":
+            return f"opensre {self.args}" if self.args else "opensre"
+
+        if self.kind == "run_interactive":
+            return self.command or "interactive command"
+
+        return f"unsupported action: {self.kind or '?'}"
+
+
 def _actions_allowed_by_capabilities(
-    actions: list[dict[str, object]], session: ReplSession
-) -> list[dict[str, object]]:
+    actions: list[ActionPlanAction], session: ReplSession
+) -> list[ActionPlanAction]:
     """Drop actions whose capability surface is explicitly disabled for *session*."""
     from interactive_shell.tools.tool_contracts import (
         capability_not_explicitly_disabled,
     )
 
-    allowed: list[dict[str, object]] = []
-    for action in actions:
-        capability = _ACTION_CAPABILITY.get(str(action.get("action", "")).strip())
-        if capability is None or capability_not_explicitly_disabled(session, capability):
-            allowed.append(action)
-    return allowed
+    return [
+        action
+        for action in actions
+        if action.capability is None
+        or capability_not_explicitly_disabled(session, action.capability)
+    ]
 
 
 def _opensre_integration_command_blocked(payload: str, session: ReplSession) -> bool:
@@ -204,26 +273,20 @@ def _extract_json_object(text: str) -> dict[str, object] | None:
     return None
 
 
-def _normalize_action(action: dict[str, object]) -> dict[str, object] | None:
-    normalized = dict(action)
-    kind = str(normalized.get("action", "")).strip()
-    if not kind and str(normalized.get("provider", "")).strip():
-        normalized["action"] = "switch_llm_provider"
-        return normalized
-    if not kind and str(normalized.get("command", "")).strip():
-        normalized["action"] = "slash"
-        return normalized
-    return normalized if kind else None
+def _normalize_action(action: dict[str, object]) -> ActionPlanAction | None:
+    return ActionPlanAction.from_payload(action)
 
 
-def _parse_action_plan(text: str) -> list[dict[str, object]]:
+def _parse_action_plan(text: str) -> list[ActionPlanAction]:
     payload = _extract_json_object(text)
     if payload is None:
         return []
+
     actions = payload.get("actions")
     if not isinstance(actions, list):
         normalized = _normalize_action(payload)
         return [normalized] if normalized is not None else []
+
     return [
         normalized
         for action in actions
@@ -231,6 +294,234 @@ def _parse_action_plan(text: str) -> list[dict[str, object]]:
         for normalized in [_normalize_action(action)]
         if normalized is not None
     ]
+
+
+def _execute_action_plan(
+    actions: list[ActionPlanAction],
+    session: ReplSession,
+    console: Console,
+    *,
+    confirm_fn: Callable[[str], str] | None = None,
+    is_tty: bool | None = None,
+) -> bool:
+    return _ActionPlanExecutor(
+        session=session,
+        console=console,
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+    ).execute(actions)
+
+
+class _ActionPlanExecutor:
+    def __init__(
+        self,
+        *,
+        session: ReplSession,
+        console: Console,
+        confirm_fn: Callable[[str], str] | None,
+        is_tty: bool | None,
+    ) -> None:
+        self.session = session
+        self.console = console
+        self.confirm_fn = confirm_fn
+        self.is_tty = is_tty
+
+    def execute(self, actions: list[ActionPlanAction]) -> bool:
+        if not actions:
+            return False
+
+        actions = _actions_allowed_by_capabilities(actions, self.session)
+        if not actions:
+            return False
+
+        self._print_requested_actions(actions)
+
+        for action in actions:
+            self.console.print()
+            self._execute_one(action)
+
+        self.console.print()
+        return True
+
+    def _execute_one(self, action: ActionPlanAction) -> None:
+        handlers: dict[str, Callable[[ActionPlanAction], None]] = {
+            "switch_llm_provider": self._switch_llm_provider,
+            "switch_toolcall_model": self._switch_toolcall_model,
+            "slash": self._slash,
+            "run_cli_command": self._run_cli_command,
+            "run_interactive": self._run_interactive,
+        }
+
+        handler = handlers.get(action.kind)
+        if handler is None:
+            self._error(f"unsupported action: {action.kind or '?'}")
+            return
+
+        handler(action)
+
+    def _print_requested_actions(self, actions: list[ActionPlanAction]) -> None:
+        self.console.print()
+        self.console.print(f"[{BOLD_BRAND}]{STREAM_LABEL_ASSISTANT}:[/]")
+        self.console.print(f"[{DIM}]Requested actions:[/]")
+
+        for index, action in enumerate(actions, start=1):
+            self.console.print(f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{escape(action.label)}[/]")
+
+        self.console.print()
+
+    def _switch_llm_provider(self, action: ActionPlanAction) -> None:
+        from interactive_shell.command_registry import switch_llm_provider
+        from interactive_shell.tools.shared import allow_tool
+        from interactive_shell.ui.execution_confirm import execution_allowed
+
+        if not action.provider:
+            self._error("missing provider for switch_llm_provider action")
+            return
+
+        slash_label = f"/model set {action.provider}"
+        if action.model:
+            slash_label += f" {action.model}"
+        if action.toolcall_model:
+            slash_label += f" --toolcall-model {action.toolcall_model}"
+
+        policy = allow_tool("switch_llm_provider")
+        if not execution_allowed(
+            policy,
+            session=self.session,
+            console=self.console,
+            action_summary=slash_label,
+            confirm_fn=self.confirm_fn,
+            is_tty=self.is_tty,
+            action_already_listed=True,
+        ):
+            return
+
+        self.console.print(f"[bold]$ {escape(slash_label)}[/bold]")
+        switch_llm_provider(
+            action.provider,
+            self.console,
+            model=action.model or None,
+            toolcall_model=action.toolcall_model or None,
+        )
+        self.session.record("slash", slash_label)
+
+    def _switch_toolcall_model(self, action: ActionPlanAction) -> None:
+        from interactive_shell.command_registry import switch_toolcall_model
+        from interactive_shell.tools.shared import allow_tool
+        from interactive_shell.ui.execution_confirm import execution_allowed
+
+        if not action.model:
+            self._error("missing model for switch_toolcall_model action")
+            return
+
+        slash_label = f"/model toolcall set {action.model}"
+
+        policy = allow_tool("switch_toolcall_model")
+        if not execution_allowed(
+            policy,
+            session=self.session,
+            console=self.console,
+            action_summary=slash_label,
+            confirm_fn=self.confirm_fn,
+            is_tty=self.is_tty,
+            action_already_listed=True,
+        ):
+            return
+
+        self.console.print(f"[bold]$ {escape(slash_label)}[/bold]")
+        switch_toolcall_model(action.model, self.console)
+        self.session.record("slash", slash_label)
+
+    def _slash(self, action: ActionPlanAction) -> None:
+        from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
+        from interactive_shell.tools.shared import allow_tool
+        from interactive_shell.ui.execution_confirm import execution_allowed
+
+        command = action.command
+        if command not in _ALLOWED_SLASH_ACTIONS:
+            self._error(f"unsupported action command: {command}")
+            return
+
+        stripped = command.strip()
+        parts = stripped.split()
+        name = parts[0].lower()
+        cmd_slash = SLASH_COMMANDS.get(name)
+
+        if cmd_slash is None:
+            dispatch_slash(
+                command,
+                self.session,
+                self.console,
+                confirm_fn=self.confirm_fn,
+                is_tty=self.is_tty,
+            )
+            return
+
+        policy = allow_tool("slash")
+        if not execution_allowed(
+            policy,
+            session=self.session,
+            console=self.console,
+            action_summary=stripped,
+            confirm_fn=self.confirm_fn,
+            is_tty=self.is_tty,
+            action_already_listed=True,
+        ):
+            self.session.record("slash", stripped, ok=False)
+            return
+
+        self.console.print(f"[bold]$ {escape(command)}[/bold]")
+        dispatch_slash(
+            command,
+            self.session,
+            self.console,
+            confirm_fn=self.confirm_fn,
+            is_tty=self.is_tty,
+            policy_precleared=True,
+        )
+
+    def _run_cli_command(self, action: ActionPlanAction) -> None:
+        if not action.args:
+            self._error("missing args for run_cli_command action")
+            return
+
+        if _opensre_integration_command_blocked(action.args, self.session):
+            self.console.print(
+                f"[{WARNING}]integration command blocked: no integrations are configured "
+                "in this session.[/]"
+            )
+            return
+
+        from interactive_shell.runtime.subprocess_runner import run_opensre_cli_command
+
+        run_opensre_cli_command(
+            action.args,
+            self.session,
+            self.console,
+            confirm_fn=self.confirm_fn,
+            is_tty=self.is_tty,
+        )
+
+    def _run_interactive(self, action: ActionPlanAction) -> None:
+        command = action.command
+
+        if not _registered_interactive_command(command):
+            self._error(f"unsupported interactive command: {command}")
+            return
+
+        from interactive_shell.ui.components.choice_menu import repl_tty_interactive
+
+        if not repl_tty_interactive():
+            self.console.print(
+                f"Run [bold]{escape(command)}[/bold] in the interactive shell to continue."
+            )
+            return
+
+        self.console.print(f"[{DIM}]Launching[/] [{BOLD_BRAND}]{escape(command)}[/]…")
+        self.session.queue_auto_command(command)
+
+    def _error(self, message: str) -> None:
+        self.console.print(f"[{ERROR}]{escape(message)}[/]")
 
 
 # ---------------------------------------------------------------------------
@@ -319,222 +610,12 @@ def _load_synthetic_observation_text(
     return raw
 
 
-def _execute_action_plan(
-    actions: list[dict[str, object]],
-    session: ReplSession,
-    console: Console,
-    *,
-    confirm_fn: Callable[[str], str] | None = None,
-    is_tty: bool | None = None,
-) -> bool:
-    if not actions:
-        return False
-
-    actions = _actions_allowed_by_capabilities(actions, session)
-    if not actions:
-        return False
-
-    from interactive_shell.command_registry import (
-        SLASH_COMMANDS,
-        dispatch_slash,
-        switch_llm_provider,
-        switch_toolcall_model,
-    )
-    from interactive_shell.tools.shared import allow_tool
-    from interactive_shell.ui.execution_confirm import execution_allowed
-
-    console.print()
-    console.print(f"[{BOLD_BRAND}]{STREAM_LABEL_ASSISTANT}:[/]")
-    console.print(f"[{DIM}]Requested actions:[/]")
-    for index, action in enumerate(actions, start=1):
-        kind = str(action.get("action", "")).strip()
-        if kind == "switch_llm_provider":
-            provider = str(action.get("provider", "")).strip()
-            model = str(action.get("model", "")).strip()
-            toolcall = str(action.get("toolcall_model", "")).strip()
-            label = f"switch LLM provider to {provider}"
-            if model:
-                label += f" ({model})"
-            if toolcall:
-                label += f" + toolcall {toolcall}"
-        elif kind == "switch_toolcall_model":
-            requested = str(action.get("model", "")).strip()
-            label = (
-                f"switch toolcall model to {requested}" if requested else "switch toolcall model"
-            )
-        elif kind == "slash":
-            label = str(action.get("command", "")).strip()
-        elif kind == "run_cli_command":
-            args = str(action.get("args", "")).strip()
-            label = f"opensre {args}" if args else "opensre"
-        elif kind == "run_interactive":
-            label = str(action.get("command", "")).strip() or "interactive command"
-        else:
-            label = f"unsupported action: {kind or '?'}"
-        console.print(f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{escape(label)}[/]")
-
-    console.print()
-    for action in actions:
-        kind = str(action.get("action", "")).strip()
-        console.print()
-        if kind == "switch_llm_provider":
-            provider = str(action.get("provider", "")).strip()
-            requested_model = str(action.get("model", "")).strip() or None
-            requested_toolcall = str(action.get("toolcall_model", "")).strip() or None
-            if not provider:
-                console.print(f"[{ERROR}]missing provider for switch_llm_provider action[/]")
-                continue
-            slash_label = f"/model set {provider}"
-            if requested_model:
-                slash_label += f" {requested_model}"
-            if requested_toolcall:
-                slash_label += f" --toolcall-model {requested_toolcall}"
-            pol = allow_tool("switch_llm_provider")
-            if not execution_allowed(
-                pol,
-                session=session,
-                console=console,
-                action_summary=slash_label,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                action_already_listed=True,
-            ):
-                continue
-            console.print(f"[bold]$ {escape(slash_label)}[/bold]")
-            switch_llm_provider(
-                provider,
-                console,
-                model=requested_model,
-                toolcall_model=requested_toolcall,
-            )
-            session.record("slash", slash_label)
-            continue
-
-        if kind == "switch_toolcall_model":
-            requested_model = str(action.get("model", "")).strip()
-            if not requested_model:
-                console.print(f"[{ERROR}]missing model for switch_toolcall_model action[/]")
-                continue
-            pol = allow_tool("switch_toolcall_model")
-            if not execution_allowed(
-                pol,
-                session=session,
-                console=console,
-                action_summary=f"/model toolcall set {requested_model}",
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                action_already_listed=True,
-            ):
-                continue
-            console.print(f"[bold]$ /model toolcall set {escape(requested_model)}[/bold]")
-            switch_toolcall_model(requested_model, console)
-            session.record("slash", f"/model toolcall set {requested_model}")
-            continue
-
-        if kind == "slash":
-            command = str(action.get("command", "")).strip()
-            if command not in _ALLOWED_SLASH_ACTIONS:
-                console.print(f"[{ERROR}]unsupported action command:[/] {escape(command)}")
-                continue
-            stripped = command.strip()
-            parts = stripped.split()
-            name = parts[0].lower()
-            cmd_slash = SLASH_COMMANDS.get(name)
-            if cmd_slash is None:
-                dispatch_slash(
-                    command,
-                    session,
-                    console,
-                    confirm_fn=confirm_fn,
-                    is_tty=is_tty,
-                )
-                continue
-            policy = allow_tool("slash")
-            if not execution_allowed(
-                policy,
-                session=session,
-                console=console,
-                action_summary=stripped,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                action_already_listed=True,
-            ):
-                session.record("slash", stripped, ok=False)
-                continue
-            console.print(f"[bold]$ {escape(command)}[/bold]")
-            dispatch_slash(
-                command,
-                session,
-                console,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                policy_precleared=True,
-            )
-            continue
-
-        if kind == "run_cli_command":
-            args = str(action.get("args", "")).strip()
-            if not args:
-                console.print(f"[{ERROR}]missing args for run_cli_command action[/]")
-                continue
-            if _opensre_integration_command_blocked(args, session):
-                console.print(
-                    f"[{WARNING}]integration command blocked: no integrations are configured "
-                    "in this session.[/]"
-                )
-                continue
-            from interactive_shell.runtime.subprocess_runner import (
-                run_opensre_cli_command,
-            )
-
-            run_opensre_cli_command(
-                args,
-                session,
-                console,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-            )
-            continue
-
-        if kind == "run_interactive":
-            command = str(action.get("command", "")).strip()
-            if not _registered_interactive_command(command):
-                console.print(f"[{ERROR}]unsupported interactive command:[/] {escape(command)}")
-                continue
-            from interactive_shell.ui.components.choice_menu import repl_tty_interactive
-
-            if not repl_tty_interactive():
-                console.print(
-                    f"Run [bold]{escape(command)}[/bold] in the interactive shell to continue."
-                )
-                continue
-            console.print(f"[{DIM}]Launching[/] [{BOLD_BRAND}]{escape(command)}[/]…")
-            session.queue_auto_command(command)
-            continue
-
-        console.print(f"[{ERROR}]unsupported action:[/] {escape(kind or '?')}")
-    console.print()
-    return True
+# ---------------------------------------------------------------------------
+# CLI agent answer
+# ---------------------------------------------------------------------------
 
 
-def _record_cli_agent_turn(session: ReplSession, message: str, assistant_text: str) -> None:
-    session.cli_agent_messages.append(("user", message))
-    session.cli_agent_messages.append(("assistant", assistant_text))
-    if len(session.cli_agent_messages) > MAX_CONVERSATION_MESSAGES:
-        session.cli_agent_messages[:] = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
-
-
-def answer_cli_agent(
-    message: str,
-    session: ReplSession,
-    console: Console,
-    *,
-    confirm_fn: Callable[[str], str] | None = None,
-    is_tty: bool | None = None,
-    tool_observation: str | None = None,
-    tool_observation_on_screen: bool = True,
-) -> LlmRunInfo | None:
-    """Run one turn of the terminal assistant (guidance only; no investigation run)."""
+def _load_reasoning_client(console: Console) -> Any | None:
     try:
         from core.runtime.llm.llm_client import get_llm_for_reasoning
     except Exception as exc:
@@ -542,23 +623,62 @@ def answer_cli_agent(
         console.print(f"[{ERROR}]LLM client unavailable:[/] {escape(str(exc))}")
         return None
 
+    return get_llm_for_reasoning()
+
+
+def _build_integration_guard(ctx: TurnContext) -> str:
+    if not (ctx.configured_integrations_known and not ctx.configured_integrations):
+        return ""
+
+    return (
+        "No integrations are configured in this session. You may still help the user "
+        "configure one: when they ask to set up, connect, or add an integration, emit a "
+        "run_interactive action for `/integrations setup <service>` (or `/mcp connect "
+        "<server>`). Do NOT emit run_cli_command or slash actions to show/verify/remove "
+        "integrations that are not configured; for those, answer with guidance only.\n\n"
+    )
+
+
+def _build_synthetic_failure_block(ctx: TurnContext) -> str:
+    obs_path = ctx.last_synthetic_observation_path
+    if not obs_path:
+        return ""
+
+    if not _user_message_requests_synthetic_failure_explanation(ctx.text):
+        return ""
+
+    obs_text = _load_synthetic_observation_text(obs_path)
+    if not obs_text:
+        return ""
+
+    return (
+        "The user is asking about a failed `opensre tests synthetic` run "
+        "in this checkout. The JSON below is the saved observation "
+        f"(scores, gates, stderr summary). Path: {obs_path}\n"
+        "Use it to explain validation failures. Do not say nothing ran or "
+        "that you lack context — the run completed and this file was written.\n\n"
+        f"--- observation_json ---\n{obs_text}\n\n"
+    )
+
+
+def _build_cli_agent_prompt(
+    *,
+    message: str,
+    session: ReplSession,
+    tool_observation: str | None,
+    tool_observation_on_screen: bool,
+    turn_ctx: TurnContext,
+) -> str:
     reference = build_cli_reference_text()
     agents_md = build_agents_md_reference_text()
     investigation_flow = build_investigation_flow_reference_text()
     log_grounding_cache_diagnostics("cli_agent_grounding")
-    history = format_recent_conversation(session)
+
+    history = format_recent_conversation(list(turn_ctx.conversation_messages))
     prior_investigation = (
-        _summarize_last_state(session.last_state) if session.last_state is not None else ""
+        _summarize_last_state(turn_ctx.last_state) if turn_ctx.last_state is not None else ""
     )
-    integration_guard = ""
-    if session.configured_integrations_known and not session.configured_integrations:
-        integration_guard = (
-            "No integrations are configured in this session. You may still help the user "
-            "configure one: when they ask to set up, connect, or add an integration, emit a "
-            "run_interactive action for `/integrations setup <service>` (or `/mcp connect "
-            "<server>`). Do NOT emit run_cli_command or slash actions to show/verify/remove "
-            "integrations that are not configured; for those, answer with guidance only.\n\n"
-        )
+
     system = _build_system_prompt(
         reference,
         history,
@@ -567,27 +687,24 @@ def answer_cli_agent(
         prior_investigation=prior_investigation,
         environment=_build_environment_block(session),
     )
-    user_block = f"--- User message ---\n{message}"
-    synthetic_block = ""
-    obs_path = session.last_synthetic_observation_path
-    if obs_path and _user_message_requests_synthetic_failure_explanation(message):
-        obs_text = _load_synthetic_observation_text(obs_path)
-        if obs_text:
-            synthetic_block = (
-                "The user is asking about a failed `opensre tests synthetic` run "
-                "in this checkout. The JSON below is the saved observation "
-                f"(scores, gates, stderr summary). Path: {obs_path}\n"
-                "Use it to explain validation failures. Do not say nothing ran or "
-                "that you lack context — the run completed and this file was written.\n\n"
-                f"--- observation_json ---\n{obs_text}\n\n"
-            )
-    observation_block = _build_observation_block(
-        tool_observation, on_screen=tool_observation_on_screen
-    )
-    prompt = f"{system}\n{integration_guard}{observation_block}{synthetic_block}{user_block}"
 
+    return (
+        f"{system}\n"
+        f"{_build_integration_guard(turn_ctx)}"
+        f"{_build_observation_block(tool_observation, on_screen=tool_observation_on_screen)}"
+        f"{_build_synthetic_failure_block(turn_ctx)}"
+        f"--- User message ---\n{message}"
+    )
+
+
+def _stream_cli_agent_response(
+    *,
+    client: Any,
+    prompt: str,
+    session: ReplSession,
+    console: Console,
+) -> LlmRunInfo | None:
     try:
-        client = get_llm_for_reasoning()
         started = time.monotonic()
         text_str = stream_to_console(
             console,
@@ -607,7 +724,7 @@ def answer_cli_agent(
         console.print(f"[{ERROR}]assistant failed:[/] {escape(str(exc))}")
         return None
 
-    run_info = build_llm_run_info(
+    return build_llm_run_info(
         session=session,
         prompt=prompt,
         response_text=text_str,
@@ -615,30 +732,153 @@ def answer_cli_agent(
         client=client,
     )
 
+
+def _render_json_like_response(console: Console, text: str) -> None:
+    if not text.lstrip().startswith("{") or not text.strip():
+        return
+
+    console.print()
+    console.print(f"[{BOLD_BRAND}]{STREAM_LABEL_ASSISTANT}:[/]")
+    with console.use_theme(MARKDOWN_THEME):
+        console.print(Markdown(text, code_theme="ansi_dark"))
+    console.print()
+
+
+def _record_cli_agent_turn(session: ReplSession, message: str, assistant_text: str) -> None:
+    session.cli_agent_messages.append(("user", message))
+    session.cli_agent_messages.append(("assistant", assistant_text))
+    if len(session.cli_agent_messages) > MAX_CONVERSATION_MESSAGES:
+        session.cli_agent_messages[:] = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
+
+
+def answer_cli_agent(
+    message: str,
+    session: ReplSession,
+    console: Console,
+    *,
+    confirm_fn: Callable[[str], str] | None = None,
+    is_tty: bool | None = None,
+    tool_observation: str | None = None,
+    tool_observation_on_screen: bool = True,
+    turn_ctx: TurnContext | None = None,
+) -> LlmRunInfo | None:
+    """Run one turn of the terminal assistant (guidance only; no investigation run).
+
+    ``turn_ctx`` is the immutable per-turn snapshot assembled at turn start.
+    When present, snapshot fields (conversation history, integration state,
+    prior investigation, synthetic-run path) are read from it rather than from
+    the live session, so prompt construction reflects a stable turn-start view.
+    """
+    client = _load_reasoning_client(console)
+    if client is None:
+        return None
+
+    ctx = turn_ctx or TurnContext.from_session(message, session)
+
+    prompt = _build_cli_agent_prompt(
+        message=message,
+        session=session,
+        tool_observation=tool_observation,
+        tool_observation_on_screen=tool_observation_on_screen,
+        turn_ctx=ctx,
+    )
+
+    run_info = _stream_cli_agent_response(
+        client=client,
+        prompt=prompt,
+        session=session,
+        console=console,
+    )
+    if run_info is None:
+        return None
+
+    text_str = run_info.response_text or ""
     actions = _parse_action_plan(text_str)
-    if _execute_action_plan(
+
+    handled = _execute_action_plan(
         actions,
         session,
         console,
         confirm_fn=confirm_fn,
         is_tty=is_tty,
-    ):
-        _record_cli_agent_turn(session, message, text_str)
-        return run_info
+    )
 
     _record_cli_agent_turn(session, message, text_str)
 
-    if text_str.lstrip().startswith("{") and text_str.strip():
-        console.print()
-        console.print(f"[{BOLD_BRAND}]{STREAM_LABEL_ASSISTANT}:[/]")
-        with console.use_theme(MARKDOWN_THEME):
-            console.print(Markdown(text_str, code_theme="ansi_dark"))
-        console.print()
+    if not handled:
+        _render_json_like_response(console, text_str)
+
     return run_info
 
 
 def _response_text(run: LlmRunInfo | None) -> str:
     return run.response_text if run is not None and run.response_text else ""
+
+
+# ---------------------------------------------------------------------------
+# Turn dispatch
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _TurnDependencies:
+    execute_actions: RunToolCallingTurn
+    gather_evidence: GatherEvidence
+    answer_agent: AnswerAgent
+
+    @classmethod
+    def from_optional(
+        cls,
+        *,
+        execute_actions: RunToolCallingTurn | None,
+        gather_evidence: GatherEvidence | None,
+        answer_agent: AnswerAgent | None,
+    ) -> _TurnDependencies:
+        return cls(
+            execute_actions=execute_actions or run_tool_calling_turn,
+            gather_evidence=gather_evidence or gather_tool_evidence,
+            answer_agent=answer_agent or answer_cli_agent,
+        )
+
+
+def _should_summarize_action_observation(
+    action_result: ToolCallingTurnResult,
+    observation: str | None,
+) -> bool:
+    return (
+        action_result.handled
+        and observation is not None
+        and action_result.executed_success_count > 0
+    )
+
+
+def _gather_and_answer(
+    *,
+    text: str,
+    session: ReplSession,
+    console: Console,
+    deps: _TurnDependencies,
+    confirm_fn: Callable[[str], str] | None,
+    is_tty: bool | None,
+    turn_ctx: TurnContext,
+) -> LlmRunInfo | None:
+    gathered = deps.gather_evidence(text, session, console, is_tty=is_tty)
+
+    # Only pass tool_observation_on_screen when there is gathered content to
+    # display (False = output is off-screen; omit = nothing was gathered).
+    extra: dict[str, object] = {"turn_ctx": turn_ctx}
+    if gathered:
+        extra["tool_observation_on_screen"] = False
+
+    return deps.answer_agent(
+        text,
+        session,
+        console,
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+        tool_observation=gathered or None,
+        **extra,  # type: ignore[arg-type]
+    )
 
 
 def handle_message_with_agent(
@@ -660,41 +900,45 @@ def handle_message_with_agent(
     2. ``action_handled`` — the action fully handled the turn; stop without the LLM.
     3. ``gather_and_answer`` — nothing was handled; gather evidence and answer.
     """
-    execute_actions = execute_actions or run_tool_calling_turn
-    gather_evidence = gather_evidence or gather_tool_evidence
-    answer_agent = answer_agent or answer_cli_agent
+    # Snapshot session state before any turn mutations. Both the action agent
+    # and the conversational assistant read from this frozen context so their
+    # prompts reflect a consistent turn-start view rather than live session state.
+    turn_ctx = TurnContext.from_session(text, session)
 
+    deps = _TurnDependencies.from_optional(
+        execute_actions=execute_actions,
+        gather_evidence=gather_evidence,
+        answer_agent=answer_agent,
+    )
     accounting = ShellTurnAccounting(session=session, text=text, recorder=recorder)
 
     # Clear any observation left by a prior turn so only this turn's discovery
     # output can trigger a summary pass.
     session.last_command_observation = None
 
-    action_result = execute_actions(
+    action_result = deps.execute_actions(
         text,
         session,
         console,
         confirm_fn=confirm_fn,
         is_tty=is_tty,
+        turn_ctx=turn_ctx,
     )
     accounting.record_action_result(action_result)
 
     observation = session.last_command_observation
 
-    if (
-        action_result.handled
-        and observation is not None
-        and action_result.executed_success_count > 0
-    ):
+    if _should_summarize_action_observation(action_result, observation):
         # Path 1: a successful terminal action left discovery output worth summarizing.
-        with apply_reasoning_effort(session.reasoning_effort):
-            run = answer_agent(
+        with apply_reasoning_effort(turn_ctx.reasoning_effort):
+            run = deps.answer_agent(
                 text,
                 session,
                 console,
                 confirm_fn=confirm_fn,
                 is_tty=is_tty,
                 tool_observation=observation,
+                turn_ctx=turn_ctx,
             )
         result = ShellTurnResult(
             final_intent="cli_agent_summarized",
@@ -702,6 +946,7 @@ def handle_message_with_agent(
             assistant_response_text=_response_text(run),
             llm_run=run,
         )
+
     elif action_result.handled:
         # Path 2: the action fully handled the turn; stop without the LLM.
         result = ShellTurnResult(
@@ -709,29 +954,19 @@ def handle_message_with_agent(
             action_result=action_result,
             assistant_response_text=action_result.response_text,
         )
+
     else:
         # Path 3: nothing was handled; gather evidence and answer.
-        with apply_reasoning_effort(session.reasoning_effort):
-            gathered = gather_evidence(text, session, console, is_tty=is_tty)
-            if gathered:
-                run = answer_agent(
-                    text,
-                    session,
-                    console,
-                    confirm_fn=confirm_fn,
-                    is_tty=is_tty,
-                    tool_observation=gathered,
-                    tool_observation_on_screen=False,
-                )
-            else:
-                run = answer_agent(
-                    text,
-                    session,
-                    console,
-                    confirm_fn=confirm_fn,
-                    is_tty=is_tty,
-                    tool_observation=None,
-                )
+        with apply_reasoning_effort(turn_ctx.reasoning_effort):
+            run = _gather_and_answer(
+                text=text,
+                session=session,
+                console=console,
+                deps=deps,
+                confirm_fn=confirm_fn,
+                is_tty=is_tty,
+                turn_ctx=turn_ctx,
+            )
         result = ShellTurnResult(
             final_intent="cli_agent_fallback",
             action_result=action_result,
