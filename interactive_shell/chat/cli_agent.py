@@ -107,9 +107,8 @@ def _execute_action_plan(
     )
     from interactive_shell.harness.orchestration.execution_policy import (
         evaluate_llm_runtime_switch,
-        evaluate_slash_tier,
+        evaluate_slash_command,
         execution_allowed,
-        resolve_slash_execution_tier,
     )
 
     console.print()
@@ -208,7 +207,6 @@ def _execute_action_plan(
             stripped = command.strip()
             parts = stripped.split()
             name = parts[0].lower()
-            arg_list = parts[1:]
             cmd_slash = SLASH_COMMANDS.get(name)
             if cmd_slash is None:
                 dispatch_slash(
@@ -219,8 +217,7 @@ def _execute_action_plan(
                     is_tty=is_tty,
                 )
                 continue
-            tier = resolve_slash_execution_tier(name, arg_list, cmd_slash.execution_tier)
-            policy = evaluate_slash_tier(tier)
+            policy = evaluate_slash_command()
             if not execution_allowed(
                 policy,
                 session=session,

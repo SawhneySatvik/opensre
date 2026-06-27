@@ -6,9 +6,6 @@ from dataclasses import dataclass
 from typing import Any
 
 from interactive_shell.command_registry.types import SlashCommand
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.tools.tool_contracts import (
     object_schema,
     string_array_property,
@@ -27,7 +24,6 @@ class SlashCommandSpec:
     anti_examples: tuple[str, ...]
     usage: tuple[str, ...]
     examples: tuple[str, ...]
-    execution_tier: ExecutionTier
     args_schema: dict[str, Any] | None
 
 
@@ -387,7 +383,6 @@ def spec_from_command(command: SlashCommand) -> SlashCommandSpec:
         anti_examples=mcp.anti_examples,
         usage=command.usage,
         examples=command.examples,
-        execution_tier=command.execution_tier,
         args_schema=_derive_args_schema(command),
     )
 

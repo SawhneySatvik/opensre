@@ -8,7 +8,7 @@ safety. The only non-execution outcome is empty input.
 
 from __future__ import annotations
 
-from interactive_shell.harness.orchestration.shell_parsing import (
+from interactive_shell.tools.shell.parsing import (
     argv_for_repl_builtin_detection,
     parse_shell_command,
 )

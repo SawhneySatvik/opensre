@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from interactive_shell.harness.orchestration.command_dispatch import (
-    deterministic_command_text,
-)
 from interactive_shell.session import ReplSession
 from interactive_shell.ui.components.choice_menu import repl_tty_interactive
+
+
+def _literal_slash_command_text(text: str) -> str | None:
+    """Return literal ``/slash`` command text for command-shaped input, else ``None``.
+
+    Terminal-UI policy only (spinner suppression and exclusive-stdin gating). This
+    recognizes explicit literal slash commands; it must never become an execution
+    shortcut around the action agent.
+    """
+    stripped = text.strip()
+    return stripped if stripped.startswith("/") else None
 
 _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
     {
@@ -65,10 +73,10 @@ _WAIT_FOR_COMPLETION_COMMANDS: frozenset[str] = frozenset(
 
 
 def turn_should_show_spinner(text: str, _session: ReplSession) -> bool:
-    # This deterministic command check is UI-only. It must never become an
+    # This literal-command check is UI-only. It must never become an
     # execution shortcut; submitted turns still go through the LLM planner before
     # any slash or shell action can run.
-    return deterministic_command_text(text.strip()) is None
+    return _literal_slash_command_text(text.strip()) is None
 
 
 def turn_needs_exclusive_stdin(text: str, _session: ReplSession) -> bool:
@@ -81,7 +89,7 @@ def turn_needs_exclusive_stdin(text: str, _session: ReplSession) -> bool:
 
     # Reserve stdin early for literal command-shaped input, but do not dispatch
     # here. Execution remains planner-owned so there are no command fast paths.
-    dispatch_text = deterministic_command_text(t)
+    dispatch_text = _literal_slash_command_text(t)
     if dispatch_text is None:
         return False
 

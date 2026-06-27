@@ -122,13 +122,6 @@ def test_repl_input_lexer_highlights_first_slash_token() -> None:
     assert " show" in rest or rest.endswith(" show")
 
 
-def test_repl_input_lexer_highlights_bare_help_alias() -> None:
-    lexer = ReplInputLexer()
-    get_line = lexer.lex_document(Document("help", 4))
-    fragments = get_line(0)
-    assert ("class:repl-slash-command", "help") in fragments
-
-
 def test_build_prompt_session_uses_persistent_history(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -295,13 +288,6 @@ def test_tab_applies_unique_slash_command_completion() -> None:
     buff.insert_text("/mod")
     _tab_expand_or_menu(buff)
     assert buff.text == "/model"
-
-
-def test_tab_applies_unique_bareword_alias_completion() -> None:
-    buff = Buffer(completer=ShellCompleter())
-    buff.insert_text("hel")
-    _tab_expand_or_menu(buff)
-    assert buff.text == "help"
 
 
 def test_tab_with_open_completion_menu_applies_current_item() -> None:

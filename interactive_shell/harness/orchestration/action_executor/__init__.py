@@ -1,4 +1,8 @@
-"""Execute planned shell, sample alert, and synthetic test actions.
+"""Execute planned sample alert, synthetic test, and code-agent actions.
+
+Shell command execution lives in ``interactive_shell.tools.shell`` (parsing,
+policy, ``execute_shell_command``, and the ``run_shell_command`` / ``run_cd`` /
+``run_pwd`` runner); it is intentionally not re-exported here.
 
 Public API is stable: all names exported below are importable directly from
 ``action_executor`` and will remain so regardless of internal submodule changes.
@@ -48,8 +52,6 @@ from .opensre_cli_runner import (
     run_opensre_cli_command,
     run_opensre_cli_command_result,
 )
-from .shell_execution import execute_shell_command
-from .shell_runner import run_cd_command, run_pwd_command, run_shell_command
 from .synthetic_tasks import (
     run_synthetic_test,
     watch_synthetic_subprocess,
@@ -111,19 +113,15 @@ __all__ = [
     "_should_use_pty",
     "_start_task_output_streams",
     "_subprocess_env_with_aligned_width",
-    "execute_shell_command",
     "os",
     "print_interactive_wizard_handoff",
     "read_diag",
     "read_task_output",
     "run_claude_code_implementation",
-    "run_cd_command",
     "run_opensre_cli_command",
     "run_opensre_cli_command_result",
-    "run_pwd_command",
     "run_sample_alert",
     "run_text_investigation",
-    "run_shell_command",
     "run_synthetic_test",
     "start_background_cli_task",
     "subprocess",

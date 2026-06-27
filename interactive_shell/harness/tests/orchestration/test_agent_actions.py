@@ -15,7 +15,7 @@ from rich.console import Console
 
 import config.constants.platform as platform_module
 import interactive_shell.harness.orchestration.action_executor as action_executor
-import interactive_shell.harness.orchestration.action_executor.shell_execution as shell_execution
+import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.harness.orchestration.agent_actions as agent_actions
 import interactive_shell.tools.implementation_tool as implementation_tool
 import interactive_shell.tools.llm_provider_tool as llm_provider_tool

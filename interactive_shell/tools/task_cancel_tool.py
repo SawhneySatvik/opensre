@@ -7,7 +7,7 @@ from typing import Any
 
 from rich.markup import escape
 
-from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
+from interactive_shell.command_registry import dispatch_slash
 from interactive_shell.harness.orchestration.execution_policy import (
     execution_allowed,
     plan_slash_execution,
@@ -78,8 +78,7 @@ def execute_task_cancel_action(args: dict[str, Any], ctx: ToolContext) -> bool:
     if task_id is None:
         return True
     command = f"/cancel {task_id}"
-    cmd = SLASH_COMMANDS["/cancel"]
-    plan = plan_slash_execution("/cancel", [task_id], cmd.execution_tier)
+    plan = plan_slash_execution()
     if not execution_allowed(
         plan.policy,
         session=ctx.session,

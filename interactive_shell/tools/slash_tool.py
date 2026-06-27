@@ -97,7 +97,7 @@ def execute_slash_action(args: dict[str, Any], ctx: ToolContext) -> bool:
         ctx.session.queue_auto_command(stripped)
         return True
 
-    plan = plan_slash_execution(name, slash_args, cmd.execution_tier)
+    plan = plan_slash_execution()
     if not execution_allowed(
         plan.policy,
         session=ctx.session,

@@ -11,9 +11,6 @@ from prompt_toolkit.document import Document
 from interactive_shell.command_registry import SLASH_COMMANDS
 from interactive_shell.command_registry.help import QUICK_ACCESS_COMMANDS
 from interactive_shell.command_registry.types import SlashCommand
-from interactive_shell.harness.orchestration.command_dispatch.catalog import (
-    BARE_COMMAND_ALIASES,
-)
 from interactive_shell.ui.components.choice_menu import repl_tty_interactive
 from interactive_shell.ui.input_prompt.layout import (
     _DEFAULT_TERMINAL_COLUMNS,
@@ -95,7 +92,7 @@ def _slash_completion(cmd: SlashCommand, start_position: int, *, cols: int) -> C
 
 
 class ShellCompleter(Completer):
-    """Tab-completion for slash commands, subcommands, file paths, and bare aliases."""
+    """Tab-completion for slash commands, subcommands, and file paths."""
 
     def get_completions(
         self,
@@ -107,17 +104,6 @@ class ShellCompleter(Completer):
             return
 
         if not text.startswith("/"):
-            if " " in text:
-                return
-            needle = text.lower()
-            for alias in sorted(BARE_COMMAND_ALIASES):
-                if alias.startswith(needle) and alias != needle:
-                    yield Completion(
-                        alias,
-                        start_position=-len(text),
-                        display=alias,
-                        display_meta="command shortcut",
-                    )
             return
 
         parts = text.split()

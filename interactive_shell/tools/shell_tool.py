@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_executor import (
-    run_shell_command,
-)
 from interactive_shell.harness.orchestration.execution_tier import (
     ExecutionTier,
+)
+from interactive_shell.tools.shell.runner import (
+    run_shell_command,
 )
 from interactive_shell.tools.tool_contracts import (
     ToolContext,

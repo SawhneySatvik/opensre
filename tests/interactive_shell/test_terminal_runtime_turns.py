@@ -32,7 +32,6 @@ def test_turn_needs_exclusive_stdin_for_bare_integration_menu(
     session = ReplSession()
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/integrations", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("integrations", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/investigate", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/mcp", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/model", session) is True
@@ -40,10 +39,13 @@ def test_turn_needs_exclusive_stdin_for_bare_integration_menu(
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/integrations list", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("/theme blue", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("integrations list", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("/verify", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("verify", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/verify datadog", session) is False
+
+    # Gating is literal-/slash only: bare command words are not recognized.
+    assert loop_input_policy.turn_needs_exclusive_stdin("integrations", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("integrations list", session) is False
+    assert loop_input_policy.turn_needs_exclusive_stdin("verify", session) is False
 
 
 def test_turn_needs_exclusive_stdin_false_for_investigate_with_target(
@@ -55,7 +57,6 @@ def test_turn_needs_exclusive_stdin_false_for_investigate_with_target(
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/investigate generic", session) is False
     assert loop_input_policy.turn_needs_exclusive_stdin("/investigate alert.json", session) is False
-    assert loop_input_policy.turn_needs_exclusive_stdin("investigate generic", session) is False
 
 
 def test_turn_needs_exclusive_stdin_for_exit_commands(
@@ -65,7 +66,9 @@ def test_turn_needs_exclusive_stdin_for_exit_commands(
     session = ReplSession()
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/exit", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("quit", session) is True
+    assert loop_input_policy.turn_needs_exclusive_stdin("/quit", session) is True
+    # Bare command words are not recognized under literal-/slash gating.
+    assert loop_input_policy.turn_needs_exclusive_stdin("quit", session) is False
 
 
 def test_turn_needs_exclusive_stdin_for_update(
@@ -76,7 +79,8 @@ def test_turn_needs_exclusive_stdin_for_update(
     session = ReplSession()
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/update", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("update", session) is True
+    # Bare command words are not recognized under literal-/slash gating.
+    assert loop_input_policy.turn_needs_exclusive_stdin("update", session) is False
 
 
 def test_turn_needs_exclusive_stdin_for_integration_setup(
@@ -86,10 +90,11 @@ def test_turn_needs_exclusive_stdin_for_integration_setup(
     session = ReplSession()
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/integrations setup", session) is True
-    assert (
-        loop_input_policy.turn_needs_exclusive_stdin("integrations setup datadog", session) is True
-    )
     assert loop_input_policy.turn_needs_exclusive_stdin("/mcp connect github", session) is True
+    # Bare command words are not recognized under literal-/slash gating.
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin("integrations setup datadog", session) is False
+    )
 
 
 def test_turn_needs_exclusive_stdin_for_integration_remove(
@@ -105,11 +110,12 @@ def test_turn_needs_exclusive_stdin_for_integration_remove(
     assert (
         loop_input_policy.turn_needs_exclusive_stdin("/integrations remove github", session) is True
     )
-    assert loop_input_policy.turn_needs_exclusive_stdin("integrations remove github", session) is (
-        True
-    )
     assert loop_input_policy.turn_needs_exclusive_stdin("/mcp disconnect", session) is True
     assert loop_input_policy.turn_needs_exclusive_stdin("/mcp disconnect github", session) is True
+    # Bare command words are not recognized under literal-/slash gating.
+    assert (
+        loop_input_policy.turn_needs_exclusive_stdin("integrations remove github", session) is False
+    )
 
 
 def test_turn_needs_exclusive_stdin_for_onboard(
@@ -123,9 +129,10 @@ def test_turn_needs_exclusive_stdin_for_onboard(
     session = ReplSession()
 
     assert loop_input_policy.turn_needs_exclusive_stdin("/onboard", session) is True
-    assert loop_input_policy.turn_needs_exclusive_stdin("onboard", session) is True
     # Args don't change the exclusive-stdin requirement.
     assert loop_input_policy.turn_needs_exclusive_stdin("/onboard local_llm", session) is True
+    # Bare command words are not recognized under literal-/slash gating.
+    assert loop_input_policy.turn_needs_exclusive_stdin("onboard", session) is False
 
 
 def test_turn_needs_exclusive_stdin_for_config(
@@ -280,9 +287,6 @@ class TestDispatchSpinnerBehavior:
             "/history",
             "/tests",
             "/model show",
-            "tests",
-            "help",
-            "opensre investigate -i alert.json",
         ],
     )
     def test_slash_dispatches_do_not_show_assistant_spinner(self, text: str) -> None:
@@ -293,6 +297,11 @@ class TestDispatchSpinnerBehavior:
         [
             "why did this fail?",
             "explain deploy",
+            # Bare command words and opensre passthrough are no longer treated as
+            # literal commands, so the spinner shows while the planner runs.
+            "tests",
+            "help",
+            "opensre investigate -i alert.json",
         ],
     )
     def test_non_slash_dispatches_show_assistant_spinner(self, text: str) -> None:

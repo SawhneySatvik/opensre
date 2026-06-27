@@ -12,24 +12,20 @@ from rich.markup import escape
 from rich.text import Text
 
 import config.constants.platform as _platform
-from interactive_shell.harness.orchestration.execution_policy import (
-    execution_allowed,
-    plan_shell_execution,
+from interactive_shell.harness.orchestration.action_executor.task_streaming import (
+    _MAX_COMMAND_OUTPUT_CHARS,
+    SHELL_COMMAND_TIMEOUT_SECONDS,
 )
-from interactive_shell.harness.orchestration.shell_parsing import (
+from interactive_shell.harness.orchestration.execution_policy import execution_allowed
+from interactive_shell.runtime import ReplSession
+from interactive_shell.tools.shell import execution as shell_execution
+from interactive_shell.tools.shell.parsing import (
     argv_for_repl_builtin_detection,
     parse_shell_command,
 )
-from interactive_shell.runtime import ReplSession
+from interactive_shell.tools.shell.policy import plan_shell_execution
 from interactive_shell.ui import ERROR, HIGHLIGHT, print_command_output
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
-
-from .shell_execution import execute_shell_command
-from .task_streaming import (
-    _MAX_COMMAND_OUTPUT_CHARS,
-    SHELL_COMMAND_TIMEOUT_SECONDS,
-    _ae_resolve,
-)
 
 
 def run_shell_command(
@@ -80,7 +76,7 @@ def run_shell_command(
     response_text: str | None = None
 
     try:
-        result = _ae_resolve("execute_shell_command", execute_shell_command)(
+        result = shell_execution.execute_shell_command(
             command=parsed.command,
             argv=exec_argv,
             use_shell=use_shell,
@@ -187,3 +183,6 @@ def run_pwd_command(command: str, session: ReplSession, console: Console) -> Non
 
     console.print(Text(str(Path.cwd())))
     session.record("shell", command)
+
+
+__all__ = ["run_cd_command", "run_pwd_command", "run_shell_command"]

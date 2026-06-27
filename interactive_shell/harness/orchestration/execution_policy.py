@@ -35,14 +35,6 @@ from typing import Literal
 from rich.console import Console
 from rich.markup import escape
 
-import config.constants.platform as _platform
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
-from interactive_shell.harness.orchestration.shell_parsing import (
-    ParsedShellCommand,
-    parse_shell_command,
-)
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import DIM, WARNING
 from platform.analytics.cli import capture_repl_execution_policy_decision
@@ -83,32 +75,6 @@ def _default_confirm_fn(prompt: str) -> str:
 
 
 DEFAULT_CONFIRM_FN: Callable[[str], str] = _default_confirm_fn
-
-
-def resolve_slash_execution_tier(
-    command_name: str, args: list[str], registered: ExecutionTier
-) -> ExecutionTier:
-    """Refine tier using subcommands where the registry defaults are too coarse."""
-    if registered == ExecutionTier.EXEMPT:
-        return ExecutionTier.EXEMPT
-    key = command_name.lower()
-    if key == "/model":
-        sub = (args[0].lower() if args else "show").strip()
-        if sub in {"show"}:
-            return ExecutionTier.SAFE
-        if sub == "toolcall":
-            if len(args) >= 2 and args[1].lower() in {"set", "use", "switch"}:
-                return ExecutionTier.ELEVATED
-            return ExecutionTier.SAFE
-        if sub in {"set", "use", "switch", "restore", "default", "reset"}:
-            return ExecutionTier.ELEVATED
-        return ExecutionTier.SAFE
-    if key == "/integrations":
-        sub = (args[0].lower() if args else "list").strip()
-        if sub == "verify":
-            return ExecutionTier.ELEVATED
-        return ExecutionTier.SAFE
-    return registered
 
 
 def _emit_decision(
@@ -235,65 +201,19 @@ def execution_allowed(
     return True
 
 
-def evaluate_shell_from_parsed(parsed: ParsedShellCommand) -> ExecutionPolicyResult:
-    """Alpha mode: allow every shell command; only reject empty input.
+def evaluate_slash_command() -> ExecutionPolicyResult:
+    """Slash execution verdict.
 
-    There is no command classification or deny floor — any command (mutating,
-    ``restricted``, operators, substitution, passthrough) is allowed. A
-    ``parse_error`` only occurs for empty input (e.g. a bare ``!``), which is
-    rejected because there is nothing to run.
+    Default-allow: every slash command resolves to ``allow``.
     """
-    if parsed.parse_error is not None:
-        return ExecutionPolicyResult(
-            verdict="deny",
-            action_type="shell",
-            reason=parsed.parse_error,
-            hint="Enter a command to run.",
-            shell_classification="unrestricted",
-        )
-
-    return ExecutionPolicyResult(
-        verdict="allow",
-        action_type="shell",
-        reason=None,
-        shell_classification="unrestricted",
-    )
-
-
-def plan_shell_execution(parsed: ParsedShellCommand) -> ActionExecutionPlan:
-    policy = evaluate_shell_from_parsed(parsed)
-    classification = policy.shell_classification or "unrestricted"
-    return ActionExecutionPlan(
-        action_type="shell",
-        classification=classification,
-        execution_mode=ActionExecutionMode.FOREGROUND,
-        policy=policy,
-    )
-
-
-def evaluate_shell_command(command: str) -> ExecutionPolicyResult:
-    """Map shell policy + passthrough rules into allow/ask/deny."""
-    parsed = parse_shell_command(command, is_windows=_platform.IS_WINDOWS)
-    return evaluate_shell_from_parsed(parsed)
-
-
-def evaluate_slash_tier(tier: ExecutionTier) -> ExecutionPolicyResult:
-    """Turn a resolved slash tier into an execution verdict.
-
-    Default-allow: every slash tier (including ``ELEVATED``) resolves to ``allow``.
-    """
-    del tier  # default-allow: tier no longer gates slash execution
     return ExecutionPolicyResult(verdict="allow", action_type="slash", reason=None)
 
 
-def plan_slash_execution(
-    command_name: str, args: list[str], registered: ExecutionTier
-) -> ActionExecutionPlan:
-    tier = resolve_slash_execution_tier(command_name, args, registered)
-    policy = evaluate_slash_tier(tier)
+def plan_slash_execution() -> ActionExecutionPlan:
+    policy = evaluate_slash_command()
     return ActionExecutionPlan(
         action_type="slash",
-        classification=tier.value,
+        classification="slash",
         execution_mode=ActionExecutionMode.FOREGROUND,
         policy=policy,
     )
@@ -362,10 +282,7 @@ __all__ = [
     "evaluate_code_agent_launch",
     "evaluate_investigation_launch",
     "evaluate_llm_runtime_switch",
-    "evaluate_shell_command",
-    "evaluate_shell_from_parsed",
-    "evaluate_slash_tier",
+    "evaluate_slash_command",
     "evaluate_synthetic_test_launch",
     "execution_allowed",
-    "resolve_slash_execution_tier",
 ]

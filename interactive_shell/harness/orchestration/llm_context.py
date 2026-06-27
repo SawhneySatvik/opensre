@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_system_prompt import (
+from interactive_shell.harness.orchestration.system_prompt import (
     _SYSTEM_PROMPT_BASE,
 )
 from interactive_shell.harness.state.conversation_history import format_recent_conversation

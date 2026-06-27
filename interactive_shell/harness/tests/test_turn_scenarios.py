@@ -13,12 +13,9 @@ from rich.console import Console
 from core.runtime import Agent, AgentTool, AgentToolContext
 from core.runtime.llm.agent_llm_client import ToolCall
 from interactive_shell.command_registry import SLASH_COMMANDS
-from interactive_shell.harness.orchestration.action_prompt import (
+from interactive_shell.harness.orchestration.llm_context import (
     build_action_system_prompt,
     build_action_user_message,
-)
-from interactive_shell.harness.orchestration.command_dispatch import (
-    deterministic_command_text,
 )
 from interactive_shell.harness.tests._ci_gates import (
     skip_or_fail,
@@ -61,9 +58,6 @@ class ExpectedAction(TypedDict):
 
 
 _ALL_CASES = load_all_scenarios()
-_DETERMINISTIC_CASES = [
-    case for case in _ALL_CASES if case.scenario.intent_class == "deterministic"
-]
 _LIVE_CASES = iter_scenarios_for_shard(
     [case for case in _ALL_CASES if case.scenario.intent_class != "deterministic"]
 )
@@ -334,12 +328,6 @@ def test_planning_match_collapses_handoff_only_retries() -> None:
 
 
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    if "deterministic_case" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "deterministic_case",
-            _DETERMINISTIC_CASES,
-            ids=[case.scenario.id for case in _DETERMINISTIC_CASES],
-        )
     if "live_planning_case" in metafunc.fixturenames:
         metafunc.parametrize(
             "live_planning_case",
@@ -359,19 +347,6 @@ def test_shard_selection_is_non_empty() -> None:
         return
     total, index = read_shard_config()
     skip_or_fail(f"No turn cases selected for shard {index}/{total}.")
-
-
-def test_deterministic_command_text_matches_scenario(deterministic_case: ScenarioCase) -> None:
-    prompt = deterministic_case.scenario.input.prompt
-    answer = deterministic_case.answer
-
-    # The literal-command detector must reproduce the normalized slash command
-    # the scenario expects for UI policy decisions.
-    assert deterministic_command_text(prompt) == answer.turn.expected_command_text
-
-
-def test_help_normalizes_to_slash_help_deterministically() -> None:
-    assert deterministic_command_text("/help") == "/help"
 
 
 def _assert_live_action_planning_once(case: ScenarioCase) -> None:

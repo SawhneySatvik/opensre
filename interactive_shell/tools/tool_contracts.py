@@ -9,9 +9,6 @@ from typing import Any
 from rich.console import Console
 
 from core.runtime.types import AgentTool, AgentToolContext
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.session import ReplSession
 
 ToolExecutor = Callable[[dict[str, Any], "ToolContext"], bool]
@@ -37,7 +34,6 @@ class ToolEntry:
     name: str
     description: str
     input_schema: dict[str, Any]
-    execution_tier: ExecutionTier
     execute: ToolExecutor
     # ``is_available`` gates BOTH planner offering and runtime dispatch.
     # ``is_planner_selectable`` additionally hides a tool from the planner's

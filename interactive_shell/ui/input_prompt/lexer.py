@@ -8,13 +8,9 @@ from prompt_toolkit.document import Document
 from prompt_toolkit.formatted_text import StyleAndTextTuples
 from prompt_toolkit.lexers import Lexer
 
-from interactive_shell.harness.orchestration.command_dispatch.catalog import (
-    BARE_COMMAND_ALIASES,
-)
-
 
 class ReplInputLexer(Lexer):
-    """Style the command token (slash form or bare alias) like Claude Code."""
+    """Style the leading slash-command token like Claude Code."""
 
     _CMD_STYLE = "class:repl-slash-command"
 
@@ -45,18 +41,6 @@ class ReplInputLexer(Lexer):
                 if rest:
                     out.append(("", rest))
                 return out
-
-            parts = stripped.split(maxsplit=1)
-            first = parts[0]
-            tail = stripped[len(first) :]
-            if first.lower() in BARE_COMMAND_ALIASES:
-                bare_line: StyleAndTextTuples = []
-                if lead:
-                    bare_line.append(("", lead))
-                bare_line.append((self._CMD_STYLE, first))
-                if tail:
-                    bare_line.append(("", tail))
-                return bare_line
 
             return [("", line)]
 

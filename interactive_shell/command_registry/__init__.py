@@ -52,9 +52,8 @@ from interactive_shell.command_registry.tools_cmds import COMMANDS as TOOLS_COMM
 from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.command_registry.watch_cmds import COMMANDS as WATCH_COMMANDS
 from interactive_shell.harness.orchestration.execution_policy import (
-    evaluate_slash_tier,
+    evaluate_slash_command,
     execution_allowed,
-    resolve_slash_execution_tier,
 )
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import ERROR
@@ -118,10 +117,7 @@ def dispatch_slash(
                 session.record("slash", stripped, ok=True)
                 return _cmd_help(session, console, [])
 
-            help_cmd = SLASH_COMMANDS["/help"]
-            gate = evaluate_slash_tier(
-                resolve_slash_execution_tier("/help", [], help_cmd.execution_tier)
-            )
+            gate = evaluate_slash_command()
             if not execution_allowed(
                 gate,
                 session=session,
@@ -176,8 +172,7 @@ def dispatch_slash(
             if name not in _DEFER_SLASH_RECORDING:
                 session.record("slash", stripped, ok=True)
             return cmd.handler(session, console, args)
-        tier = resolve_slash_execution_tier(name, args, cmd.execution_tier)
-        policy = evaluate_slash_tier(tier)
+        policy = evaluate_slash_command()
         if not execution_allowed(
             policy,
             session=session,

@@ -108,10 +108,13 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   Every turn enters the agent pipeline; slash command execution belongs to the
   action-agent tool path (`slash_invoke`) rather than a pre-agent dispatcher or
   deterministic action shortcut.
-- The runtime (`runtime/utils/input_policy.py`) may reuse
-  `orchestration.command_dispatch.deterministic_command_text` for terminal-UI
-  concerns only (spinner suppression and exclusive-stdin gating). It must not
-  grow into natural-language intent inference or an action-execution shortcut.
+- The runtime (`runtime/utils/input_policy.py`) recognizes only **literal
+  `/slash` command text** (`_literal_slash_command_text`) for terminal-UI
+  concerns (spinner suppression and exclusive-stdin gating). The former
+  `command_dispatch.deterministic_command_text` helper, its bare-alias catalog,
+  and typo normalization were removed. This gate must not grow back into
+  bare-alias matching, natural-language intent inference, or an
+  action-execution shortcut.
 - Regex fallback has been intentionally removed. Do **not**
   re-introduce legacy regex fallback phases
   unless there is an explicit product decision to restore them. A product
@@ -120,10 +123,11 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
 - **The shell action agent is the sole tool selector for non-command turns.**
   There is no regex/keyword intent inference and no deterministic
   natural-language → action mapping in `orchestration/`. The former
-  `slash_commands/deterministic_action_mapper.py`, `intent_parser` regex
-  patterns/extractors, and the regex planner postprocessing overrides were
+  `slash_commands/deterministic_action_mapper.py`, the `command_dispatch` and
+  `intent_parser` packages (alias catalog, literal-command detection, typo
+  normalization), and the regex planner postprocessing overrides were
   removed. Do **not** reintroduce them: change tool selection by editing the
-  action-agent system prompt (`orchestration/action_system_prompt.py`) and the per-tool
+  action-agent system prompt (`orchestration/system_prompt.py`) and the per-tool
   descriptions in `interactive_shell/tools/*`, never by adding pattern matching.
   Tool-call argument *validation* belongs to the first-class AgentTool runtime
   contract and tool availability gates; intent *classification* by regex is not.
@@ -159,9 +163,8 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
 
 - Turn tests are part of the default CI/CD flow; do **not** move them to
   optional-only jobs.
-- Keep deterministic dispatch contracts
-  (`test_turn_scenarios.py::test_deterministic_command_text_matches_scenario` and
-  `test_turn_fixture_integrity.py`) in the default PR CI flow. These run as
+- Keep the no-LLM fixture-integrity contracts
+  (`test_turn_fixture_integrity.py`) in the default PR CI flow. These run as
   the no-LLM `turn-checks` job in `.github/workflows/interactive-shell-live.yml`
   (`pytest interactive_shell/harness/tests/ -m "not live_llm"`), which
   needs no secrets and therefore also gates fork PRs.

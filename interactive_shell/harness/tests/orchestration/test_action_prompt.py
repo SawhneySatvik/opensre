@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from interactive_shell.harness.orchestration.action_prompt import (
+from interactive_shell.harness.orchestration.llm_context import (
     build_action_system_prompt,
     connected_integrations_block,
     recent_conversation_block,
 )
-from interactive_shell.harness.orchestration.action_system_prompt import _SYSTEM_PROMPT_BASE
+from interactive_shell.harness.orchestration.system_prompt import _SYSTEM_PROMPT_BASE
 from interactive_shell.harness.state.conversation_history import NO_HISTORY_PLACEHOLDER
 
 

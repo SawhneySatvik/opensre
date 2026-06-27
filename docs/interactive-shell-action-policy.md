@@ -19,7 +19,7 @@ recurring source of precedence drift.
 1. There is no regex/keyword intent inference. Non-command turns are
    selected entirely by the shell action agent via native tool-calling.
 2. Tool selection is driven by the action-agent system prompt
-   (`.../orchestration/action_system_prompt.py`) and the per-tool descriptions
+   (`.../orchestration/system_prompt.py`) and the per-tool descriptions
    in the tool catalog (`interactive_shell/tools/*`). Keep both precise — they
    are the only selection signal.
 3. The action path does not post-hoc rewrite the model's tool calls. Tool calls
@@ -30,10 +30,11 @@ recurring source of precedence drift.
    through to a conversational reply rather than guessing an action. When the
    action-agent LLM itself is unavailable, the REPL renders and persists a
    failed assistant turn so `/resume` can show the outage.
-5. `command_dispatch/detection.py` remains terminal-UI policy only: spinner
-   suppression and exclusive-stdin gating for literal command text. It must
-   never infer intent from natural language and must not become an action
-   execution shortcut.
+5. The runtime's literal-`/slash` detection
+   (`runtime/utils/input_policy._literal_slash_command_text`) is terminal-UI
+   policy only: spinner suppression and exclusive-stdin gating for literal
+   `/slash` command text. It must never infer intent from natural language and
+   must not become an action execution shortcut.
 
 ## What this means for changes
 - To change how a phrasing maps to a tool, edit the action-agent system prompt and/or
@@ -70,7 +71,7 @@ answered without adding keyword/regex rules. Two complementary mechanisms:
    `interactive_shell/chat/cli_agent.py`) lists the configured set as
    facts, letting the model answer directly when state is already known.
 2. LLM-driven discovery. The action-agent system prompt
-   (`.../orchestration/action_system_prompt.py`) lets the model, at its own
+   (`.../orchestration/system_prompt.py`) lets the model, at its own
    discretion, emit a read-only discovery action (for example
    `slash_invoke("/integrations", ["list"])` or `["verify"]`) to discover the
    answer instead of deflecting. There is no keyword mapping for this — the LLM

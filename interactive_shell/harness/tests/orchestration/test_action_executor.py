@@ -21,18 +21,20 @@ from interactive_shell.harness.orchestration.action_executor import (
     _pump_task_stream,
     read_diag,
     read_task_output,
-    run_cd_command,
     run_claude_code_implementation,
     run_opensre_cli_command,
-    run_pwd_command,
-    run_shell_command,
     run_synthetic_test,
     start_background_cli_task,
     terminate_child_process,
     watch_synthetic_subprocess,
 )
-from interactive_shell.harness.orchestration.action_executor.shell_execution import (
+from interactive_shell.tools.shell.execution import (
     ShellExecutionResult,
+)
+from interactive_shell.tools.shell.runner import (
+    run_cd_command,
+    run_pwd_command,
+    run_shell_command,
 )
 from interactive_shell.session import ReplSession
 from platform.common.task_types import TaskKind, TaskStatus
@@ -337,7 +339,7 @@ def test_run_shell_command_silent_success_prints_checkmark(monkeypatch: pytest.M
         )
 
     monkeypatch.setattr(
-        "interactive_shell.harness.orchestration.action_executor.execute_shell_command",
+        "interactive_shell.tools.shell.execution.execute_shell_command",
         _fake_execute,
     )
 
@@ -364,7 +366,7 @@ def test_run_shell_command_failure_prints_exit_line(monkeypatch: pytest.MonkeyPa
         )
 
     monkeypatch.setattr(
-        "interactive_shell.harness.orchestration.action_executor.execute_shell_command",
+        "interactive_shell.tools.shell.execution.execute_shell_command",
         _fake_execute,
     )
 
@@ -391,7 +393,7 @@ def test_run_shell_command_reports_start_failure(monkeypatch: pytest.MonkeyPatch
         raise RuntimeError("spawn failed")
 
     monkeypatch.setattr(
-        "interactive_shell.harness.orchestration.action_executor.execute_shell_command",
+        "interactive_shell.tools.shell.execution.execute_shell_command",
         _raise,
     )
     monkeypatch.setattr(

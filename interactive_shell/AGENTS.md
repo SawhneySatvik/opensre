@@ -118,8 +118,8 @@ owning area rather than adding more logic to the caller.
     characters in the next prompt. If no `^[[…R` garbage appears, the registration
     is correct.
   - **Agent-selected interactive commands:** `_EXCLUSIVE_STDIN_MENU_COMMANDS`
-    only reserves stdin for literal command text that
-    `deterministic_command_text` can normalize. When free text like
+    only reserves stdin for literal `/slash` command text that
+    `_literal_slash_command_text` recognizes. When free text like
     "remove github" is resolved by the action agent into an inline-picker
     command (`/integrations remove`, `/integrations setup`, `/mcp connect`,
     `/mcp disconnect`, or a bare `/integrations` / `/mcp` menu), the loop has not

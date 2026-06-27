@@ -188,8 +188,9 @@ Test commands, turn-handling rules, CI-only paths: **[CI.md](CI.md)**. Live REPL
 - Interactive-shell action selection: do not implement regex/keyword/fuzzy
   intent routing, literal slash-command shortcuts, or deterministic action
   bypasses around the action-agent AgentTool path. Engineers have been fired
-  before for implementing this exact shortcut. `deterministic_command_text` is
-  terminal UI policy only, not an execution path.
+  before for implementing this exact shortcut. The runtime's literal-`/slash`
+  detection (`input_policy._literal_slash_command_text`) is terminal UI policy
+  only (spinner/stdin gating), not an execution path.
 
 ## 6. New Integration Checklist
 

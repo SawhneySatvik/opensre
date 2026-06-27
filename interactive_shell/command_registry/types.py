@@ -9,9 +9,6 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape as _rich_escape
 
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.runtime import ReplSession
 from platform.terminal.theme import ERROR
 
@@ -26,7 +23,6 @@ class SlashCommand:
     notes: tuple[str, ...] = ()
     #: Tab-completion hints for the first argument after the command name (keyword, meta text).
     first_arg_completions: tuple[tuple[str, str], ...] = ()
-    execution_tier: ExecutionTier = ExecutionTier.SAFE
     #: Optional pre-policy arg validator. Returns ``None`` if args are valid, or
     #: a user-facing error string (rendered via ``console.print``) to short-circuit
     #: dispatch with no policy prompt and no handler invocation.
@@ -69,4 +65,4 @@ def make_list_root_handler(
     return _root
 
 
-__all__ = ["ExecutionTier", "SlashCommand", "make_list_root_handler"]
+__all__ = ["SlashCommand", "make_list_root_handler"]

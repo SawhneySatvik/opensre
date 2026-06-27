@@ -14,7 +14,7 @@ from rich.markup import escape
 from core.runtime.agent import Agent
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from integrations.llm_cli.failure_explain import is_context_length_overflow
-from interactive_shell.harness.orchestration.action_prompt import (
+from interactive_shell.harness.orchestration.llm_context import (
     build_action_system_prompt,
     build_action_user_message,
 )
