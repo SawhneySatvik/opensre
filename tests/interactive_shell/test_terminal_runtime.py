@@ -966,7 +966,7 @@ class TestReplState:
             task = asyncio.create_task(_noop())
             cancel = threading.Event()
             state.start_dispatch(task=task, cancel_event=cancel)
-            assert state.phase is loop_state.TurnPhase.DISPATCHING
+            assert state.is_dispatch_running() is True
             await task
             state.finish_dispatch(cancel)
             assert state.phase is loop_state.TurnPhase.IDLE

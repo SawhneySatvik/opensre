@@ -109,7 +109,7 @@ def list_github_commits(
         payload = normalize_github_tool_result(result)
         payload["commits"] = payload.pop("structured_content", None)
         return payload
-    except BaseException as exc:
+    except Exception as exc:
         # MCP session cleanup can raise ExceptionGroup (anyio TaskGroup) when both
         # the tool call and the background receive-loop fail simultaneously.
         # Catch here to ensure the tool always returns an error dict rather than raising.

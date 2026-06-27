@@ -688,7 +688,7 @@ def call_github_mcp_tool(
 
     try:
         return cast(dict[str, Any], _run_async(_call_tool_async(config, tool_name, arguments)))
-    except BaseException as err:
+    except Exception as err:
         logger.debug("GitHub MCP tool call failed: %s", tool_name, exc_info=True)
         return {
             "is_error": True,

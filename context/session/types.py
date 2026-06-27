@@ -36,9 +36,11 @@ class SessionPersistenceSource(Protocol):
 class SessionStorage(Protocol):
     """Per-session persistence backend for one logical session."""
 
-    def open_session(self, session: SessionPersistenceSource) -> None: ...
+    def open_session(self, session: SessionPersistenceSource) -> None:
+        raise NotImplementedError
 
-    def append_turn(self, session: SessionPersistenceSource, kind: str, text: str) -> None: ...
+    def append_turn(self, session: SessionPersistenceSource, kind: str, text: str) -> None:
+        raise NotImplementedError
 
     def append_turn_detail(
         self,
@@ -51,7 +53,8 @@ class SessionStorage(Protocol):
         model: str | None = None,
         provider: str | None = None,
         latency_ms: int | None = None,
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
     def append_tool_call(
         self,
@@ -62,7 +65,8 @@ class SessionStorage(Protocol):
         result: str,
         ok: bool,
         source: str | None = None,
-    ) -> None: ...
+    ) -> None:
+        raise NotImplementedError
 
     def append_investigation_result(
         self,
@@ -70,27 +74,37 @@ class SessionStorage(Protocol):
         state: dict[str, Any],
         *,
         trigger: str = "",
-    ) -> str: ...
+    ) -> str:
+        raise NotImplementedError
 
-    def flush(self, session: SessionPersistenceSource) -> None: ...
+    def flush(self, session: SessionPersistenceSource) -> None:
+        raise NotImplementedError
 
-    def reopen_session(self, session_id: str) -> None: ...
+    def reopen_session(self, session_id: str) -> None:
+        raise NotImplementedError
 
 
 @runtime_checkable
 class SessionRepo(Protocol):
     """Cross-session query/lifecycle surface over all stored sessions."""
 
-    def load_recent(self, n: int = 20) -> list[dict[str, Any]]: ...
+    def load_recent(self, n: int = 20) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
-    def count_prefix_matches(self, prefix: str) -> int: ...
+    def count_prefix_matches(self, prefix: str) -> int:
+        raise NotImplementedError
 
-    def load_session(self, session_id_prefix: str) -> dict[str, Any] | None: ...
+    def load_session(self, session_id_prefix: str) -> dict[str, Any] | None:
+        raise NotImplementedError
 
-    def load_investigation_history(self, n: int = 50) -> list[dict[str, Any]]: ...
+    def load_investigation_history(self, n: int = 50) -> list[dict[str, Any]]:
+        raise NotImplementedError
 
-    def lookup_investigation(self, prefix: str) -> tuple[dict[str, Any] | None, int]: ...
+    def lookup_investigation(self, prefix: str) -> tuple[dict[str, Any] | None, int]:
+        raise NotImplementedError
 
-    def load_investigation(self, prefix: str) -> dict[str, Any] | None: ...
+    def load_investigation(self, prefix: str) -> dict[str, Any] | None:
+        raise NotImplementedError
 
-    def count_investigation_prefix_matches(self, prefix: str) -> int: ...
+    def count_investigation_prefix_matches(self, prefix: str) -> int:
+        raise NotImplementedError
