@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from typing import Any
 
+import httpx
+
 from integrations.sentry import (
     DEFAULT_SENTRY_ISSUE_LIMIT,
     SentryConfig,
     build_sentry_config,
+    describe_sentry_api_error,
     list_sentry_issues,
     sentry_config_from_env,
 )
+from tools._telemetry import report_run_error
 from tools.tool_decorator import tool
 
 
@@ -110,7 +114,51 @@ def search_sentry_issues(
             "issues": [],
         }
 
-    issues = list_sentry_issues(
-        config=config, query=query, limit=limit, stats_period=stats_period or None
-    )
+    try:
+        issues = list_sentry_issues(
+            config=config, query=query, limit=limit, stats_period=stats_period or None
+        )
+    except httpx.HTTPStatusError as err:
+        report_run_error(
+            err,
+            tool_name="search_sentry_issues",
+            source="sentry",
+            component="tools.sentry_search_issues_tool",
+            method="list_sentry_issues",
+            severity="warning",
+            extras={
+                "query": query,
+                "organization_slug": config.organization_slug,
+                "project_slug": config.project_slug,
+                "status_code": err.response.status_code,
+            },
+        )
+        return {
+            "source": "sentry",
+            "available": False,
+            "error": describe_sentry_api_error(
+                err,
+                query=query,
+                project_slug=config.project_slug,
+            ),
+            "issues": [],
+            "query": query,
+        }
+    except Exception as err:
+        report_run_error(
+            err,
+            tool_name="search_sentry_issues",
+            source="sentry",
+            component="tools.sentry_search_issues_tool",
+            method="list_sentry_issues",
+            extras={"query": query, "organization_slug": config.organization_slug},
+        )
+        return {
+            "source": "sentry",
+            "available": False,
+            "error": f"Sentry issue search failed: {err}",
+            "issues": [],
+            "query": query,
+        }
+
     return {"source": "sentry", "available": True, "issues": issues, "query": query}

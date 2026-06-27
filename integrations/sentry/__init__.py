@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -24,6 +25,7 @@ DEFAULT_SENTRY_STATS_PERIOD = "24h"
 DEFAULT_SENTRY_ISSUE_LIMIT = 100
 _MAX_SENTRY_PAGE_SIZE = 100
 _MAX_SENTRY_QUERY_LEN = 200
+_OR_SPLIT = re.compile(r"\s+OR\s+", re.IGNORECASE)
 # Window used by the verification probe to report a recent issue count.
 _SENTRY_VERIFY_STATS_PERIOD = "7d"
 _SENTRY_VERIFY_WINDOW_LABEL = "last 7 days"
@@ -117,6 +119,30 @@ def get_sentry_auth_recommendations() -> dict[str, str]:
     }
 
 
+def _normalize_sentry_query_segment(segment: str) -> str:
+    return segment.strip()[:_MAX_SENTRY_QUERY_LEN]
+
+
+def _sentry_query_candidates(query: str) -> list[str]:
+    """Return ordered issue-search query strings to try against the Sentry API.
+
+    Issue search does not support ``OR`` (unlike Discover). When the agent
+    passes ``"foo" OR "bar"``, each alternative is returned so callers can
+    retry after a 400 ``InvalidSearchQuery`` response.
+    """
+    first_line = query.split("\n")[0].strip()
+    if not first_line:
+        return [""]
+    if _OR_SPLIT.search(first_line):
+        segments = [
+            _normalize_sentry_query_segment(part)
+            for part in _OR_SPLIT.split(first_line)
+            if part.strip()
+        ]
+        return segments or [""]
+    return [_normalize_sentry_query_segment(first_line)]
+
+
 def _sanitize_sentry_query(query: str) -> str:
     """Reduce a raw query string to something the Sentry issues API accepts.
 
@@ -126,8 +152,42 @@ def _sanitize_sentry_query(query: str) -> str:
     Taking the first non-empty line and capping at _MAX_SENTRY_QUERY_LEN
     characters is enough to produce a valid free-text search token.
     """
-    first_line = query.split("\n")[0].strip()
-    return first_line[:_MAX_SENTRY_QUERY_LEN]
+    return _sentry_query_candidates(query)[0]
+
+
+def describe_sentry_api_error(
+    err: httpx.HTTPStatusError,
+    *,
+    query: str = "",
+    project_slug: str = "",
+) -> str:
+    """Turn a Sentry HTTP failure into an operator- and agent-friendly message."""
+    detail = ""
+    try:
+        body = err.response.json()
+        if isinstance(body, dict):
+            detail = str(body.get("detail") or body.get("error") or "").strip()
+    except Exception:
+        detail = err.response.text.strip()
+    if not detail:
+        detail = str(err)
+
+    hints: list[str] = []
+    if err.response.status_code == 400:
+        if _OR_SPLIT.search(query.split("\n", maxsplit=1)[0]):
+            hints.append(
+                "Sentry issue search does not support OR; use one keyword or phrase at a time."
+            )
+        if project_slug:
+            hints.append(f"Verify project slug {project_slug!r} exists in the organization.")
+        hints.append(
+            "Prefer short free-text keywords or field filters such as is:unresolved level:error."
+        )
+
+    message = f"Sentry API returned HTTP {err.response.status_code}: {detail}"
+    if hints:
+        message = f"{message} {' '.join(hints)}"
+    return message
 
 
 def _build_issue_list_params(
@@ -135,11 +195,16 @@ def _build_issue_list_params(
     limit: int,
     query: str,
     stats_period: str | None = None,
+    *,
+    normalized_query: str | None = None,
 ) -> list[tuple[str, str | int | float | bool | None]]:
+    effective_query = (
+        normalized_query if normalized_query is not None else _sanitize_sentry_query(query)
+    )
     params: list[tuple[str, str | int | float | bool | None]] = [
         ("limit", str(_clamp_issue_limit(limit))),
         ("statsPeriod", _resolve_stats_period(stats_period)),
-        ("query", _sanitize_sentry_query(query)),
+        ("query", effective_query),
     ]
     if config.project_slug:
         params.append(("project", config.project_slug))
@@ -220,13 +285,31 @@ def list_sentry_issues(
     (e.g. ``24h``, ``14d``) defaults to ``SENTRY_STATS_PERIOD`` then ``24h``.
     """
 
-    payload = _request_json(
-        config,
-        "GET",
-        f"/api/0/organizations/{config.organization_slug}/issues/",
-        params=_build_issue_list_params(config, limit, query, stats_period),
-    )
-    return payload if isinstance(payload, list) else []
+    path = f"/api/0/organizations/{config.organization_slug}/issues/"
+    last_error: httpx.HTTPStatusError | None = None
+    for candidate in _sentry_query_candidates(query):
+        try:
+            payload = _request_json(
+                config,
+                "GET",
+                path,
+                params=_build_issue_list_params(
+                    config,
+                    limit,
+                    query,
+                    stats_period,
+                    normalized_query=candidate,
+                ),
+            )
+            return payload if isinstance(payload, list) else []
+        except httpx.HTTPStatusError as err:
+            if err.response.status_code == 400:
+                last_error = err
+                continue
+            raise
+    if last_error is not None:
+        raise last_error
+    return []
 
 
 def get_sentry_issue(

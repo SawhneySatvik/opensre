@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import os
+from typing import Any
 from unittest.mock import patch
 
+import httpx
 import pytest
 
-from integrations.sentry import _MAX_SENTRY_QUERY_LEN, _sanitize_sentry_query
+from integrations.sentry import (
+    _MAX_SENTRY_QUERY_LEN,
+    SentryConfig,
+    _sanitize_sentry_query,
+    _sentry_query_candidates,
+    describe_sentry_api_error,
+    list_sentry_issues,
+)
 from tests.tools.conftest import BaseToolContract, mock_agent_state
 from tools.sentry_search_issues_tool import search_sentry_issues
 
@@ -136,6 +145,87 @@ def test_sanitize_sentry_query_strips_whitespace() -> None:
 
 def test_sanitize_sentry_query_empty_string() -> None:
     assert _sanitize_sentry_query("") == ""
+
+
+def test_sanitize_sentry_query_or_takes_first_alternative() -> None:
+    raw = '"database connection" OR "too many connections" OR "connection refused"'
+    assert _sanitize_sentry_query(raw) == '"database connection"'
+
+
+def test_sentry_query_candidates_splits_or() -> None:
+    raw = '"database connection" OR "too many connections" OR "connection refused"'
+    assert _sentry_query_candidates(raw) == [
+        '"database connection"',
+        '"too many connections"',
+        '"connection refused"',
+    ]
+
+
+def test_run_returns_structured_error_on_http_400() -> None:
+    request = httpx.Request("GET", "https://sentry.io/api/0/organizations/my-org/issues/")
+    response = httpx.Response(
+        400,
+        request=request,
+        json={"detail": "Invalid query."},
+    )
+    err = httpx.HTTPStatusError("bad request", request=request, response=response)
+
+    with (
+        patch("tools.sentry_search_issues_tool.list_sentry_issues", side_effect=err),
+        patch("tools.sentry_search_issues_tool.sentry_config_from_env", return_value=None),
+    ):
+        result = search_sentry_issues(
+            organization_slug="my-org",
+            sentry_token="tok_test",
+            query='"database connection" OR "too many connections"',
+            project_slug="python",
+        )
+
+    assert result["available"] is False
+    assert result["issues"] == []
+    assert "HTTP 400" in result["error"]
+    assert "Invalid query." in result["error"]
+    assert "does not support OR" in result["error"]
+    assert "project slug 'python'" in result["error"]
+
+
+def test_list_sentry_issues_retries_or_segments_on_400() -> None:
+    config = SentryConfig(organization_slug="my-org", auth_token="tok", project_slug="python")
+    query = '"database connection" OR "too many connections"'
+    calls: list[str] = []
+
+    def _fake_request_json(
+        _config: SentryConfig,
+        _method: str,
+        _path: str,
+        *,
+        params: list[tuple[str, str | int | float | bool | None]] | None = None,
+    ) -> list[dict[str, Any]]:
+        assert params is not None
+        calls.append(str(dict(params)["query"]))
+        if len(calls) == 1:
+            request = httpx.Request("GET", "https://sentry.io/api/0/organizations/my-org/issues/")
+            response = httpx.Response(400, request=request, json={"detail": "Invalid query."})
+            raise httpx.HTTPStatusError("bad request", request=request, response=response)
+        return [{"id": "1", "title": "too many connections"}]
+
+    with patch("integrations.sentry._request_json", side_effect=_fake_request_json):
+        issues = list_sentry_issues(config=config, query=query)
+
+    assert calls == ['"database connection"', '"too many connections"']
+    assert len(issues) == 1
+
+
+def test_describe_sentry_api_error_includes_json_detail() -> None:
+    request = httpx.Request("GET", "https://sentry.io/api/0/organizations/my-org/issues/")
+    response = httpx.Response(400, request=request, json={"detail": "Invalid search query."})
+    err = httpx.HTTPStatusError("bad request", request=request, response=response)
+
+    message = describe_sentry_api_error(err, query="windows", project_slug="backend")
+
+    assert "HTTP 400" in message
+    assert "Invalid search query." in message
+    assert "project slug 'backend'" in message
 
 
 def test_build_issue_list_params_sanitizes_multiline_query() -> None:
