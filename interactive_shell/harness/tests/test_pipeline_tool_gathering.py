@@ -8,9 +8,9 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.harness.controller import (
+from interactive_shell.harness.harness import handle_message_with_agent
+from interactive_shell.turn_accounting import (
     TerminalActionExecutionResult,
-    handle_message_with_agent,
 )
 from interactive_shell.session import ReplSession
 

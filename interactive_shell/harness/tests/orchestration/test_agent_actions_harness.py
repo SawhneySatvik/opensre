@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 
 import interactive_shell.tools.slash_tool as slash_tool
-from interactive_shell.harness.controller import (
+from interactive_shell.harness.harness import (
     ActionExecutionDeps,
     execute_cli_actions,
 )

@@ -8,12 +8,12 @@ import pytest
 from rich.console import Console
 
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.controller import (
-    TerminalActionExecutionResult,
-    handle_message_with_agent,
-)
+from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
+)
+from interactive_shell.harness.turn_accounting import (
+    TerminalActionExecutionResult,
 )
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
 from interactive_shell.session import ReplSession
@@ -241,7 +241,7 @@ def test_handle_message_with_agent_nitro_prompt_executes_remote_then_investigati
         call_order.append(f"investigation:{alert_text}")
 
     monkeypatch.setattr(
-        "interactive_shell.harness.controller._default_llm_factory",
+        "interactive_shell.harness.harness._default_llm_factory",
         lambda: FakeActionLLM(
             [
                 AgentLLMResponse(

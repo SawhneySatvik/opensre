@@ -1,4 +1,4 @@
-"""Interactive shell runtime controller, action execution, and turn handling."""
+"""Interactive shell action execution, turn handling, and dispatch helpers."""
 
 from __future__ import annotations
 
@@ -11,13 +11,10 @@ from collections.abc import Awaitable, Callable, Coroutine, Iterator
 from dataclasses import dataclass
 from typing import Any, Literal
 
-from prompt_toolkit import PromptSession
-from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.markup import escape
 
 from config.llm_reasoning_effort import apply_reasoning_effort
-from core.domain.alerts import inbox as _alert_inbox
 from core.runtime.agent import Agent
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from integrations.llm_cli.failure_explain import is_context_length_overflow
@@ -28,8 +25,12 @@ from interactive_shell.harness.llm_context import (
     build_action_user_message,
 )
 from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
+from interactive_shell.turn_accounting import (
+    ShellTurnAccounting,
+    ShellTurnResult,
+    TerminalActionExecutionResult,
+)
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
-from interactive_shell.runtime.core.prompt_manager import PromptManager
 from interactive_shell.runtime.core.state import (
     PROMPT_REFRESH_INTERVAL_S,
     ReplState,
@@ -39,13 +40,8 @@ from interactive_shell.runtime.input import (
     PromptInputReader,
 )
 from interactive_shell.runtime.input.actions import (
-    CancelTurn,
-    CloseShell,
-    DeliverConfirmation,
-    IgnoreInput,
     InputAction,
     ShellInputSnapshot,
-    SubmitTurn,
     decide_input_action,
 )
 from interactive_shell.runtime.utils.input_policy import (
@@ -53,9 +49,7 @@ from interactive_shell.runtime.utils.input_policy import (
     turn_should_show_spinner,
 )
 from interactive_shell.session import (
-    ReplRuntimeContext,
     ReplSession,
-    create_repl_runtime_context,
 )
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
@@ -67,7 +61,6 @@ from interactive_shell.ui.streaming import render_response_header
 from interactive_shell.ui.streaming.console import StreamingConsole
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
-from platform.analytics.cli import capture_terminal_turn_summarized
 from platform.analytics.repl_context import bind_cli_session_id, reset_cli_session_id
 
 log = logging.getLogger(__name__)
@@ -85,22 +78,6 @@ _EXECUTED_HISTORY_TYPES = {
     "implementation",
     "cli_command",
 }
-
-# Distinguishes the two zero-count outcomes that need different analytics:
-# a normal action-agent run that completed without planning actions ("completed"),
-# versus a run that never produced actions because it failed/overflowed ("not_run").
-ActionAccountingStatus = Literal["completed", "not_run"]
-
-
-@dataclass(frozen=True)
-class TerminalActionExecutionResult:
-    planned_count: int
-    executed_count: int
-    executed_success_count: int
-    has_unhandled_clause: bool
-    handled: bool
-    response_text: str = ""
-    accounting_status: ActionAccountingStatus = "completed"
 
 
 @dataclass(frozen=True)
@@ -297,108 +274,8 @@ GatherEvidence = Callable[..., str | None]
 AnswerAgent = Callable[..., LlmRunInfo | None]
 
 
-@dataclass(frozen=True)
-class ShellTurnResult:
-    final_intent: str
-    action_result: TerminalActionExecutionResult
-    assistant_response_text: str = ""
-    llm_run: LlmRunInfo | None = None
-
-    @property
-    def answered(self) -> bool:
-        """A turn is "answered" exactly when the conversational LLM produced a run."""
-        return self.llm_run is not None
-
-
 def _response_text(run: LlmRunInfo | None) -> str:
     return run.response_text if run is not None and run.response_text else ""
-
-
-@dataclass
-class ShellTurnAccounting:
-    """Single owner of a shell turn's accounting side effects.
-
-    Separates "what happened" (decided by the turn flow) from "how it is
-    accounted for": action-agent analytics, terminal-turn aggregate telemetry,
-    prompt-recorder flushing, conversational-turn persistence, and the final
-    assistant-intent stamp.
-    """
-
-    session: ReplSession
-    text: str
-    recorder: PromptRecorder | None
-
-    def record_action_result(self, action_result: TerminalActionExecutionResult) -> None:
-        """Emit action-agent analytics and update terminal-turn aggregates."""
-        self._record_action_analytics(action_result)
-        self._record_terminal_turn(action_result)
-
-    def finalize(self, result: ShellTurnResult) -> ShellTurnResult:
-        """Flush the recorder, persist the turn, and stamp the session intent."""
-        self._flush_prompt_recorder(result)
-        if result.llm_run is not None:
-            self.session.record("cli_agent", self.text)
-        self.session.last_assistant_intent = result.final_intent
-        return result
-
-    def _record_action_analytics(self, action_result: TerminalActionExecutionResult) -> None:
-        from platform.analytics.cli import (
-            capture_repl_execution_policy_decision,
-            capture_terminal_actions_executed,
-            capture_terminal_actions_planned,
-        )
-
-        if action_result.accounting_status == "not_run":
-            capture_terminal_actions_executed(
-                planned_count=0,
-                executed_count=0,
-                executed_success_count=0,
-            )
-            return
-
-        capture_terminal_actions_planned(
-            planned_count=action_result.planned_count,
-            has_unhandled_clause=action_result.has_unhandled_clause,
-        )
-        capture_repl_execution_policy_decision(
-            {
-                "policy_stage": "shell_action_agent",
-                "policy_trace": (
-                    "agent_tool_calls" if action_result.planned_count else "assistant_handoff"
-                ),
-                "planned_count": action_result.planned_count,
-                "has_unhandled_clause": action_result.has_unhandled_clause,
-            }
-        )
-        capture_terminal_actions_executed(
-            planned_count=action_result.planned_count,
-            executed_count=action_result.executed_count,
-            executed_success_count=action_result.executed_success_count,
-        )
-
-    def _record_terminal_turn(self, action_result: TerminalActionExecutionResult) -> None:
-        fallback_to_llm = not action_result.handled
-        snapshot = self.session.record_terminal_turn(
-            executed_count=action_result.executed_count,
-            executed_success_count=action_result.executed_success_count,
-            fallback_to_llm=fallback_to_llm,
-        )
-        capture_terminal_turn_summarized(
-            planned_count=action_result.planned_count,
-            executed_count=action_result.executed_count,
-            executed_success_count=action_result.executed_success_count,
-            fallback_to_llm=fallback_to_llm,
-            session_turn_index=snapshot.turn_index,
-            session_fallback_count=snapshot.fallback_count,
-            session_action_success_percent=snapshot.action_success_percent,
-            session_fallback_rate_percent=snapshot.fallback_rate_percent,
-        )
-
-    def _flush_prompt_recorder(self, result: ShellTurnResult) -> None:
-        if self.recorder is None:
-            return
-        self.recorder.set_response(result.assistant_response_text, result.llm_run)
-        self.recorder.flush()
 
 
 def handle_message_with_agent(
@@ -516,33 +393,6 @@ AgentEventSink = Callable[[AgentEvent], Awaitable[None]]
 
 class DispatchCancelled(Exception):
     """Raised when in-flight dispatch is cancelled during confirmation."""
-
-
-def _resolve_runtime_context(
-    session: ReplSession | ReplRuntimeContext | None,
-    *,
-    state: ReplState | None,
-    spinner: SpinnerState | None,
-    pt_session: PromptSession[str] | None,
-    inbox: _alert_inbox.AlertInbox | None,
-) -> ReplRuntimeContext:
-    if isinstance(session, ReplRuntimeContext):
-        if state is None and spinner is None and pt_session is None and inbox is None:
-            return session
-        return ReplRuntimeContext(
-            session=session.session,
-            state=state if state is not None else session.state,
-            spinner=spinner if spinner is not None else session.spinner,
-            pt_session=pt_session if pt_session is not None else session.pt_session,
-            inbox=inbox if inbox is not None else session.inbox,
-        )
-    return create_repl_runtime_context(
-        session,
-        state=state,
-        spinner=spinner,
-        pt_session=pt_session,
-        inbox=inbox,
-    )
 
 
 @contextlib.contextmanager
@@ -778,123 +628,6 @@ async def run_agent_turn_queue(
             state.queue.task_done()
 
 
-class InteractiveShellController:
-    """Coordinate prompt input, queued dispatch, background workers, and shutdown."""
-
-    def __init__(
-        self,
-        session: ReplSession | ReplRuntimeContext | None = None,
-        *,
-        state: ReplState | None = None,
-        spinner: SpinnerState | None = None,
-        pt_session: PromptSession[str] | None = None,
-        inbox: _alert_inbox.AlertInbox | None = None,
-    ) -> None:
-        self.runtime_context = _resolve_runtime_context(
-            session,
-            state=state,
-            spinner=spinner,
-            pt_session=pt_session,
-            inbox=inbox,
-        )
-        self.session = self.runtime_context.session
-        self.inbox = self.runtime_context.inbox
-        self.state = self.runtime_context.state
-        self.spinner = self.runtime_context.spinner
-        self.prompt = PromptManager(
-            self.session,
-            self.state,
-            self.spinner,
-            self.runtime_context.pt_session,
-        )
-        self.turn_runner = AgentTurnRunner(
-            session=self.session,
-            state=self.state,
-            spinner=self.spinner,
-            invalidate_prompt=lambda: self.prompt.invalidate_prompt(),
-        )
-        self.echo_console = Console(highlight=False, force_terminal=True, color_system="truecolor")
-        self.input_reader = PromptInputReader(
-            self.prompt,
-            self.state,
-            self.session,
-            self.echo_console,
-        )
-        self.background: BackgroundTaskManager | None = None
-        self.tasks: list[tuple[str, asyncio.Task[None]]] = []
-
-    async def start_interactive_shell(self) -> None:
-        self.session.schedule_warm_resolved_integrations()
-        self._start_runtime_services()
-        try:
-            with patch_stdout(raw=True):
-                await run_input_loop(
-                    state=self.state,
-                    session=self.session,
-                    background=self.background,
-                    input_reader=self.input_reader,
-                    echo_console=self.echo_console,
-                    handle_input_action=self._handle_input_action,
-                )
-        finally:
-            await self._shutdown_runtime()
-
-    def _start_runtime_services(self) -> None:
-        self.prompt.setup()
-        self.background = BackgroundTaskManager(
-            self.session,
-            self.state,
-            self.spinner,
-            self.inbox,
-            self.prompt.invalidate_prompt,
-        )
-        self.tasks = self.background.start_all(
-            lambda: run_agent_turn_queue(
-                state=self.state,
-                run_turn=self.turn_runner.run_agent_turn,
-            )
-        )
-
-    async def _handle_input_action(self, action: InputAction) -> bool:
-        match action:
-            case IgnoreInput():
-                return True
-            case CloseShell():
-                return False
-            case CancelTurn(submitted_text=text):
-                if text:
-                    self.prompt.render_submitted_prompt(self.echo_console, text)
-                self.state.cancel_current_dispatch()
-                return True
-            case DeliverConfirmation(text=text):
-                self.state.deliver_confirmation(text)
-                return True
-            case SubmitTurn(text=text, wait_until_idle=wait, warning=warning):
-                if warning:
-                    self.echo_console.print(warning)
-                self.prompt.render_submitted_prompt(self.echo_console, text)
-                await self.state.queue.put(text)
-                if wait:
-                    await self.state.queue.join()
-                return True
-        raise AssertionError(f"Unhandled input action: {action!r}")
-
-    async def _shutdown_runtime(self) -> None:
-        self.state.request_exit()
-        self.state.cancel_current_dispatch()
-
-        for _label, task in self.tasks:
-            task.cancel()
-
-        shutdown_results = await asyncio.gather(
-            *(task for _label, task in self.tasks),
-            return_exceptions=True,
-        )
-        for (label, _task), result in zip(self.tasks, shutdown_results, strict=True):
-            if isinstance(result, Exception) and not isinstance(result, asyncio.CancelledError):
-                log.debug("%s task shutdown raised exception: %s", label, result)
-
-
 def request_confirmation_via_prompt(state: ReplState, prompt_text: str) -> str:
     response_event = threading.Event()
     state.begin_confirmation(response_event, prompt_text)
@@ -912,16 +645,11 @@ def request_confirmation_via_prompt(state: ReplState, prompt_text: str) -> str:
 
 
 __all__ = [
-    "ActionAccountingStatus",
     "ActionExecutionDeps",
     "AgentEvent",
     "AgentEventSink",
     "AgentTurnRunner",
     "DispatchCancelled",
-    "InteractiveShellController",
-    "ShellTurnAccounting",
-    "ShellTurnResult",
-    "TerminalActionExecutionResult",
     "execute_cli_actions",
     "handle_message_with_agent",
     "request_confirmation_via_prompt",

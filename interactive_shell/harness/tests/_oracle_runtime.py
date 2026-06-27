@@ -19,7 +19,7 @@ from rich.console import Console
 # cannot be resolved the scenario is skipped, never failed (env gap, not bug).
 LIVE_INTEGRATION_SENTINEL = "@live"
 
-from interactive_shell.harness.controller import handle_message_with_agent
+from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.tests._oracle_normalize import (
     normalize_history_entry,
     normalize_response_text,
