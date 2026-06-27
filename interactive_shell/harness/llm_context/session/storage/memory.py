@@ -1,6 +1,6 @@
 """In-memory session storage backend.
 
-A :class:`~interactive_shell.session.types.SessionStorage` implementation that
+A :class:`~interactive_shell.harness.llm_context.session.types.SessionStorage` implementation that
 keeps records in process memory instead of on disk. Useful for tests and any
 caller that wants session writes without touching the filesystem. Mirrors the
 observable semantics of :class:`JsonlSessionStorage` (open/append/flush/reopen,
@@ -13,7 +13,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from interactive_shell.session.types import CHAT_KINDS, SessionPersistenceSource
+from interactive_shell.harness.llm_context.session.types import CHAT_KINDS, SessionPersistenceSource
 
 _TRIGGER_MAX_CHARS = 200
 

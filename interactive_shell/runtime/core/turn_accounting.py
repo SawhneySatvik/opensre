@@ -13,7 +13,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-from interactive_shell.session import ReplSession
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
 from platform.analytics.cli import capture_terminal_turn_summarized
 

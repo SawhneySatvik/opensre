@@ -2,7 +2,7 @@
 
 ## Human summary
 
-`interactive_shell/session/` is the single, canonical home for everything about a
+`interactive_shell/harness/llm_context/session/` is the single, canonical home for everything about a
 REPL session: the in-memory domain object, the runtime context bundle assembled
 for the controller, and all session persistence. Before this package existed,
 session state lived in `runtime/core/session.py` + `runtime/core/context.py`
@@ -37,7 +37,7 @@ Layers (mirrors the layered "harness/session" pattern):
   not a module-level singleton baked into call sites.
 - `paths.py` is the only module that resolves `OPENSRE_HOME_DIR / "sessions"`.
   Both the JSONL storage and repo go through it, so tests patch exactly one seam
-  (`interactive_shell.session.paths.sessions_dir`).
+  (`interactive_shell.harness.llm_context.session.paths.sessions_dir`).
 - This package must not import from `interactive_shell.runtime.__init__`. The
   one allowed runtime dependency is `runtime.core.state` (used by `context.py`).
   `runtime/__init__.py` lazily re-exports this package's surface to avoid the
@@ -45,10 +45,10 @@ Layers (mirrors the layered "harness/session" pattern):
 
 ## Test seam policy
 
-- Patch `interactive_shell.session.paths.sessions_dir` (or set
+- Patch `interactive_shell.harness.llm_context.session.paths.sessions_dir` (or set
   `config.constants.OPENSRE_HOME_DIR` to a temp dir) for filesystem isolation.
 - Prefer `InMemorySessionStorage` for storage-behavior tests that do not need to
   assert on-disk JSONL format.
-- Import canonical names from `interactive_shell.session`. Do not reintroduce a
+- Import canonical names from `interactive_shell.harness.llm_context.session`. Do not reintroduce a
   `SessionStore` symbol in source; it only survives in a few tests as a thin
   alias for an instance/facade and should not grow new call sites.

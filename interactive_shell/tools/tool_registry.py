@@ -6,7 +6,7 @@ import functools
 from typing import Any, Literal
 
 from core.runtime.types import AgentTool
-from interactive_shell.session import ReplSession
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,

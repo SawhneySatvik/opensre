@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from interactive_shell.harness.agent import handle_message_with_agent
-from interactive_shell.session import ReplSession
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.ui import render_banner
 from interactive_shell.ui.input_prompt.rendering import render_submitted_prompt
 from interactive_shell.utils.telemetry import PromptRecorder

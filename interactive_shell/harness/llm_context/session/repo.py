@@ -1,6 +1,6 @@
 """JSONL-backed cross-session repository.
 
-Where :class:`~interactive_shell.session.storage.jsonl.JsonlSessionStorage`
+Where :class:`~interactive_shell.harness.llm_context.session.storage.jsonl.JsonlSessionStorage`
 owns writes to a single session file, this repository owns read queries across
 every session file under ``~/.opensre/sessions/``: listing recent sessions for
 ``/sessions``, loading one for ``/resume``, and browsing persisted RCA reports
@@ -14,8 +14,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-import interactive_shell.session.paths as paths
-from interactive_shell.session.paths import derive_name
+import interactive_shell.harness.llm_context.session.paths as paths
+from interactive_shell.harness.llm_context.session.paths import derive_name
 
 _ROOT_CAUSE_PREVIEW_CHARS = 80
 _DEFAULT_RCA_HISTORY_LIMIT = 50

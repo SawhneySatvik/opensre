@@ -1,12 +1,11 @@
-"""Tests for the pluggable grounding diagnostics registry."""
+"""Tests for the session-scoped grounding context and its diagnostics sources."""
 
 from __future__ import annotations
 
+from interactive_shell.harness.llm_context.grounding.context import GroundingContext
 from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
     GroundingSource,
-    iter_grounding_sources,
     log_grounding_cache_diagnostics,
-    register_grounding_source,
 )
 
 
@@ -18,76 +17,45 @@ def _make_source(name: str, hits: int = 0) -> GroundingSource:
     )
 
 
-def test_register_and_iterate(tmp_path: object) -> None:
-    """Registered sources appear in iter_grounding_sources."""
-    from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
-
-    original = dict(_gd._registry)
-    _gd._registry.clear()
-    try:
-        src = _make_source("test_cli")
-        register_grounding_source(src)
-        sources = list(iter_grounding_sources())
-        assert any(s.name == "test_cli" for s in sources)
-    finally:
-        _gd._registry.clear()
-        _gd._registry.update(original)
+def test_context_exposes_one_source_per_cache() -> None:
+    """A GroundingContext yields a diagnostics source for each grounding cache."""
+    ctx = GroundingContext()
+    names = [s.name for s in ctx.iter_sources()]
+    assert names == ["cli", "docs", "agents_md"]
 
 
-def test_idempotent_registration() -> None:
-    """Registering the same name twice updates in place, no duplicates."""
-    from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
-
-    original = dict(_gd._registry)
-    _gd._registry.clear()
-    try:
-        register_grounding_source(_make_source("dup", hits=1))
-        register_grounding_source(_make_source("dup", hits=2))
-        sources = [s for s in iter_grounding_sources() if s.name == "dup"]
-        assert len(sources) == 1
-        assert sources[0].stats_fn()["hits"] == 2
-    finally:
-        _gd._registry.clear()
-        _gd._registry.update(original)
+def test_context_sources_are_isolated_per_instance() -> None:
+    """Two contexts own independent caches (no shared module-level state)."""
+    ctx_a = GroundingContext()
+    ctx_b = GroundingContext()
+    assert ctx_a.cli is not ctx_b.cli
+    assert ctx_a.docs is not ctx_b.docs
+    assert ctx_a.agents_md is not ctx_b.agents_md
 
 
-def test_iteration_order() -> None:
-    """Sources are returned in insertion order."""
-    from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
-
-    original = dict(_gd._registry)
-    _gd._registry.clear()
-    try:
-        register_grounding_source(_make_source("first"))
-        register_grounding_source(_make_source("second"))
-        names = [s.name for s in iter_grounding_sources()]
-        assert names == ["first", "second"]
-    finally:
-        _gd._registry.clear()
-        _gd._registry.update(original)
+def test_invalidate_clears_every_cache() -> None:
+    ctx = GroundingContext()
+    ctx.cli.build_text()
+    assert ctx.cli.stats()["misses"] >= 1
+    ctx.invalidate()
+    assert ctx.cli.stats()["misses"] == 0
 
 
-def test_log_grounding_uses_registry(monkeypatch: object) -> None:
-    """log_grounding_cache_diagnostics iterates the registry when verbose."""
+def test_log_grounding_iterates_provided_sources(monkeypatch: object) -> None:
+    """log_grounding_cache_diagnostics logs each provided source when verbose."""
     import os
 
     from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
 
-    original = dict(_gd._registry)
-    _gd._registry.clear()
     logged: list[str] = []
-
     try:
-        monkeypatch.setenv("TRACER_VERBOSE", "1")
-        register_grounding_source(_make_source("mock", hits=5))
-        monkeypatch.setattr(
+        monkeypatch.setenv("TRACER_VERBOSE", "1")  # type: ignore[attr-defined]
+        monkeypatch.setattr(  # type: ignore[attr-defined]
             _gd._logger,
             "debug",
             lambda msg, *args: logged.append(msg % args),
         )
-        log_grounding_cache_diagnostics("test_reason")
+        log_grounding_cache_diagnostics([_make_source("mock", hits=5)], "test_reason")
         assert any("mock" in entry for entry in logged)
     finally:
-        _gd._registry.clear()
-        _gd._registry.update(original)
         os.environ.pop("TRACER_VERBOSE", None)

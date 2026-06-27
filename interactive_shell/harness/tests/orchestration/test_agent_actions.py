@@ -22,6 +22,7 @@ import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from interactive_shell.harness.agent import handle_message_with_agent
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
     default_target_surface,
@@ -29,7 +30,6 @@ from interactive_shell.harness.tests._planned_action import (
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.session import ReplSession
 from interactive_shell.tools.tool_registry import (
     TOOL_KIND_TO_NAME,
     ToolKind,

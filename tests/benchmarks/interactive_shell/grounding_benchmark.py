@@ -11,17 +11,8 @@ import time
 from collections.abc import Callable
 from pathlib import Path
 
-from interactive_shell.harness.llm_context.grounding.cli_reference import (
-    build_cli_reference_text,
-    get_cli_reference_cache_stats,
-    invalidate_cli_reference_cache,
-)
-from interactive_shell.harness.llm_context.grounding.docs_reference import (
-    build_docs_reference_text,
-    discover_docs,
-    get_docs_cache_stats,
-    invalidate_docs_cache,
-)
+from interactive_shell.harness.llm_context.grounding.cli_reference import CliReference
+from interactive_shell.harness.llm_context.grounding.docs_reference import DocsReference
 
 
 def _timed(label: str, fn: Callable[[], object]) -> tuple[float, object]:
@@ -35,26 +26,26 @@ def _timed(label: str, fn: Callable[[], object]) -> tuple[float, object]:
 def main() -> None:
     docs_root = Path(__file__).resolve().parents[3] / "docs"
 
-    invalidate_cli_reference_cache()
-    invalidate_docs_cache()
+    cli = CliReference()
+    docs = DocsReference()
 
-    cold_cli, _ = _timed("CLI reference (cold)", build_cli_reference_text)
-    warm_cli, _ = _timed("CLI reference (warm)", build_cli_reference_text)
-    cli_stats = get_cli_reference_cache_stats()
+    cold_cli, _ = _timed("CLI reference (cold)", cli.build_text)
+    warm_cli, _ = _timed("CLI reference (warm)", cli.build_text)
+    cli_stats = cli.stats()
 
     cold_docs = 0.0
     warm_docs = 0.0
     if docs_root.is_dir():
-        cold_docs, _ = _timed("Docs parse (cold)", lambda: discover_docs(docs_root))
-        warm_docs, _ = _timed("Docs parse (warm)", lambda: discover_docs(docs_root))
+        cold_docs, _ = _timed("Docs parse (cold)", lambda: docs.discover(docs_root))
+        warm_docs, _ = _timed("Docs parse (warm)", lambda: docs.discover(docs_root))
         _timed(
             "Docs reference text (warm index)",
-            lambda: build_docs_reference_text("configure Datadog integration"),
+            lambda: docs.build_text("configure Datadog integration"),
         )
     else:
         print("[skip] docs/ not present — docs parse timings omitted")
 
-    docs_stats = get_docs_cache_stats()
+    docs_stats = docs.stats()
 
     print(
         f"\nSummary: CLI speedup ~{cold_cli / warm_cli:.1f}x (warm vs cold reference build)"

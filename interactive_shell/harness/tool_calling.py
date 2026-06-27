@@ -28,9 +28,9 @@ from interactive_shell.harness.llm_context import (
     build_action_user_message,
 )
 from interactive_shell.harness.llm_context.conversation_history import MAX_CONVERSATION_MESSAGES
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.turn_context import TurnContext
 from interactive_shell.runtime.core.turn_accounting import ToolCallingTurnResult
-from interactive_shell.session import ReplSession
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
 from interactive_shell.ui.action_rendering import ActionRenderObserver

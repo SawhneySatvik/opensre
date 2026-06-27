@@ -17,13 +17,13 @@ if TYPE_CHECKING:
     from interactive_shell.harness.llm_context.grounding.context import GroundingContext
 
 from config.llm_reasoning_effort import ReasoningEffortChoice
+from interactive_shell.harness.llm_context.session.storage.jsonl import JsonlSessionStorage
+from interactive_shell.harness.llm_context.session.types import SessionStorage
 from interactive_shell.runtime.background.models import (
     BackgroundInvestigationRecord,
     BackgroundNotificationPreferences,
 )
 from interactive_shell.runtime.core.tasks import TaskRegistry
-from interactive_shell.session.storage.jsonl import JsonlSessionStorage
-from interactive_shell.session.types import SessionStorage
 
 InterventionKind = Literal["ctrl_c", "correction"]
 

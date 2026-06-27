@@ -24,6 +24,7 @@ from interactive_shell.harness.agent import (
     _parse_action_plan,
     answer_cli_agent,
 )
+from interactive_shell.harness.llm_context import cli_agent_prompt
 from interactive_shell.harness.llm_context.assistant_system_prompt import (
     _ACTION_RULE,
     _MARKDOWN_RULE,
@@ -32,7 +33,7 @@ from interactive_shell.harness.llm_context.assistant_system_prompt import (
     _build_observation_block,
     _build_system_prompt,
 )
-from interactive_shell.session import ReplSession
+from interactive_shell.harness.llm_context.session import ReplSession
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -167,16 +168,18 @@ class TestSystemPromptInvestigationFlowGrounding:
 
     def test_answer_cli_agent_injects_investigation_flow_reference(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "Yes, I can describe the pipeline.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
         monkeypatch.setattr(
-            cli_agent,
+            cli_agent_prompt,
             "build_investigation_flow_reference_text",
             lambda: "resolve → extract → investigate → deliver",
         )
 
+        session = ReplSession()
+        monkeypatch.setattr(session.grounding.cli, "build_text", lambda: "(ref)")
+        monkeypatch.setattr(session.grounding.agents_md, "build_text", lambda: "")
+
         console, _ = _capture()
-        answer_cli_agent("Can you see how investigations are structured?", ReplSession(), console)
+        answer_cli_agent("Can you see how investigations are structured?", session, console)
 
         assert client.last_prompt is not None
         assert "--- Investigation flow reference ---" in client.last_prompt
@@ -210,11 +213,11 @@ class TestEnvironmentIntegrationGrounding:
 
     def test_answer_cli_agent_injects_configured_integrations(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "No, Sentry is not configured.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
-        monkeypatch.setattr(cli_agent, "build_investigation_flow_reference_text", lambda: "")
+        monkeypatch.setattr(cli_agent_prompt, "build_investigation_flow_reference_text", lambda: "")
 
         session = ReplSession()
+        monkeypatch.setattr(session.grounding.cli, "build_text", lambda: "(ref)")
+        monkeypatch.setattr(session.grounding.agents_md, "build_text", lambda: "")
         session.configured_integrations_known = True
         session.configured_integrations = ("gitlab",)
         console, _ = _capture()
@@ -242,11 +245,11 @@ class TestObservationSummaryBlock:
 
     def test_answer_cli_agent_injects_observation(self, monkeypatch: Any) -> None:
         client = _patch_llm(monkeypatch, "No — Sentry is not configured.")
-        monkeypatch.setattr(cli_agent, "build_cli_reference_text", lambda: "(ref)")
-        monkeypatch.setattr(cli_agent, "build_agents_md_reference_text", lambda: "")
-        monkeypatch.setattr(cli_agent, "build_investigation_flow_reference_text", lambda: "")
+        monkeypatch.setattr(cli_agent_prompt, "build_investigation_flow_reference_text", lambda: "")
 
         session = ReplSession()
+        monkeypatch.setattr(session.grounding.cli, "build_text", lambda: "(ref)")
+        monkeypatch.setattr(session.grounding.agents_md, "build_text", lambda: "")
         console, _ = _capture()
         observation = (
             "Integration status from `/integrations`:\n- sentry: missing (Not configured.)"

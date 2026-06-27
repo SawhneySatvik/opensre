@@ -19,7 +19,7 @@ from config.config import (
     resolve_llm_settings_verbose,
 )
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.session import JsonlSessionStorage, ReplSession
+from interactive_shell.harness.llm_context.session import JsonlSessionStorage, ReplSession
 
 SessionStore = JsonlSessionStorage()
 

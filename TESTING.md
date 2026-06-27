@@ -74,7 +74,7 @@ For features that touch both storage and display, test each layer separately:
 
 ```python
 # Phase 1 — storage correctness (fast, no REPL)
-from interactive_shell.session import (
+from interactive_shell.harness.llm_context.session import (
     JsonlSessionStorage,
     ReplSession,
     default_session_repo,

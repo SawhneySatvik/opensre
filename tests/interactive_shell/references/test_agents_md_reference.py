@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -11,20 +10,9 @@ import pytest
 from interactive_shell.harness.llm_context.grounding import agents_md_reference
 from interactive_shell.harness.llm_context.grounding.agents_md_reference import (
     AgentsMdFile,
+    AgentsMdReference,
     _excerpt,
-    build_agents_md_reference_text,
-    discover_agents_md_files,
-    get_agents_md_cache_stats,
-    invalidate_agents_md_cache,
 )
-
-
-@pytest.fixture(autouse=True)
-def _clear_agents_md_cache() -> Iterator[None]:
-    """Reset the per-process AGENTS.md cache so each test sees a fresh tree."""
-    invalidate_agents_md_cache()
-    yield
-    invalidate_agents_md_cache()
 
 
 def _write(root: Path, relpath: str, content: str) -> None:
@@ -48,11 +36,11 @@ def _seed_agents_md(root: Path) -> None:
 class TestDiscoverAgentsMdFiles:
     def test_returns_empty_list_when_root_missing(self, tmp_path: Path) -> None:
         missing = tmp_path / "no-such-dir"
-        assert discover_agents_md_files(missing) == []
+        assert AgentsMdReference().discover(missing) == []
 
     def test_walks_root_and_skips_excluded_dirs(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
-        files = discover_agents_md_files(tmp_path)
+        files = AgentsMdReference().discover(tmp_path)
         relpaths = {f.relpath for f in files}
         assert "AGENTS.md" in relpaths
         assert "core/runtime/llm/AGENTS.md" in relpaths
@@ -67,7 +55,7 @@ class TestDiscoverAgentsMdFiles:
 
     def test_results_are_sorted_by_relpath(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
-        files = discover_agents_md_files(tmp_path)
+        files = AgentsMdReference().discover(tmp_path)
         relpaths = [f.relpath for f in files]
         assert relpaths == sorted(relpaths)
 
@@ -76,7 +64,7 @@ class TestDiscoverAgentsMdFiles:
         # delimiters (if a contributor adds them) must be preserved verbatim.
         body = "---\nfoo: bar\n---\n\n# Title\n\nBody.\n"
         _write(tmp_path, "AGENTS.md", body)
-        files = discover_agents_md_files(tmp_path)
+        files = AgentsMdReference().discover(tmp_path)
         assert len(files) == 1
         assert files[0].body == body
 
@@ -88,7 +76,7 @@ class TestBuildAgentsMdReferenceText:
         tmp_path: Path,
     ) -> None:
         monkeypatch.setattr(agents_md_reference, "_REPO_ROOT", tmp_path / "missing")
-        assert build_agents_md_reference_text() == ""
+        assert AgentsMdReference().build_text() == ""
 
     def test_concatenates_each_file_with_labelled_header(
         self,
@@ -97,7 +85,7 @@ class TestBuildAgentsMdReferenceText:
     ) -> None:
         _seed_agents_md(tmp_path)
         monkeypatch.setattr(agents_md_reference, "_REPO_ROOT", tmp_path)
-        text = build_agents_md_reference_text()
+        text = AgentsMdReference().build_text()
         # Root file must be disambiguated from per-package files.
         assert "=== AGENTS.md (root) ===" in text
         assert "=== core/runtime/llm/AGENTS.md ===" in text
@@ -114,7 +102,7 @@ class TestBuildAgentsMdReferenceText:
     ) -> None:
         _seed_agents_md(tmp_path)
         monkeypatch.setattr(agents_md_reference, "_REPO_ROOT", tmp_path)
-        text = build_agents_md_reference_text(max_chars=100)
+        text = AgentsMdReference().build_text(max_chars=100)
         # Allow a small margin for the truncation marker appended at the cap.
         assert len(text) <= 200
         assert "truncated" in text
@@ -141,32 +129,35 @@ class TestAgentsMdFileDataclass:
 
 class TestAgentsMdGroundingCache:
     def test_cache_maxsize_matches_implementation(self) -> None:
-        stats = get_agents_md_cache_stats()
+        stats = AgentsMdReference().stats()
         assert stats["maxsize"] == 32
 
     def test_repeated_discover_hits_parse_cache(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
-        discover_agents_md_files(tmp_path)
-        info1 = get_agents_md_cache_stats()
-        discover_agents_md_files(tmp_path)
-        info2 = get_agents_md_cache_stats()
+        ref = AgentsMdReference()
+        ref.discover(tmp_path)
+        info1 = ref.stats()
+        ref.discover(tmp_path)
+        info2 = ref.stats()
         assert info2["hits"] == info1["hits"] + 1
         assert info2["misses"] == info1["misses"]
 
     def test_invalidate_resets_stats(self, tmp_path: Path) -> None:
         _seed_agents_md(tmp_path)
-        discover_agents_md_files(tmp_path)
-        discover_agents_md_files(tmp_path)
-        assert get_agents_md_cache_stats()["hits"] >= 1
-        invalidate_agents_md_cache()
-        cleared = get_agents_md_cache_stats()
+        ref = AgentsMdReference()
+        ref.discover(tmp_path)
+        ref.discover(tmp_path)
+        assert ref.stats()["hits"] >= 1
+        ref.invalidate()
+        cleared = ref.stats()
         assert cleared["hits"] == 0
         assert cleared["misses"] == 0
         assert cleared["currsize"] == 0
 
     def test_file_edit_invalidates_and_refreshes_content(self, tmp_path: Path) -> None:
+        ref = AgentsMdReference()
         _write(tmp_path, "AGENTS.md", "# Repo map\n\nOld content.\n")
-        files1 = discover_agents_md_files(tmp_path)
+        files1 = ref.discover(tmp_path)
         assert any("Old content" in f.body for f in files1)
 
         # Bump mtime well beyond filesystem mtime resolution so the
@@ -176,6 +167,6 @@ class TestAgentsMdGroundingCache:
         st = target.stat()
         os.utime(target, ns=(st.st_atime_ns, st.st_mtime_ns + 2_000_000_000))
 
-        files2 = discover_agents_md_files(tmp_path)
+        files2 = ref.discover(tmp_path)
         assert any("New refreshed content" in f.body for f in files2)
         assert not any("Old content" in f.body for f in files2)

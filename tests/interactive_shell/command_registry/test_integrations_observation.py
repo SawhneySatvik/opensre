@@ -11,7 +11,7 @@ from interactive_shell.command_registry.integrations import (
     _record_integration_show_observation,
     _record_integrations_observation,
 )
-from interactive_shell.session import ReplSession
+from interactive_shell.harness.llm_context.session import ReplSession
 
 
 def test_records_status_lines_for_each_service() -> None:

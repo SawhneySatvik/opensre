@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
@@ -10,23 +9,12 @@ import pytest
 from interactive_shell.harness.llm_context.grounding import docs_reference
 from interactive_shell.harness.llm_context.grounding.docs_reference import (
     DocPage,
+    DocsReference,
     _excerpt,
     _query_tokens,
     build_docs_index,
-    build_docs_reference_text,
-    discover_docs,
     find_relevant_docs,
-    get_docs_cache_stats,
-    invalidate_docs_cache,
 )
-
-
-@pytest.fixture(autouse=True)
-def _clear_doc_cache() -> Iterator[None]:
-    """Reset the per-process docs cache so each test sees a fresh tree."""
-    invalidate_docs_cache()
-    yield
-    invalidate_docs_cache()
 
 
 def _write_doc(root: Path, relpath: str, content: str) -> None:
@@ -71,11 +59,11 @@ def _seed_docs(root: Path) -> None:
 class TestDiscoverDocs:
     def test_returns_empty_list_when_root_missing(self, tmp_path: Path) -> None:
         missing = tmp_path / "no-docs"
-        assert discover_docs(missing) == []
+        assert DocsReference().discover(missing) == []
 
     def test_walks_root_and_skips_asset_dirs(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         slugs = {p.slug for p in pages}
         assert "datadog" in slugs
         assert "deployment" in slugs
@@ -88,20 +76,20 @@ class TestDiscoverDocs:
 
     def test_extracts_title_from_frontmatter(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         by_slug = {p.slug: p for p in pages}
         assert by_slug["datadog"].title == "Datadog"
         assert by_slug["deployment"].title == "Deployment"
 
     def test_falls_back_to_first_heading_when_no_frontmatter(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         by_slug = {p.slug: p for p in pages}
         assert by_slug["investigating-task-failures"].title == "Investigating task failures"
 
     def test_strips_frontmatter_from_body(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         by_slug = {p.slug: p for p in pages}
         # Frontmatter delimiters and the title line must NOT appear in the body
         # (they would otherwise leak into the LLM grounding context).
@@ -134,27 +122,27 @@ class TestQueryTokens:
 class TestFindRelevantDocs:
     def test_empty_query_returns_empty(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         # Query with only stopwords should not match anything.
         assert find_relevant_docs("how do I", pages) == []
 
     def test_ranks_datadog_page_first_for_datadog_query(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         results = find_relevant_docs("how do I configure Datadog?", pages)
         assert results, "expected at least one match"
         assert results[0].slug == "datadog"
 
     def test_ranks_deployment_page_first_for_deploy_query(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         results = find_relevant_docs("how do I deploy this?", pages)
         assert results
         assert results[0].slug == "deployment"
 
     def test_caps_results_at_top_n(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         results = find_relevant_docs("install configure deploy investigate", pages, top_n=2)
         assert len(results) <= 2
 
@@ -175,7 +163,7 @@ class TestFindRelevantDocs:
             "tutorials/advanced/notes.mdx",
             "# Notes\n\nWe briefly mention masking in this tutorial.\n",
         )
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         results = find_relevant_docs("masking", pages)
         slugs = [p.slug for p in results]
         assert "notes" in slugs, (
@@ -191,7 +179,7 @@ class TestBuildDocsReferenceText:
     ) -> None:
         # Point the module at a non-existent docs root.
         monkeypatch.setattr(docs_reference, "_DOCS_ROOT", tmp_path / "missing")
-        assert build_docs_reference_text("anything") == ""
+        assert DocsReference().build_text("anything") == ""
 
     def test_includes_relevant_doc_excerpt_and_index(
         self,
@@ -200,7 +188,7 @@ class TestBuildDocsReferenceText:
     ) -> None:
         _seed_docs(tmp_path)
         monkeypatch.setattr(docs_reference, "_DOCS_ROOT", tmp_path)
-        text = build_docs_reference_text("how do I configure Datadog?")
+        text = DocsReference().build_text("how do I configure Datadog?")
         assert "datadog.mdx" in text
         assert "API Key" in text
         # The compact index of all pages must always be appended so the LLM
@@ -215,7 +203,7 @@ class TestBuildDocsReferenceText:
     ) -> None:
         _seed_docs(tmp_path)
         monkeypatch.setattr(docs_reference, "_DOCS_ROOT", tmp_path)
-        text = build_docs_reference_text("Datadog", max_chars=120)
+        text = DocsReference().build_text("Datadog", max_chars=120)
         assert len(text) <= 200
         assert "truncated" in text
 
@@ -223,7 +211,7 @@ class TestBuildDocsReferenceText:
 class TestBuildDocsIndex:
     def test_lists_all_pages_with_titles(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        pages = discover_docs(tmp_path)
+        pages = DocsReference().discover(tmp_path)
         index = build_docs_index(pages)
         assert "datadog.mdx: Datadog" in index
         assert "deployment.mdx: Deployment" in index
@@ -252,36 +240,39 @@ class TestDocPageDataclass:
 
 class TestDocsGroundingCache:
     def test_cache_maxsize_matches_implementation(self) -> None:
-        stats = get_docs_cache_stats()
+        stats = DocsReference().stats()
         assert stats["maxsize"] == 32
 
     def test_repeated_discover_hits_parse_cache(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        discover_docs(tmp_path)
-        info1 = get_docs_cache_stats()
-        discover_docs(tmp_path)
-        info2 = get_docs_cache_stats()
+        ref = DocsReference()
+        ref.discover(tmp_path)
+        info1 = ref.stats()
+        ref.discover(tmp_path)
+        info2 = ref.stats()
         assert info2["hits"] == info1["hits"] + 1
         assert info2["misses"] == info1["misses"]
 
     def test_invalidate_resets_stats(self, tmp_path: Path) -> None:
         _seed_docs(tmp_path)
-        discover_docs(tmp_path)
-        discover_docs(tmp_path)
-        assert get_docs_cache_stats()["hits"] >= 1
-        invalidate_docs_cache()
-        cleared = get_docs_cache_stats()
+        ref = DocsReference()
+        ref.discover(tmp_path)
+        ref.discover(tmp_path)
+        assert ref.stats()["hits"] >= 1
+        ref.invalidate()
+        cleared = ref.stats()
         assert cleared["hits"] == 0
         assert cleared["misses"] == 0
         assert cleared["currsize"] == 0
 
     def test_file_edit_invalidates_and_refreshes_content(self, tmp_path: Path) -> None:
+        ref = DocsReference()
         _write_doc(
             tmp_path,
             "datadog.mdx",
             '---\ntitle: "Datadog"\n---\n\nOld content.\n',
         )
-        pages1 = discover_docs(tmp_path)
+        pages1 = ref.discover(tmp_path)
         assert any("Old content" in p.body for p in pages1)
 
         datadog = tmp_path / "datadog.mdx"
@@ -289,7 +280,7 @@ class TestDocsGroundingCache:
             '---\ntitle: "Datadog"\n---\n\nNew refreshed content.\n',
             encoding="utf-8",
         )
-        pages2 = discover_docs(tmp_path)
+        pages2 = ref.discover(tmp_path)
         assert any("New refreshed content" in p.body for p in pages2)
         assert not any("Old content" in p.body for p in pages2)
 
@@ -307,7 +298,8 @@ class TestDocsGroundingCache:
             return real_iter(root)
 
         monkeypatch.setattr(docs_reference, "_iter_doc_files", _spy)
-        discover_docs(tmp_path)
+        ref = DocsReference()
+        ref.discover(tmp_path)
         assert calls == 1
-        discover_docs(tmp_path)
+        ref.discover(tmp_path)
         assert calls == 2

@@ -9,19 +9,19 @@ from rich.console import Console
 
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from interactive_shell.harness.agent import handle_message_with_agent
+from interactive_shell.harness.llm_context.session import ReplSession
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
+from interactive_shell.runtime.core.turn_accounting import (
+    ToolCallingTurnResult,
+)
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
-from interactive_shell.session import ReplSession
 from interactive_shell.tools import (
     investigation_tool as _investigation_tool,
 )
 from interactive_shell.tools import (
     slash_tool as _slash_tool,
-)
-from interactive_shell.runtime.core.turn_accounting import (
-    ToolCallingTurnResult,
 )
 
 

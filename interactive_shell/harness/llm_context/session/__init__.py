@@ -17,21 +17,24 @@ singletons provide the production JSONL backends used by the slash commands.
 
 from __future__ import annotations
 
-from interactive_shell.session.context import (
+from interactive_shell.harness.llm_context.session.context import (
     ReplRuntimeContext,
     ReplSessionBootstrapSpec,
     create_repl_runtime_context,
     prepare_repl_session,
 )
-from interactive_shell.session.repo import JsonlSessionRepo
-from interactive_shell.session.state import (
+from interactive_shell.harness.llm_context.session.repo import JsonlSessionRepo
+from interactive_shell.harness.llm_context.session.state import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
     InterventionKind,
     ReplSession,
     TerminalMetricsSnapshot,
 )
-from interactive_shell.session.storage import InMemorySessionStorage, JsonlSessionStorage
-from interactive_shell.session.types import (
+from interactive_shell.harness.llm_context.session.storage import (
+    InMemorySessionStorage,
+    JsonlSessionStorage,
+)
+from interactive_shell.harness.llm_context.session.types import (
     CHAT_KINDS,
     SessionPersistenceSource,
     SessionRepo,

@@ -13,7 +13,7 @@ Design: incremental writes, one JSONL file per session under
 - reopen_session()     — strips trailing session_end so /resume can append to the file
 
 Cross-session queries (list, load, RCA history) live in
-:class:`~interactive_shell.session.repo.JsonlSessionRepo`.
+:class:`~interactive_shell.harness.llm_context.session.repo.JsonlSessionRepo`.
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from pathlib import Path
 from typing import Any
 
 from config.version import get_version
-from interactive_shell.session.paths import session_path
-from interactive_shell.session.types import CHAT_KINDS, SessionPersistenceSource
+from interactive_shell.harness.llm_context.session.paths import session_path
+from interactive_shell.harness.llm_context.session.types import CHAT_KINDS, SessionPersistenceSource
 
 _TRIGGER_MAX_CHARS = 200
 

@@ -21,7 +21,7 @@ from interactive_shell.harness.llm_context.conversation_history import MAX_CONVE
 
 if TYPE_CHECKING:
     from config.llm_reasoning_effort import ReasoningEffortChoice
-    from interactive_shell.session import ReplSession
+    from interactive_shell.harness.llm_context.session import ReplSession
 
 
 @dataclass(frozen=True)

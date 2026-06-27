@@ -12,7 +12,7 @@ import contextlib
 import json
 from pathlib import Path
 
-from interactive_shell.session.types import CHAT_KINDS
+from interactive_shell.harness.llm_context.session.types import CHAT_KINDS
 
 _NAME_MAX_CHARS = 50
 

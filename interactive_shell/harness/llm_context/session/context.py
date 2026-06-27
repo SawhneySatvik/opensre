@@ -8,9 +8,9 @@ from prompt_toolkit import PromptSession
 from pydantic import BaseModel, ConfigDict, Field, InstanceOf, field_validator, model_validator
 
 from core.domain.alerts import inbox as _alert_inbox
+from interactive_shell.harness.llm_context.session.state import ReplSession
 from interactive_shell.runtime.core.state import ReplState, SpinnerState, create_repl_mutable_state
 from interactive_shell.runtime.core.tasks import TaskRegistry
-from interactive_shell.session.state import ReplSession
 
 
 class ReplSessionBootstrapSpec(BaseModel):

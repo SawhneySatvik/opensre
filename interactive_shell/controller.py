@@ -15,6 +15,11 @@ from interactive_shell.harness.agent import (
     run_agent_turn_queue,
     run_input_loop,
 )
+from interactive_shell.harness.llm_context.session import (
+    ReplRuntimeContext,
+    ReplSession,
+    create_repl_runtime_context,
+)
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.prompt_manager import PromptManager
 from interactive_shell.runtime.core.state import (
@@ -31,11 +36,6 @@ from interactive_shell.runtime.input.actions import (
     IgnoreInput,
     InputAction,
     SubmitTurn,
-)
-from interactive_shell.session import (
-    ReplRuntimeContext,
-    ReplSession,
-    create_repl_runtime_context,
 )
 
 log = logging.getLogger(__name__)
