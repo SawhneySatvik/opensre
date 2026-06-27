@@ -11,7 +11,7 @@ from rich.console import Console
 
 from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.harness.agent import (
-    AgentTurnRunner,
+    AgentTurnCoordinator,
     run_agent_turn_queue,
     run_input_loop,
 )
@@ -97,7 +97,7 @@ class InteractiveShellController:
             self.spinner,
             self.runtime_context.pt_session,
         )
-        self.turn_runner = AgentTurnRunner(
+        self.turn_coordinator = AgentTurnCoordinator(
             session=self.session,
             state=self.state,
             spinner=self.spinner,
@@ -141,7 +141,7 @@ class InteractiveShellController:
         self.tasks = self.background.start_all(
             lambda: run_agent_turn_queue(
                 state=self.state,
-                run_turn=self.turn_runner.run_agent_turn,
+                run_turn=self.turn_coordinator.run_turn,
             )
         )
 
