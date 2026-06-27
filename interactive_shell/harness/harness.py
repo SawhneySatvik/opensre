@@ -8,7 +8,7 @@ from rich.console import Console
 
 from interactive_shell.chat.cli_agent import answer_cli_agent
 from interactive_shell.chat.tool_gathering import gather_tool_evidence
-from interactive_shell.harness.orchestration.agent_actions import (
+from interactive_shell.harness.agent_actions import (
     TerminalActionExecutionResult,
     execute_cli_actions,
 )

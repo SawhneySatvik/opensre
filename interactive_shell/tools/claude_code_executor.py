@@ -6,7 +6,7 @@ task, and watches the subprocess lifecycle in a daemon thread.
 
 Lives next to the agent-facing ``interactive_shell.tools.implementation_tool``.
 Shared task-streaming helpers and the execution policy still come from
-``interactive_shell.harness.orchestration.subprocess_runner``.
+``interactive_shell.runtime.subprocess_runner``.
 
 ``subprocess`` and ``threading`` are referenced as module globals so tests can
 patch ``interactive_shell.tools.claude_code_executor.subprocess.Popen`` /
@@ -21,25 +21,24 @@ import subprocess
 import threading
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
 
 from integrations.llm_cli.claude_code import ClaudeCodeAdapter
 from integrations.llm_cli.subprocess_env import build_cli_subprocess_env
-from interactive_shell.harness.orchestration.subprocess_runner.task_streaming import (
+from interactive_shell.harness.execution_policy import (
+    evaluate_code_agent_launch,
+)
+from interactive_shell.runtime import ReplSession, TaskKind
+from interactive_shell.runtime.subprocess_runner.task_streaming import (
     _MAX_COMMAND_OUTPUT_CHARS,
     _SYNTHETIC_DIAG_CHARS,
     CLAUDE_CODE_IMPLEMENTATION_TIMEOUT_SECONDS,
     terminate_child_process,
 )
-from interactive_shell.harness.orchestration.execution_policy import (
-    evaluate_code_agent_launch,
-    execution_allowed,
-)
-from interactive_shell.runtime import ReplSession, TaskKind
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT, WARNING, print_command_output
+from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
 _IMPLEMENT_PERMISSION_MODE_ENV = "CLAUDE_CODE_IMPLEMENT_PERMISSION_MODE"

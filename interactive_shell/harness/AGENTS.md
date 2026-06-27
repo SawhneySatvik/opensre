@@ -143,7 +143,7 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   convention, and `render_plan_denied` were removed for this reason. Do **not**
   reintroduce a planning-stage denial; if write/mutating actions are ever added,
   gate them with an execution-stage confirmation (see
-  `orchestration/execution_policy.py`), not a planner denial. The legacy
+  `execution_policy.py`), not a planner denial. The legacy
   `fail_closed`, `has_unhandled_clause`, and `turn.expected_signals` fixture
   fields were removed (the oracle never asserted on them); the policy block now
   carries a single `executes_terminal_action` boolean. See the `Answer` and

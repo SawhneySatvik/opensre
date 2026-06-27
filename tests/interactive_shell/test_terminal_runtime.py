@@ -1432,10 +1432,10 @@ class TestExecutionAllowedRespectsDispatchCancelled:
     ) -> None:
         from rich.console import Console
 
-        from interactive_shell.harness.orchestration.execution_policy import (
+        from interactive_shell.harness.execution_policy import (
             ExecutionPolicyResult,
-            execution_allowed,
         )
+        from interactive_shell.ui.execution_confirm import execution_allowed
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         session = ReplSession()
@@ -1474,10 +1474,10 @@ class TestExecutionAllowedRespectsDispatchCancelled:
         """
         from rich.console import Console
 
-        from interactive_shell.harness.orchestration.execution_policy import (
+        from interactive_shell.harness.execution_policy import (
             ExecutionPolicyResult,
-            execution_allowed,
         )
+        from interactive_shell.ui.execution_confirm import execution_allowed
 
         monkeypatch.setattr("sys.stdin.isatty", lambda: True)
         session = ReplSession()

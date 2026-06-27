@@ -8,7 +8,7 @@ from typing import Literal
 
 from rich.console import Console
 
-from interactive_shell.harness.orchestration.agent_actions import (
+from interactive_shell.harness.agent_actions import (
     TerminalActionExecutionResult,
 )
 from interactive_shell.session import ReplSession

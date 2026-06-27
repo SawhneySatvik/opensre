@@ -16,11 +16,11 @@ from rich.markup import escape
 
 from interactive_shell.command_registry.suggestions import closest_choice
 from interactive_shell.command_registry.types import SlashCommand
-from interactive_shell.harness.orchestration.subprocess_runner import (
+from interactive_shell.runtime import ReplSession, TaskKind
+from interactive_shell.runtime.subprocess_runner import (
     SYNTHETIC_TEST_TIMEOUT_SECONDS,
     start_background_cli_task,
 )
-from interactive_shell.runtime import ReplSession, TaskKind
 from interactive_shell.ui import DIM, ERROR, print_command_output
 
 _UPDATE_SUBPROCESS_TIMEOUT_SECONDS = 300

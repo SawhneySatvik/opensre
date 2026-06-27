@@ -105,11 +105,11 @@ def _execute_action_plan(
         switch_llm_provider,
         switch_toolcall_model,
     )
-    from interactive_shell.harness.orchestration.execution_policy import (
+    from interactive_shell.harness.execution_policy import (
         evaluate_llm_runtime_switch,
         evaluate_slash_command,
-        execution_allowed,
     )
+    from interactive_shell.ui.execution_confirm import execution_allowed
 
     console.print()
     console.print(f"[{BOLD_BRAND}]{STREAM_LABEL_ASSISTANT}:[/]")
@@ -251,7 +251,7 @@ def _execute_action_plan(
                     "in this session.[/]"
                 )
                 continue
-            from interactive_shell.harness.orchestration.subprocess_runner import (
+            from interactive_shell.runtime.subprocess_runner import (
                 run_opensre_cli_command,
             )
 

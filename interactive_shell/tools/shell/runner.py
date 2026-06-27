@@ -12,12 +12,11 @@ from rich.markup import escape
 from rich.text import Text
 
 import config.constants.platform as _platform
-from interactive_shell.harness.orchestration.subprocess_runner.task_streaming import (
+from interactive_shell.runtime import ReplSession
+from interactive_shell.runtime.subprocess_runner.task_streaming import (
     _MAX_COMMAND_OUTPUT_CHARS,
     SHELL_COMMAND_TIMEOUT_SECONDS,
 )
-from interactive_shell.harness.orchestration.execution_policy import execution_allowed
-from interactive_shell.runtime import ReplSession
 from interactive_shell.tools.shell import execution as shell_execution
 from interactive_shell.tools.shell.parsing import (
     argv_for_repl_builtin_detection,
@@ -25,6 +24,7 @@ from interactive_shell.tools.shell.parsing import (
 )
 from interactive_shell.tools.shell.policy import plan_shell_execution
 from interactive_shell.ui import ERROR, HIGHLIGHT, print_command_output
+from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
 

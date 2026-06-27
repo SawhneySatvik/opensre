@@ -10,7 +10,7 @@ other tools. They reuse the shared policy contracts
 from __future__ import annotations
 
 import config.constants.platform as _platform
-from interactive_shell.harness.orchestration.execution_policy import (
+from interactive_shell.harness.execution_policy import (
     ActionExecutionMode,
     ActionExecutionPlan,
     ExecutionPolicyResult,

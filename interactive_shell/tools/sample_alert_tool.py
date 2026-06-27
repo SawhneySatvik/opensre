@@ -8,8 +8,7 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.orchestration.execution_policy import (
-    execution_allowed,
+from interactive_shell.harness.execution_policy import (
     plan_investigation_execution,
 )
 from interactive_shell.runtime import ReplSession
@@ -19,6 +18,7 @@ from interactive_shell.tools.tool_contracts import (
     object_schema,
     string_property,
 )
+from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.ui.foreground_investigation import run_foreground_investigation
 from platform.common.task_types import TaskRecord
 

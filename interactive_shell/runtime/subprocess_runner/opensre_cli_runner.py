@@ -12,17 +12,19 @@ from enum import StrEnum
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.orchestration.execution_policy import (
+from interactive_shell.harness.execution_policy import (
     ActionExecutionMode,
     ActionExecutionPlan,
     ExecutionPolicyResult,
-    execution_allowed,
 )
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import DIM, ERROR, WARNING, print_command_output
+from interactive_shell.ui.execution_confirm import execution_allowed
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
-from .background_task_executor import start_background_cli_task as _start_background_cli_task_default
+from .background_task_executor import (
+    start_background_cli_task as _start_background_cli_task_default,
+)
 from .task_streaming import SHELL_COMMAND_TIMEOUT_SECONDS, _sr_resolve
 
 _OPENSRE_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({"agent"})
@@ -159,6 +161,7 @@ def _opensre_confirmation_reason(tokens: list[str]) -> str:
     if tokens and tokens[0] == "fleet":
         return "this updates the local AI-agent registry"
     return "this opensre subcommand may change local config or infrastructure"
+
 
 def _build_opensre_execution_plan(tokens: list[str]) -> OpensreExecutionPlan:
     """Compute classification + execution mode from one canonical policy table."""

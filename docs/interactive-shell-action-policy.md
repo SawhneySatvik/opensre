@@ -164,7 +164,7 @@ them; the fixture `policy` block now carries a single `executes_terminal_action`
 `boolean` (true only when a shell action AgentTool is expected to run).
 
 If write/mutating actions are introduced later, gate them with the
-execution-stage confirmation policy (`orchestration/execution_policy.py`), **not**
+execution-stage confirmation policy (`interactive_shell/harness/execution_policy.py`), **not**
 an action-selection denial.
 
 ### Removal of the shell-command safety policy (alpha)
@@ -194,7 +194,10 @@ What changed:
 - The **only** remaining non-execution outcome is genuinely empty input (a bare
   `!` or whitespace), which is rejected as input validation, not as a guardrail.
 
-The `ask`/confirmation machinery (`execution_allowed`, `trust_mode`) is retained
-as an unused hook. If command guardrails are reintroduced after alpha, gate them
-here at the execution stage (`orchestration/execution_policy.py`) — never with an
-action-selection denial in the planner.
+The `ask`/confirmation machinery (`trust_mode` plus the confirmation UX) is
+retained as an unused hook, split across two layers: the pure decision lives in
+`interactive_shell/harness/execution_policy.py` (`resolve_confirmation`), and the terminal
+interaction (`execution_allowed` — console output, the `Proceed? [Y/n]` prompt,
+analytics) lives in `interactive_shell/ui/execution_confirm.py`. If command
+guardrails are reintroduced after alpha, gate them here at the execution stage —
+never with an action-selection denial in the planner.

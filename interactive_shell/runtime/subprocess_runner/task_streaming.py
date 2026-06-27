@@ -24,7 +24,7 @@ from interactive_shell.utils.error_handling.exception_reporting import report_ex
 # look up patchable names from the parent namespace at call time so that tests
 # using ``monkeypatch.setattr("…subprocess_runner.X", fake)`` take effect even
 # when the implementation lives in a submodule.
-_SUBPROCESS_RUNNER_MODULE = "interactive_shell.harness.orchestration.subprocess_runner"
+_SUBPROCESS_RUNNER_MODULE = "interactive_shell.runtime.subprocess_runner"
 
 
 def _sr_resolve(name: str, default: Any) -> Any:

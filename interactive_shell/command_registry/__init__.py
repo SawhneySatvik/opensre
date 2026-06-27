@@ -51,12 +51,12 @@ from interactive_shell.command_registry.theme import COMMANDS as THEME_COMMANDS
 from interactive_shell.command_registry.tools_cmds import COMMANDS as TOOLS_COMMANDS
 from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.command_registry.watch_cmds import COMMANDS as WATCH_COMMANDS
-from interactive_shell.harness.orchestration.execution_policy import (
+from interactive_shell.harness.execution_policy import (
     evaluate_slash_command,
-    execution_allowed,
 )
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import ERROR
+from interactive_shell.ui.execution_confirm import execution_allowed
 
 _MERGED_SEQUENCE = tuple(
     chain(

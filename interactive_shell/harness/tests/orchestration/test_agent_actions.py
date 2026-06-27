@@ -14,8 +14,8 @@ import pytest
 from rich.console import Console
 
 import config.constants.platform as platform_module
-import interactive_shell.harness.orchestration.subprocess_runner as subprocess_runner
-import interactive_shell.harness.orchestration.agent_actions as agent_actions
+import interactive_shell.harness.agent_actions as agent_actions
+import interactive_shell.runtime.subprocess_runner as subprocess_runner
 import interactive_shell.tools.implementation_tool as implementation_tool
 import interactive_shell.tools.llm_provider_tool as llm_provider_tool
 import interactive_shell.tools.shell.execution as shell_execution
@@ -36,7 +36,7 @@ from interactive_shell.tools.tool_registry import (
 from platform.common.task_types import TaskKind, TaskStatus
 
 _ACTION_LLM_FACTORY_PATCH = (
-    "interactive_shell.harness.orchestration.agent_actions._default_llm_factory"
+    "interactive_shell.harness.agent_actions._default_llm_factory"
 )
 
 

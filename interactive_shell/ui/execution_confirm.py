@@ -4,7 +4,7 @@ This module owns the *user-facing* half of the execution gate: it renders the
 policy decision (``Action blocked``, the non-TTY warning, the ``Proceed? [Y/n]``
 prompt), reads the user's confirmation, and emits analytics. The pure decision
 itself is computed by
-:func:`interactive_shell.harness.orchestration.execution_policy.resolve_confirmation`,
+:func:`interactive_shell.harness.execution_policy.resolve_confirmation`,
 which has no console, ``input``, or analytics dependency.
 
 Keeping interaction here (rather than in ``execution_policy``) means the policy
@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.orchestration.execution_policy import (
+from interactive_shell.harness.execution_policy import (
     ConfirmationOutcome,
     ExecutionPolicyResult,
     ExecutionVerdict,

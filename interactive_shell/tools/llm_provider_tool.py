@@ -7,9 +7,8 @@ from typing import Any
 from rich.markup import escape
 
 from interactive_shell.command_registry import switch_llm_provider, switch_reasoning_model
-from interactive_shell.harness.orchestration.execution_policy import (
+from interactive_shell.harness.execution_policy import (
     evaluate_llm_runtime_switch,
-    execution_allowed,
 )
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
@@ -17,6 +16,7 @@ from interactive_shell.tools.tool_contracts import (
     capability_not_explicitly_disabled,
     object_schema,
 )
+from interactive_shell.ui.execution_confirm import execution_allowed
 
 
 def _provider_values() -> tuple[str, ...]:

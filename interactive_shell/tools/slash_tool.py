@@ -11,8 +11,7 @@ from interactive_shell.command_registry.slash_catalog import (
     slash_invoke_input_schema,
     slash_invoke_tool_description,
 )
-from interactive_shell.harness.orchestration.execution_policy import (
-    execution_allowed,
+from interactive_shell.harness.execution_policy import (
     plan_slash_execution,
 )
 from interactive_shell.tools.tool_contracts import (
@@ -21,6 +20,7 @@ from interactive_shell.tools.tool_contracts import (
     capability_not_explicitly_disabled,
 )
 from interactive_shell.ui import BOLD_BRAND, DIM, repl_tty_interactive
+from interactive_shell.ui.execution_confirm import execution_allowed
 
 # Slash commands that drive a raw-stdin inline picker or wizard (questionary /
 # repl_choose_one). When the action agent resolves free text (e.g. "remove

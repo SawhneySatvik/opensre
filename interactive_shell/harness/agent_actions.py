@@ -22,7 +22,7 @@ from interactive_shell.harness.state.conversation_history import MAX_CONVERSATIO
 from interactive_shell.runtime import ReplSession
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
-from interactive_shell.ui import BOLD_BRAND, DIM
+from interactive_shell.ui.action_rendering import ActionRenderObserver
 from interactive_shell.ui.streaming import render_response_header
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
@@ -111,35 +111,6 @@ class _StaticToolCallLLM:
         }
 
 
-class _ActionRenderObserver:
-    def __init__(self, *, session: ReplSession, console: Console, message: str) -> None:
-        self.session = session
-        self.console = console
-        self.message = message
-        self.planned_count = 0
-        self._recorded_cli_agent = False
-
-    def __call__(self, kind: str, data: dict[str, Any]) -> None:
-        if kind != "tool_start":
-            return
-        name = str(data.get("name", "")).strip()
-        if not name or name == "assistant_handoff":
-            return
-        tool_input = data.get("input")
-        args = tool_input if isinstance(tool_input, dict) else {}
-        if self.planned_count == 0:
-            self.console.print()
-            render_response_header(self.console, "assistant")
-            self.console.print(f"[{DIM}]Requested actions:[/]")
-            self.session.record("cli_agent", self.message)
-            self._recorded_cli_agent = True
-        self.planned_count += 1
-        label, content = _tool_call_display(name, args)
-        self.console.print(
-            f"[{DIM}]{self.planned_count}.[/] [{BOLD_BRAND}]{label}[/] {escape(content)}"
-        )
-
-
 def _response_text_from_history_entries(entries: list[dict[str, Any]]) -> str:
     chunks: list[str] = []
     for item in entries:
@@ -162,33 +133,6 @@ def _render_action_agent_error(console: Console, message: str) -> None:
     console.print(f"[yellow]{escape(message)}[/]")
 
 
-def _tool_call_display(tool_name: str, args: dict[str, Any]) -> tuple[str, str]:
-    if tool_name == "slash_invoke":
-        command = str(args.get("command", "")).strip()
-        raw_args = args.get("args")
-        parsed_args = [str(item).strip() for item in raw_args] if isinstance(raw_args, list) else []
-        return "command", " ".join([command, *parsed_args]).strip()
-    if tool_name == "llm_set_provider":
-        return "LLM provider", str(args.get("target", args.get("provider", ""))).strip()
-    if tool_name == "alert_sample":
-        return "sample alert", str(args.get("template", "")).strip()
-    if tool_name == "investigation_start":
-        return "investigation", str(args.get("alert_text", "")).strip()
-    if tool_name == "synthetic_run":
-        suite = str(args.get("suite", "")).strip()
-        scenario = str(args.get("scenario", "")).strip()
-        return "synthetic test", f"{suite}:{scenario}" if scenario else suite
-    if tool_name == "task_cancel":
-        return "cancel task", str(args.get("target", "")).strip()
-    if tool_name == "cli_exec":
-        return "opensre", str(args.get("payload", "")).strip()
-    if tool_name == "code_implement":
-        return "implementation", str(args.get("task", "")).strip()
-    if tool_name == "shell_run":
-        return "shell", str(args.get("command", "")).strip()
-    return tool_name, json.dumps(args, default=str, sort_keys=True)
-
-
 def _bang_shell_command(message: str) -> str | None:
     # The only deterministic action bypass allowed in this module is the explicit
     # `!cmd` shell escape. Do NOT copy this pattern for `/slash` commands, bare
@@ -208,6 +152,44 @@ def _default_llm_factory() -> Any:
     return agent_llm_client.get_agent_llm()
 
 
+def _record_success_analytics(summary: TerminalActionExecutionResult) -> None:
+    """Emit the planned/policy/executed analytics for a completed action turn."""
+    from platform.analytics.cli import (
+        capture_repl_execution_policy_decision,
+        capture_terminal_actions_executed,
+        capture_terminal_actions_planned,
+    )
+
+    capture_terminal_actions_planned(
+        planned_count=summary.planned_count,
+        has_unhandled_clause=False,
+    )
+    capture_repl_execution_policy_decision(
+        {
+            "policy_stage": "shell_action_agent",
+            "policy_trace": "agent_tool_calls" if summary.planned_count else "assistant_handoff",
+            "planned_count": summary.planned_count,
+            "has_unhandled_clause": False,
+        }
+    )
+    capture_terminal_actions_executed(
+        planned_count=summary.planned_count,
+        executed_count=summary.executed_count,
+        executed_success_count=summary.executed_success_count,
+    )
+
+
+def _record_failure_analytics() -> None:
+    """Emit the executed-analytics no-op used when a turn never ran any action."""
+    from platform.analytics.cli import capture_terminal_actions_executed
+
+    capture_terminal_actions_executed(
+        planned_count=0,
+        executed_count=0,
+        executed_success_count=0,
+    )
+
+
 def execute_cli_actions(
     message: str,
     session: ReplSession,
@@ -218,12 +200,6 @@ def execute_cli_actions(
     deps: ActionExecutionDeps | None = None,
 ) -> TerminalActionExecutionResult:
     """Run one shell action-selection turn through the shared agent harness."""
-    from platform.analytics.cli import (
-        capture_repl_execution_policy_decision,
-        capture_terminal_actions_executed,
-        capture_terminal_actions_planned,
-    )
-
     history_start = len(session.history)
     ctx = ToolContext(
         session=session,
@@ -233,7 +209,7 @@ def execute_cli_actions(
         action_already_listed=True,
     )
     tools = REGISTRY.agent_tools_for_context(ctx)
-    observer = _ActionRenderObserver(session=session, console=console, message=message)
+    observer = ActionRenderObserver(session=session, console=console, message=message)
 
     bang_command = _bang_shell_command(message)
     if bang_command is not None:
@@ -271,11 +247,7 @@ def execute_cli_actions(
             logger.debug(
                 "shell action prompt overflow; falling through to assistant", exc_info=True
             )
-            capture_terminal_actions_executed(
-                planned_count=0,
-                executed_count=0,
-                executed_success_count=0,
-            )
+            _record_failure_analytics()
             return TerminalActionExecutionResult(0, 0, 0, False, False)
         else:
             error_text = str(exc)
@@ -283,11 +255,7 @@ def execute_cli_actions(
             _render_action_agent_error(console, error_text)
             _persist_action_agent_error(session, message, error_text)
             session.record("cli_agent", message, ok=False)
-        capture_terminal_actions_executed(
-            planned_count=0,
-            executed_count=0,
-            executed_success_count=0,
-        )
+        _record_failure_analytics()
         return TerminalActionExecutionResult(0, 0, 0, True, True, response_text=error_text)
 
     executed_entries = [
@@ -303,24 +271,7 @@ def execute_cli_actions(
     if handled:
         console.print()
 
-    capture_terminal_actions_planned(
-        planned_count=planned_count,
-        has_unhandled_clause=False,
-    )
-    capture_repl_execution_policy_decision(
-        {
-            "policy_stage": "shell_action_agent",
-            "policy_trace": "agent_tool_calls" if planned_count else "assistant_handoff",
-            "planned_count": planned_count,
-            "has_unhandled_clause": False,
-        }
-    )
-    capture_terminal_actions_executed(
-        planned_count=planned_count,
-        executed_count=executed_count,
-        executed_success_count=executed_success_count,
-    )
-    return TerminalActionExecutionResult(
+    summary = TerminalActionExecutionResult(
         planned_count,
         executed_count,
         executed_success_count,
@@ -328,6 +279,8 @@ def execute_cli_actions(
         handled,
         response_text=response_text,
     )
+    _record_success_analytics(summary)
+    return summary
 
 
 __all__ = [

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.subprocess_runner import (
+from interactive_shell.runtime.subprocess_runner import (
     run_opensre_cli_command,
 )
 from interactive_shell.tools.tool_contracts import (

@@ -8,8 +8,7 @@ from typing import Any
 from rich.markup import escape
 
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.harness.orchestration.execution_policy import (
-    execution_allowed,
+from interactive_shell.harness.execution_policy import (
     plan_slash_execution,
 )
 from interactive_shell.runtime import TaskKind, TaskStatus
@@ -18,6 +17,7 @@ from interactive_shell.tools.tool_contracts import (
     ToolEntry,
     object_schema,
 )
+from interactive_shell.ui.execution_confirm import execution_allowed
 
 
 def _running_task_matches(ctx: ToolContext, target: str) -> Sequence[object]:
