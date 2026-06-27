@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from interactive_shell.chat.grounding import docs_reference
-from interactive_shell.chat.grounding.docs_reference import (
+from interactive_shell.harness.llm_context.grounding import docs_reference
+from interactive_shell.harness.llm_context.grounding.docs_reference import (
     DocPage,
     _excerpt,
     _query_tokens,

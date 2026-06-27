@@ -140,7 +140,7 @@ flowchart TD
 - Turn accounting is consolidated behind `ShellTurnAccounting` in
   `interactive_shell/turn_accounting.py` (alongside the `ToolCallingTurnResult`
   and `ShellTurnResult` turn data model), invoked from `handle_message_with_agent`
-  in `harness/harness.py`. It owns action-agent analytics, terminal-turn aggregate
+  in `harness/agent.py`. It owns action-agent analytics, terminal-turn aggregate
   telemetry, prompt-recorder flush, conversational-turn persistence, and the final
   assistant-intent stamp. `run_tool_calling_turn` (in `harness/tool_calling.py`)
   returns facts only (`ToolCallingTurnResult` with `accounting_status` of

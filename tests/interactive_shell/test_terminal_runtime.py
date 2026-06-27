@@ -21,7 +21,7 @@ from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 
 from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
-from interactive_shell.harness import harness as controller_runtime
+from interactive_shell.harness import agent as controller_runtime
 from interactive_shell.runtime.core import state as loop_state
 from interactive_shell.runtime.core import turn_detection as loop_turn_detection
 from interactive_shell.runtime.startup import initial_input as startup_initial_input
@@ -1262,7 +1262,7 @@ class TestRequestConfirmationViaPrompt:
         """
         state = loop_state.ReplState()
         # Active dispatch must have a cancel event parked; in production
-        # ``interactive_shell.harness.harness.AgentTurnRunner.run_agent_turn`` allocates this before invoking the
+        # ``interactive_shell.harness.agent.AgentTurnRunner.run_agent_turn`` allocates this before invoking the
         # confirm_fn. Never set in this test.
         state.current_cancel_event = threading.Event()
 

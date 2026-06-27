@@ -19,13 +19,13 @@ should be predictable, interruptible, explainable, and safe by default.
 | --- | --- | --- |
 | `controller.py` | top-level REPL wiring | feature-specific business logic or compatibility-only forwarding |
 | `entrypoint.py` | process/bootstrap boundary for starting the REPL | per-turn dispatch/runtime logic |
-| `turn_accounting.py` | turn-result data model (`ToolCallingTurnResult`, `ShellTurnResult`) and `ShellTurnAccounting` (analytics, telemetry, recorder flush, turn persistence, intent stamp) | turn-flow control (owned by `harness/harness.py`) or tool-calling turn execution (owned by `harness/tool_calling.py`) |
+| `turn_accounting.py` | turn-result data model (`ToolCallingTurnResult`, `ShellTurnResult`) and `ShellTurnAccounting` (analytics, telemetry, recorder flush, turn persistence, intent stamp) | turn-flow control (owned by `harness/agent.py`) or tool-calling turn execution (owned by `harness/tool_calling.py`) |
 | `command_registry/` | slash-command definitions, argument validation, command dispatch | long-running implementation details better placed in services/runtime modules |
 | `session/` | `ReplSession`, runtime context assembly, and session persistence (storage backends + cross-session repo) | UI rendering, prompt text, and runtime task scheduling |
 | `runtime/` | background tasks, lifecycle/`ReplState`, controller/entrypoint support modules (lazily re-exports the `session/` surface for back-compat) | UI rendering, prompt text, and session persistence |
 | `orchestration/` | action planning, execution policy, subprocess runner, deterministic command detection, and interaction models | raw UI formatting |
 | `tools/shell/` | shell command parsing, shell execution policy, subprocess execution, and the `run_shell_command`/`run_cd`/`run_pwd` runner (next to the `shell_run` tool in `tools/shell_tool.py`) | slash-command execution |
-| `chat/` | assistant/help/follow-up answer surfaces and shared LLM prompt rules | direct mutation of runtime state outside the subprocess runner |
+| `harness/agent.py` | conversational assistant turn (`answer_cli_agent`), action-plan parsing, and capability validation | direct mutation of runtime state outside the subprocess runner |
 | `references/` | CLI/docs/source/AGENTS reference loading and caching | generated model prose |
 | `config/` | interactive-shell config loading and tool catalog metadata | global app config unrelated to the REPL |
 | `harness/state/` | conversation context helpers and shared harness state (history, data store) | prompt rendering and session persistence (now owned by `session/`) |
@@ -167,7 +167,7 @@ owning area rather than adding more logic to the caller.
   rather than inventing steps.
 - Do not include secrets in prompts. Redact or omit tokens, auth headers, env
   values, local credentials, and raw integration config.
-- Keep prompt rules reusable in `chat/` so chat/help/action surfaces use
+- Keep prompt rules reusable in `harness/llm_context/` so chat/help/action surfaces use
   consistent terminology and formatting.
 - Reference caches should be deterministic, invalidatable when source files
   change, and cheap to rebuild in tests.

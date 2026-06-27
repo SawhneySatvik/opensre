@@ -10,7 +10,7 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 
 from core.domain.alerts import inbox as _alert_inbox
-from interactive_shell.harness.harness import (
+from interactive_shell.harness.agent import (
     AgentTurnRunner,
     run_agent_turn_queue,
     run_input_loop,

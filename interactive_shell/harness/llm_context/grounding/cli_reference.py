@@ -9,7 +9,7 @@ from typing import Any
 
 import click
 
-from interactive_shell.chat.grounding import grounding_diagnostics as _gd
+from interactive_shell.harness.llm_context.grounding import grounding_diagnostics as _gd
 
 _logger = logging.getLogger(__name__)
 

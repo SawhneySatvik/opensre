@@ -1,9 +1,9 @@
 """AGENTS.md grounding helpers for OpenSRE interactive-shell answers.
 
 The conversational interactive-shell assistant grounds answers on the
-``opensre --help`` reference (via :mod:`interactive_shell.chat.grounding.cli_reference`)
+``opensre --help`` reference (via :mod:`interactive_shell.harness.llm_context.grounding.cli_reference`)
 and, for procedural questions, excerpts from ``docs/`` (via
-:mod:`interactive_shell.chat.grounding.docs_reference`). Neither surface includes
+:mod:`interactive_shell.harness.llm_context.grounding.docs_reference`). Neither surface includes
 internal repo-map content, so the assistant cannot answer questions like
 "where do I add a new tool?" or "how does the remote threads pipeline work?"
 from maintained internal documentation.
@@ -11,7 +11,7 @@ from maintained internal documentation.
 This module surfaces the repo's ``AGENTS.md`` files (root + per-package) as a
 third grounding source for the conversational shell. It is purely static
 (no embeddings, no DB, no new dependencies) and mirrors the shape of
-:mod:`interactive_shell.chat.grounding.docs_reference` so the two stay symmetric.
+:mod:`interactive_shell.harness.llm_context.grounding.docs_reference` so the two stay symmetric.
 
 Source of truth
 ---------------
@@ -44,11 +44,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import interactive_shell.chat.grounding.grounding_diagnostics as _gd
+import interactive_shell.harness.llm_context.grounding.grounding_diagnostics as _gd
 
-# Repo root is three levels above this file
-# (.../interactive_shell/chat/grounding/agents_md_reference.py -> repo root).
-_REPO_ROOT = Path(__file__).resolve().parents[3]
+# Repo root is five levels above this file
+# (.../interactive_shell/harness/llm_context/grounding/agents_md_reference.py -> repo root).
+_REPO_ROOT = Path(__file__).resolve().parents[4]
 
 _AGENTS_MD_FILENAME = "AGENTS.md"
 

@@ -8,8 +8,8 @@ from pathlib import Path
 
 import pytest
 
-from interactive_shell.chat.grounding import agents_md_reference
-from interactive_shell.chat.grounding.agents_md_reference import (
+from interactive_shell.harness.llm_context.grounding import agents_md_reference
+from interactive_shell.harness.llm_context.grounding.agents_md_reference import (
     AgentsMdFile,
     _excerpt,
     build_agents_md_reference_text,

@@ -38,9 +38,11 @@ def _status_provider_display() -> str:
 
 
 def _cmd_status(session: ReplSession, console: Console, _args: list[str]) -> bool:
-    import interactive_shell.chat.grounding.cli_reference  # noqa: F401
-    import interactive_shell.chat.grounding.docs_reference  # noqa: F401
-    from interactive_shell.chat.grounding.grounding_diagnostics import iter_grounding_sources
+    import interactive_shell.harness.llm_context.grounding.cli_reference  # noqa: F401
+    import interactive_shell.harness.llm_context.grounding.docs_reference  # noqa: F401
+    from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
+        iter_grounding_sources,
+    )
 
     table = repl_table(title="Session status\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")

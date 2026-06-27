@@ -68,7 +68,7 @@ answered without adding keyword/regex rules. Two complementary mechanisms:
    `configured_integration_services()` helper in `integrations/catalog.py`
    (the same source the welcome banner uses, so they never diverge). The chat
    assistant prompt (`_build_environment_block` in
-   `interactive_shell/chat/cli_agent.py`) lists the configured set as
+   `interactive_shell/harness/agent.py`) lists the configured set as
    facts, letting the model answer directly when state is already known.
 2. LLM-driven discovery. The action-agent system prompt
    (`.../llm_context/system_prompt.py`) lets the model, at its own

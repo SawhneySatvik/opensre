@@ -46,11 +46,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import interactive_shell.chat.grounding.grounding_diagnostics as _gd
+import interactive_shell.harness.llm_context.grounding.grounding_diagnostics as _gd
 
-# Docs live at the repository root, three levels above this file
-# (.../interactive_shell/chat/grounding/docs_reference.py -> repo root).
-_DOCS_ROOT = Path(__file__).resolve().parents[3] / "docs"
+# Docs live at the repository root, five levels above this file
+# (.../interactive_shell/harness/llm_context/grounding/docs_reference.py -> repo root).
+_DOCS_ROOT = Path(__file__).resolve().parents[4] / "docs"
 
 # Extensions we read for grounding. Mintlify content is .mdx; .md is included
 # for any plain-Markdown page the project may add later.

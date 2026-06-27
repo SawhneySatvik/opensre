@@ -6,7 +6,7 @@ import logging
 
 import pytest
 
-from interactive_shell.chat.grounding.grounding_diagnostics import (
+from interactive_shell.harness.llm_context.grounding.grounding_diagnostics import (
     log_grounding_cache_diagnostics,
 )
 

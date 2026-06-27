@@ -18,9 +18,8 @@ from typing import Any
 
 from rich.console import Console
 
-from interactive_shell.chat import cli_agent
-from interactive_shell.chat.action_plan import _parse_action_plan
-from interactive_shell.chat.cli_agent import answer_cli_agent
+from interactive_shell.harness import agent as cli_agent
+from interactive_shell.harness.agent import _parse_action_plan, answer_cli_agent
 from interactive_shell.harness.llm_context.assistant_system_prompt import (
     _ACTION_RULE,
     _MARKDOWN_RULE,
