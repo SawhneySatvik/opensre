@@ -14,11 +14,11 @@ import pytest
 from rich.console import Console
 
 import config.constants.platform as platform_module
-import interactive_shell.harness.orchestration.action_executor as action_executor
-import interactive_shell.tools.shell.execution as shell_execution
+import interactive_shell.harness.orchestration.subprocess_runner as subprocess_runner
 import interactive_shell.harness.orchestration.agent_actions as agent_actions
 import interactive_shell.tools.implementation_tool as implementation_tool
 import interactive_shell.tools.llm_provider_tool as llm_provider_tool
+import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from interactive_shell.harness.tests._planned_action import (
@@ -804,7 +804,7 @@ def test_execute_cli_actions_lists_all_actions_before_synthetic_rds(monkeypatch:
         return proc
 
     monkeypatch.setattr(slash_tool, "dispatch_slash", _fake_dispatch)
-    monkeypatch.setattr(action_executor.subprocess, "Popen", _fake_popen)
+    monkeypatch.setattr(subprocess_runner.subprocess, "Popen", _fake_popen)
 
     session = ReplSession()
     console, buf = _capture()
@@ -872,7 +872,7 @@ def test_execute_cli_actions_runs_requested_synthetic_scenario(monkeypatch: obje
         proc.returncode = 0
         return proc
 
-    monkeypatch.setattr(action_executor.subprocess, "Popen", _fake_popen)
+    monkeypatch.setattr(subprocess_runner.subprocess, "Popen", _fake_popen)
 
     session = ReplSession()
     console, buf = _capture()
@@ -961,7 +961,7 @@ def test_execute_cli_actions_runs_shell_command(monkeypatch: object) -> None:
     def _fail_run(*_args: object, **_kwargs: object) -> None:  # pragma: no cover
         raise AssertionError("subprocess.run should not be used for pwd")
 
-    monkeypatch.setattr(action_executor.Path, "cwd", classmethod(_fake_cwd))
+    monkeypatch.setattr(subprocess_runner.Path, "cwd", classmethod(_fake_cwd))
     monkeypatch.setattr(shell_execution.subprocess, "run", _fail_run)
 
     session = ReplSession()
@@ -984,7 +984,7 @@ def test_execute_cli_actions_cd_preserves_windows_paths(monkeypatch: object) -> 
         changed_directories.append(target)
 
     monkeypatch.setattr(platform_module, "IS_WINDOWS", True)
-    monkeypatch.setattr(action_executor.os, "chdir", _fake_chdir)
+    monkeypatch.setattr(subprocess_runner.os, "chdir", _fake_chdir)
 
     session = ReplSession()
     console, _ = _capture()
@@ -1008,7 +1008,7 @@ def test_execute_cli_actions_cd_dispatches_case_insensitively(monkeypatch: objec
         raise AssertionError("subprocess.run should not be used for CD")
 
     monkeypatch.setattr(platform_module, "IS_WINDOWS", True)
-    monkeypatch.setattr(action_executor.os, "chdir", _fake_chdir)
+    monkeypatch.setattr(subprocess_runner.os, "chdir", _fake_chdir)
     monkeypatch.setattr(shell_execution.subprocess, "run", _fail_run)
 
     session = ReplSession()
@@ -1030,7 +1030,7 @@ def test_execute_cli_actions_cd_handles_trailing_backslash_on_windows(monkeypatc
         changed_directories.append(target)
 
     monkeypatch.setattr(platform_module, "IS_WINDOWS", True)
-    monkeypatch.setattr(action_executor.os, "chdir", _fake_chdir)
+    monkeypatch.setattr(subprocess_runner.os, "chdir", _fake_chdir)
 
     session = ReplSession()
     console, _ = _capture()
@@ -1051,7 +1051,7 @@ def test_execute_cli_actions_cd_strips_quotes_on_windows(monkeypatch: object) ->
         changed_directories.append(target)
 
     monkeypatch.setattr(platform_module, "IS_WINDOWS", True)
-    monkeypatch.setattr(action_executor.os, "chdir", _fake_chdir)
+    monkeypatch.setattr(subprocess_runner.os, "chdir", _fake_chdir)
 
     session = ReplSession()
     console, _ = _capture()
@@ -1093,7 +1093,7 @@ def test_execute_cli_actions_records_shell_failure(monkeypatch: object) -> None:
                 "text": True,
                 "encoding": "utf-8",
                 "errors": "replace",
-                "timeout": action_executor.SHELL_COMMAND_TIMEOUT_SECONDS,
+                "timeout": subprocess_runner.SHELL_COMMAND_TIMEOUT_SECONDS,
                 "check": False,
             },
         )
@@ -1164,7 +1164,7 @@ def test_execute_cli_actions_runs_passthrough_with_shell_true(monkeypatch: objec
                 "text": True,
                 "encoding": "utf-8",
                 "errors": "replace",
-                "timeout": action_executor.SHELL_COMMAND_TIMEOUT_SECONDS,
+                "timeout": subprocess_runner.SHELL_COMMAND_TIMEOUT_SECONDS,
                 "check": False,
             },
         )
@@ -1184,7 +1184,7 @@ def test_execute_cli_actions_dispatches_bang_cd_through_builtin(monkeypatch: obj
     def _boom(*_args: object, **_kwargs: object) -> None:  # pragma: no cover
         raise AssertionError("subprocess.run should not be used for !cd builtin execution")
 
-    monkeypatch.setattr(action_executor.os, "chdir", _fake_chdir)
+    monkeypatch.setattr(subprocess_runner.os, "chdir", _fake_chdir)
     monkeypatch.setattr(shell_execution.subprocess, "run", _boom)
 
     session = ReplSession()
@@ -1205,7 +1205,7 @@ def test_execute_cli_actions_dispatches_bang_pwd_through_builtin(monkeypatch: ob
     def _boom(*_args: object, **_kwargs: object) -> None:  # pragma: no cover
         raise AssertionError("subprocess.run should not be used for !pwd builtin execution")
 
-    monkeypatch.setattr(action_executor.Path, "cwd", classmethod(_fake_cwd))
+    monkeypatch.setattr(subprocess_runner.Path, "cwd", classmethod(_fake_cwd))
     monkeypatch.setattr(shell_execution.subprocess, "run", _boom)
 
     session = ReplSession()

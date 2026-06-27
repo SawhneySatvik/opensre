@@ -24,7 +24,6 @@ notes:
   instead of handing off to suggest connecting one. Contrast with 313 (incident, no integrations -> handoff).'
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

@@ -6,11 +6,8 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_executor import (
+from interactive_shell.tools.synthetic.runner import (
     run_synthetic_test,
-)
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
 )
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
@@ -90,7 +87,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("suite", "scenario"),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_synthetic_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "synthetic_suites"),
 )

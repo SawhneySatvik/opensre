@@ -29,7 +29,6 @@ notes:
   the 401 the fake-token draft masked.
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: false
 planned_actions: []

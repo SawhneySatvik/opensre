@@ -15,7 +15,7 @@ from interactive_shell.command_registry.model.switching import (
     switch_reasoning_model,
     switch_toolcall_model,
 )
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT, WARNING, render_models_table
 from interactive_shell.ui.components.choice_menu import (
@@ -399,6 +399,5 @@ COMMANDS: list[SlashCommand] = [
             "The menu stays open after show actions and closes after set, restore, or toolcall changes.",
         ),
         first_arg_completions=_MODEL_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     ),
 ]

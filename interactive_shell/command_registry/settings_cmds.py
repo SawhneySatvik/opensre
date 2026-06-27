@@ -15,7 +15,7 @@ from config.llm_reasoning_effort import (
     parse_reasoning_effort,
     provider_supports_reasoning_effort,
 )
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import (
     DIM,
@@ -167,7 +167,6 @@ COMMANDS: list[SlashCommand] = [
         usage=("/trust", "/trust on", "/trust off"),
         notes=("In a TTY, bare /trust opens an interactive menu.",),
         first_arg_completions=_TRUST_FIRST_ARGS,
-        execution_tier=ExecutionTier.EXEMPT,
     ),
     SlashCommand(
         "/effort",

@@ -41,7 +41,6 @@ notes:
   handoff fan-out (contrast 338, where the same integrations DO gather).'
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

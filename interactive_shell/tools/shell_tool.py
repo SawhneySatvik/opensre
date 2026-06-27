@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.tools.shell.runner import (
     run_shell_command,
 )
@@ -54,7 +51,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("command",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_shell_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "shell_commands"),
 )

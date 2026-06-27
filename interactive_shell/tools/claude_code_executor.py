@@ -1,10 +1,23 @@
-"""Claude Code implementation runner."""
+"""Claude Code implementation executor.
+
+Spawns the Claude Code CLI to implement a requested change in the current
+repository, applies the execution policy, tracks the launch as a background
+task, and watches the subprocess lifecycle in a daemon thread.
+
+Lives next to the agent-facing ``interactive_shell.tools.implementation_tool``.
+Shared task-streaming helpers and the execution policy still come from
+``interactive_shell.harness.orchestration.subprocess_runner``.
+
+``subprocess`` and ``threading`` are referenced as module globals so tests can
+patch ``interactive_shell.tools.claude_code_executor.subprocess.Popen`` /
+``.threading.Thread``; ``ClaudeCodeAdapter`` is likewise a module global that
+tests patch directly.
+"""
 
 from __future__ import annotations
 
 import os
 import subprocess
-import sys
 import threading
 from collections.abc import Callable
 from pathlib import Path
@@ -15,6 +28,12 @@ from rich.markup import escape
 
 from integrations.llm_cli.claude_code import ClaudeCodeAdapter
 from integrations.llm_cli.subprocess_env import build_cli_subprocess_env
+from interactive_shell.harness.orchestration.subprocess_runner.task_streaming import (
+    _MAX_COMMAND_OUTPUT_CHARS,
+    _SYNTHETIC_DIAG_CHARS,
+    CLAUDE_CODE_IMPLEMENTATION_TIMEOUT_SECONDS,
+    terminate_child_process,
+)
 from interactive_shell.harness.orchestration.execution_policy import (
     evaluate_code_agent_launch,
     execution_allowed,
@@ -22,29 +41,6 @@ from interactive_shell.harness.orchestration.execution_policy import (
 from interactive_shell.runtime import ReplSession, TaskKind
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT, WARNING, print_command_output
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
-
-from .task_streaming import (
-    _MAX_COMMAND_OUTPUT_CHARS,
-    _SYNTHETIC_DIAG_CHARS,
-    CLAUDE_CODE_IMPLEMENTATION_TIMEOUT_SECONDS,
-    terminate_child_process,
-)
-
-_ACTION_EXECUTOR_MODULE = "interactive_shell.harness.orchestration.action_executor"
-
-
-def _get_claude_code_adapter_cls() -> type[Any]:
-    """Look up ClaudeCodeAdapter via the action_executor package namespace.
-
-    This indirection lets tests monkeypatch ``action_executor.ClaudeCodeAdapter``
-    and have the patch take effect even though the implementation lives in a submodule.
-    Falls back to the directly-imported class when the package is not yet loaded
-    (e.g. in isolated unit tests for this submodule).
-    """
-    ae = sys.modules.get(_ACTION_EXECUTOR_MODULE)
-    cls = getattr(ae, "ClaudeCodeAdapter", None) if ae is not None else None
-    return cls if cls is not None else ClaudeCodeAdapter
-
 
 _IMPLEMENT_PERMISSION_MODE_ENV = "CLAUDE_CODE_IMPLEMENT_PERMISSION_MODE"
 _DEFAULT_IMPLEMENT_PERMISSION_MODE = "acceptEdits"
@@ -129,7 +125,7 @@ def run_claude_code_implementation(
         session.record("implementation", request, ok=False)
         return
 
-    adapter = _get_claude_code_adapter_cls()()
+    adapter = ClaudeCodeAdapter()
     probe = adapter.detect()
     if not probe.installed or not probe.bin_path:
         console.print(f"[{ERROR}]Claude Code CLI not available:[/] {escape(probe.detail)}")

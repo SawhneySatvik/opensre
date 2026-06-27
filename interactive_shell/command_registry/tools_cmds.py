@@ -5,7 +5,6 @@ from __future__ import annotations
 from rich.console import Console
 
 from interactive_shell.command_registry.types import (
-    ExecutionTier,
     SlashCommand,
     make_list_root_handler,
 )
@@ -36,7 +35,6 @@ COMMANDS: list[SlashCommand] = [
         _cmd_tools,
         usage=("/tools", "/tools list"),
         first_arg_completions=_TOOLS_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     )
 ]
 

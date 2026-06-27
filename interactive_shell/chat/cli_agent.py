@@ -251,7 +251,7 @@ def _execute_action_plan(
                     "in this session.[/]"
                 )
                 continue
-            from interactive_shell.harness.orchestration.action_executor import (
+            from interactive_shell.harness.orchestration.subprocess_runner import (
                 run_opensre_cli_command,
             )
 

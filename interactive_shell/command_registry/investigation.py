@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.markup import escape
 
 from config.llm_reasoning_effort import apply_reasoning_effort
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.runtime.background.runner import (
     start_background_template_investigation,
@@ -404,7 +404,6 @@ COMMANDS: list[SlashCommand] = [
         ),
         notes=("In a TTY, bare /template opens an interactive menu.",),
         first_arg_completions=_TEMPLATE_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/investigate",
@@ -421,21 +420,18 @@ COMMANDS: list[SlashCommand] = [
             "stays free during RCA.",
         ),
         first_arg_completions=_INVESTIGATE_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
         validate_args=_validate_investigate_args,
     ),
     SlashCommand(
         "/last",
         "Reprint the most recent investigation report.",
         _cmd_last,
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/save",
         "Save the last investigation to a file.",
         _cmd_save,
         usage=("/save <path>",),
-        execution_tier=ExecutionTier.ELEVATED,
         validate_args=_validate_save_args,
     ),
 ]

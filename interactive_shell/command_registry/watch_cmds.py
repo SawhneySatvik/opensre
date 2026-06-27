@@ -11,7 +11,6 @@ from rich.console import Console
 from rich.markup import escape
 
 from interactive_shell.command_registry.types import (
-    ExecutionTier,
     SlashCommand,
 )
 from interactive_shell.runtime import ReplSession, TaskKind, TaskRecord, TaskStatus
@@ -335,7 +334,6 @@ COMMANDS: list[SlashCommand] = [
             "[--cooldown D] [--interval N] [--once]",
         ),
         notes=("Alarms are sent to Telegram when Telegram delivery is configured.",),
-        execution_tier=ExecutionTier.ELEVATED,
         validate_args=_validate_watch_args,
     ),
     SlashCommand(
@@ -350,7 +348,6 @@ COMMANDS: list[SlashCommand] = [
         _cmd_unwatch,
         usage=("/unwatch <task_id>",),
         notes=("Use /watches to list watchdog task ids.",),
-        execution_tier=ExecutionTier.ELEVATED,
         validate_args=_validate_unwatch_args,
     ),
 ]

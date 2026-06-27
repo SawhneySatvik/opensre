@@ -20,7 +20,6 @@ notes:
   but "was called" proves gather selected GitHub instead of hallucinating issue text.
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: false
 planned_actions:

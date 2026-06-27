@@ -12,9 +12,6 @@ from interactive_shell.harness.orchestration.execution_policy import (
     execution_allowed,
     plan_slash_execution,
 )
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.runtime import TaskKind, TaskStatus
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
@@ -121,7 +118,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("target",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_task_cancel_action,
 )
 

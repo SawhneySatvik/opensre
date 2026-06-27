@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_executor import (
+from interactive_shell.harness.orchestration.subprocess_runner import (
     run_opensre_cli_command,
-)
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
 )
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
@@ -53,7 +50,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("payload",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_cli_command_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "cli_commands"),
 )

@@ -7,7 +7,7 @@ from collections.abc import Sequence
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import ERROR
 from interactive_shell.ui.components.choice_menu import repl_tty_interactive
@@ -184,9 +184,8 @@ COMMANDS: list[SlashCommand] = [
         _cmd_help,
         usage=("/help", "/help <command>", "/help <category>"),
         examples=("/help /model", "/help tasks"),
-        execution_tier=ExecutionTier.EXEMPT,
     ),
-    SlashCommand("/?", "Shortcut for /help.", _cmd_help, execution_tier=ExecutionTier.EXEMPT),
+    SlashCommand("/?", "Shortcut for /help.", _cmd_help),
 ]
 
 __all__ = ["COMMANDS", "QUICK_ACCESS_COMMANDS"]

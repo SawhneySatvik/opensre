@@ -53,7 +53,7 @@ If all answers are weak, keep the logic inline.
 
 | File | Ownership | Scope |
 | --- | --- | --- |
-| `interactive_shell/harness/tests/test_turn_scenarios.py` | Harness package owners | Canonical runner: deterministic command detection, live action planning, turn-execution oracles |
+| `interactive_shell/harness/tests/test_turn_scenarios.py` | Harness package owners | Canonical runner: live action planning and turn-execution oracles |
 | `interactive_shell/harness/tests/test_turn_fixture_integrity.py` | Harness package owners | Scenario-tree/schema/no-mocks guardrails |
 | `interactive_shell/harness/tests/scenario_loader.py` | Harness package owners | Load `scenarios/<behavior_class>/<id>/{scenario.yml,answer.yml}` |
 | `interactive_shell/harness/tests/scenarios/**/scenario.yml` | Harness package owners | Input world: prompt, session, capabilities, intent metadata |
@@ -127,7 +127,7 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   `intent_parser` packages (alias catalog, literal-command detection, typo
   normalization), and the regex planner postprocessing overrides were
   removed. Do **not** reintroduce them: change tool selection by editing the
-  action-agent system prompt (`orchestration/system_prompt.py`) and the per-tool
+  action-agent system prompt (`llm_context/system_prompt.py`) and the per-tool
   descriptions in `interactive_shell/tools/*`, never by adding pattern matching.
   Tool-call argument *validation* belongs to the first-class AgentTool runtime
   contract and tool availability gates; intent *classification* by regex is not.
@@ -179,4 +179,4 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   in roughly 20 seconds on a typical dev machine.
 - If runtime drifts above the target, reduce/curate prompt cases first (keep
   coverage signal high), then tune worker parallelism; avoid weakening core
-  deterministic command-detection coverage.
+  action-planning and turn-execution coverage.

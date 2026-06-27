@@ -4,11 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_executor import (
+from interactive_shell.tools.claude_code_executor import (
     run_claude_code_implementation,
-)
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
 )
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
@@ -46,7 +43,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("task",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_implementation_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "implementation"),
 )

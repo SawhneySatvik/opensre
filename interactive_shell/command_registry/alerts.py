@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 
 from core.domain.alerts.inbox import get_current_inbox
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import print_repl_table, repl_table
 from platform.terminal.theme import BOLD_BRAND, DIM, HIGHLIGHT, WARNING
@@ -32,9 +32,7 @@ def _cmd_alerts(_session: ReplSession, console: Console, _args: list[str]) -> bo
 
 
 COMMANDS: list[SlashCommand] = [
-    SlashCommand(
-        "/alerts", "Show alert listener status.", _cmd_alerts, execution_tier=ExecutionTier.SAFE
-    ),
+    SlashCommand("/alerts", "Show alert listener status.", _cmd_alerts),
 ]
 
 __all__ = ["COMMANDS"]

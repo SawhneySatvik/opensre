@@ -12,7 +12,7 @@ from interactive_shell.command_registry.investigation import (
     render_investigation_report,
     write_investigation_export,
 )
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.session import default_session_repo
 from interactive_shell.ui import (
@@ -482,7 +482,6 @@ COMMANDS: list[SlashCommand] = [
             "/rca save <investigation-id> <path>",
         ),
         first_arg_completions=_RCA_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     ),
 ]
 

@@ -20,21 +20,21 @@ from interactive_shell.runtime import TaskRecord
 from interactive_shell.ui import DIM, ERROR
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
-# Full dotted name of the ``action_executor`` package. Submodules use this to
+# Full dotted name of the ``subprocess_runner`` package. Submodules use this to
 # look up patchable names from the parent namespace at call time so that tests
-# using ``monkeypatch.setattr("…action_executor.X", fake)`` take effect even
+# using ``monkeypatch.setattr("…subprocess_runner.X", fake)`` take effect even
 # when the implementation lives in a submodule.
-_ACTION_EXECUTOR_MODULE = "interactive_shell.harness.orchestration.action_executor"
+_SUBPROCESS_RUNNER_MODULE = "interactive_shell.harness.orchestration.subprocess_runner"
 
 
-def _ae_resolve(name: str, default: Any) -> Any:
-    """Return ``action_executor.<name>`` if the package is loaded, else ``default``.
+def _sr_resolve(name: str, default: Any) -> Any:
+    """Return ``subprocess_runner.<name>`` if the package is loaded, else ``default``.
 
     Used by submodules to honour monkeypatches applied to the parent package
-    namespace (e.g. ``monkeypatch.setattr("…action_executor.read_diag", …)``).
+    namespace (e.g. ``monkeypatch.setattr("…subprocess_runner.read_diag", …)``).
     """
-    ae = sys.modules.get(_ACTION_EXECUTOR_MODULE)
-    return getattr(ae, name, default) if ae is not None else default
+    sr = sys.modules.get(_SUBPROCESS_RUNNER_MODULE)
+    return getattr(sr, name, default) if sr is not None else default
 
 
 SHELL_COMMAND_TIMEOUT_SECONDS = 120

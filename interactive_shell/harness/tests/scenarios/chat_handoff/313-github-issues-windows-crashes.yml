@@ -14,7 +14,6 @@ notes:
   counterpart (integrations connected) is 314 in complex_shell_prompts/.'
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: false
 planned_actions: []

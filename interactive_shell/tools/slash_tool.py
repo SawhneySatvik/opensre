@@ -15,9 +15,6 @@ from interactive_shell.harness.orchestration.execution_policy import (
     execution_allowed,
     plan_slash_execution,
 )
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -127,7 +124,6 @@ TOOL_ENTRY = ToolEntry(
     name="slash_invoke",
     description=slash_invoke_tool_description(),
     input_schema=slash_invoke_input_schema(),
-    execution_tier=ExecutionTier.SAFE,
     execute=execute_slash_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "slash_commands"),
 )

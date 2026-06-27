@@ -4,9 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -44,7 +41,6 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("content",),
     ),
-    execution_tier=ExecutionTier.SAFE,
     execute=execute_assistant_handoff_action,
 )
 

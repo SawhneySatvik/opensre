@@ -2,22 +2,89 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
-from interactive_shell.harness.orchestration.action_executor import (
-    run_sample_alert,
+from rich.console import Console
+from rich.markup import escape
+
+from interactive_shell.harness.orchestration.execution_policy import (
+    execution_allowed,
+    plan_investigation_execution,
 )
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
+from interactive_shell.runtime import ReplSession
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
     object_schema,
     string_property,
 )
+from interactive_shell.ui.foreground_investigation import run_foreground_investigation
+from platform.common.task_types import TaskRecord
 
 _SAMPLE_ALERT_TEMPLATES = ("generic",)
+
+
+def run_sample_alert(
+    template_name: str,
+    session: ReplSession,
+    console: Console,
+    *,
+    confirm_fn: Callable[[str], str] | None = None,
+    is_tty: bool | None = None,
+    action_already_listed: bool = False,
+) -> None:
+    from cli.investigation import run_sample_alert_for_session
+
+    plan = plan_investigation_execution(action_type="sample_alert", user_initiated=True)
+    if not execution_allowed(
+        plan.policy,
+        session=session,
+        console=console,
+        action_summary=f"sample alert investigation ({template_name})",
+        confirm_fn=confirm_fn,
+        is_tty=is_tty,
+        action_already_listed=action_already_listed,
+    ):
+        session.record("alert", f"sample:{template_name}", ok=False)
+        return
+
+    console.print(f"[bold]sample alert:[/bold] {escape(template_name)}")
+    if session.background_mode_enabled:
+        from interactive_shell.runtime.background.runner import (
+            start_background_template_investigation,
+        )
+
+        start_background_template_investigation(
+            template_name=template_name,
+            session=session,
+            console=console,
+            display_command=f"sample alert:{template_name}",
+        )
+        session.record("alert", f"sample:{template_name}")
+        return
+
+    def _run(task: TaskRecord) -> dict[str, object]:
+        return run_sample_alert_for_session(
+            template_name=template_name,
+            context_overrides=session.accumulated_context or None,
+            cancel_requested=task.cancel_requested,
+        )
+
+    if (
+        run_foreground_investigation(
+            session=session,
+            console=console,
+            task_command=f"sample alert:{template_name}",
+            run=_run,
+            exception_context="interactive_shell.sample_alert",
+        )
+        is None
+    ):
+        session.record("alert", f"sample:{template_name}", ok=False)
+        return
+
+    session.record("alert", f"sample:{template_name}")
 
 
 def execute_sample_alert_action(args: dict[str, Any], ctx: ToolContext) -> bool:
@@ -56,9 +123,8 @@ TOOL_ENTRY = ToolEntry(
         },
         required=("template",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_sample_alert_action,
 )
 
 
-__all__ = ["TOOL_ENTRY", "execute_sample_alert_action"]
+__all__ = ["TOOL_ENTRY", "execute_sample_alert_action", "run_sample_alert"]

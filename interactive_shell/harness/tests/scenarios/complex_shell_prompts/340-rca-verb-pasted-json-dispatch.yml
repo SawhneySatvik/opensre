@@ -28,7 +28,6 @@ notes:
   rather than an exact string (same convention as 314 and 336).'
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

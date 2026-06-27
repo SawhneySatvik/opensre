@@ -5,7 +5,7 @@ from __future__ import annotations
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import (
     BOLD_BRAND,
@@ -194,7 +194,6 @@ COMMANDS: list[SlashCommand] = [
             "/background notify set <channel[,channel...]>",
         ),
         first_arg_completions=_BACKGROUND_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     )
 ]
 

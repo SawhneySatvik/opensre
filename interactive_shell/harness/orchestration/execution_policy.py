@@ -17,28 +17,23 @@ read-only / mutating / restricted classification and its deny floor were removed
 evaluation still rejects is genuinely empty input (a bare ``!`` or whitespace),
 which is input validation rather than a guardrail.
 
-The ``ask`` verdict and its confirmation UX (``execution_allowed``) are retained
-so that ``trust_mode`` and any future opt-in stricter policy still have a hook,
-but the policy functions here never emit ``ask``. If guardrails are
-reintroduced after alpha, gate them here at the execution stage (not the
-planner).
+The ``ask`` verdict is retained so that ``trust_mode`` and any future opt-in
+stricter policy still have a hook, but the policy functions here never emit
+``ask``. If guardrails are reintroduced after alpha, gate them here at the
+execution stage (not the planner).
+
+This module is intentionally **pure**: it has no terminal I/O, no analytics, and
+no console dependency. The decision is computed by :func:`resolve_confirmation`,
+and the interaction layer (printing the reason/hint, the ``Proceed? [Y/n]``
+prompt, and analytics emission) lives in
+``interactive_shell.ui.execution_confirm.execution_allowed``.
 """
 
 from __future__ import annotations
 
-import sys
-from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Literal
-
-from rich.console import Console
-from rich.markup import escape
-
-from interactive_shell.runtime import ReplSession
-from interactive_shell.ui import DIM, WARNING
-from platform.analytics.cli import capture_repl_execution_policy_decision
-from platform.analytics.provider import Properties
 
 ExecutionVerdict = Literal["allow", "ask", "deny"]
 
@@ -70,135 +65,80 @@ class ActionExecutionPlan:
     policy: ExecutionPolicyResult
 
 
-def _default_confirm_fn(prompt: str) -> str:
-    return input(prompt)
+class ConfirmationOutcome(StrEnum):
+    """Pure decision for how the interaction layer should treat an action."""
+
+    ALLOW = "allow"  # proceed, no prompt
+    DENY = "deny"  # blocked by policy (show reason + hint)
+    BLOCK_NON_TTY = "block_non_tty"  # ask verdict but stdin is not a TTY
+    NEEDS_CONFIRMATION = "needs_confirmation"  # prompt the user
 
 
-DEFAULT_CONFIRM_FN: Callable[[str], str] = _default_confirm_fn
+@dataclass(frozen=True)
+class ConfirmationPlan:
+    """Result of :func:`resolve_confirmation` (side-effect free).
+
+    ``analytics_outcome`` / ``analytics_reason`` carry the values the interaction
+    layer should emit for the non-prompt outcomes (ALLOW / DENY / BLOCK_NON_TTY).
+    For ``NEEDS_CONFIRMATION`` the analytics outcome depends on the user's answer
+    and is decided by the interaction layer, so both fields are ``None``.
+    """
+
+    outcome: ConfirmationOutcome
+    result: ExecutionPolicyResult
+    analytics_outcome: str | None = None
+    analytics_reason: str | None = None
 
 
-def _emit_decision(
-    *,
-    action_type: str,
-    policy_verdict: ExecutionVerdict,
-    outcome: str,
-    trust_mode: bool,
-    reason: str | None,
-    user_prompted: bool = False,
-) -> None:
-    props: Properties = {
-        "action_type": action_type,
-        "policy_verdict": policy_verdict,
-        "outcome": outcome,
-        "trust_mode": trust_mode,
-    }
-    if reason:
-        props["reason"] = reason[:240]
-    if user_prompted:
-        props["user_prompted"] = True
-    capture_repl_execution_policy_decision(props)
-
-
-def execution_allowed(
+def resolve_confirmation(
     result: ExecutionPolicyResult,
     *,
-    session: ReplSession,
-    console: Console,
-    action_summary: str,
-    confirm_fn: Callable[[str], str] | None = None,
-    is_tty: bool | None = None,
-    action_already_listed: bool = False,
-) -> bool:
-    """Print policy UX, emit analytics, and return whether execution should proceed.
+    trust_mode: bool,
+    is_tty: bool,
+) -> ConfirmationPlan:
+    """Resolve a policy result into a confirmation decision, with no side effects.
 
-    When ``action_already_listed`` is True (e.g. assistant printed a numbered action plan),
-    the TTY prompt omits repeating ``action_summary`` and shows only the policy reason.
+    Pure function: no console, no ``input``, no analytics. The interaction layer
+    (``interactive_shell.ui.execution_confirm``) renders the decision and emits
+    analytics.
     """
-    trust_mode = session.trust_mode
-    tty = sys.stdin.isatty() if is_tty is None else is_tty
-    confirm = confirm_fn or DEFAULT_CONFIRM_FN
-
     if result.verdict == "deny":
-        _emit_decision(
-            action_type=result.action_type,
-            policy_verdict="deny",
-            outcome="blocked",
-            trust_mode=trust_mode,
-            reason=result.reason,
+        return ConfirmationPlan(
+            outcome=ConfirmationOutcome.DENY,
+            result=result,
+            analytics_outcome="blocked",
+            analytics_reason=result.reason,
         )
-        console.print(f"[{WARNING}]Action blocked:[/] {escape(result.reason or 'not allowed')}")
-        if result.hint:
-            console.print(f"[{DIM}]{escape(result.hint)}[/]")
-        return False
 
     if result.verdict == "allow":
-        _emit_decision(
-            action_type=result.action_type,
-            policy_verdict="allow",
-            outcome="allowed",
-            trust_mode=trust_mode,
-            reason=result.reason,
+        return ConfirmationPlan(
+            outcome=ConfirmationOutcome.ALLOW,
+            result=result,
+            analytics_outcome="allowed",
+            analytics_reason=result.reason,
         )
-        return True
 
     # ask
     if trust_mode:
-        _emit_decision(
-            action_type=result.action_type,
-            policy_verdict="ask",
-            outcome="allowed",
-            trust_mode=trust_mode,
-            reason="trust_mode_skipped_prompt",
+        return ConfirmationPlan(
+            outcome=ConfirmationOutcome.ALLOW,
+            result=result,
+            analytics_outcome="allowed",
+            analytics_reason="trust_mode_skipped_prompt",
         )
-        return True
 
-    if not tty:
-        _emit_decision(
-            action_type=result.action_type,
-            policy_verdict="ask",
-            outcome="blocked",
-            trust_mode=trust_mode,
-            reason="non_interactive_stdin",
+    if not is_tty:
+        return ConfirmationPlan(
+            outcome=ConfirmationOutcome.BLOCK_NON_TTY,
+            result=result,
+            analytics_outcome="blocked",
+            analytics_reason="non_interactive_stdin",
         )
-        console.print(
-            f"[{WARNING}]confirmation required but stdin is not a TTY; "
-            f"enable trust mode with[/] [bold]/trust[/bold] [{WARNING}]or rerun in a terminal.[/]"
-        )
-        console.print(f"[{DIM}]{escape(action_summary)}[/]")
-        return False
 
-    reason = (result.reason or "this action").strip()
-    summary = action_summary.strip()
-    if action_already_listed:
-        console.print(f"[{WARNING}]Confirm:[/] [{DIM}]{escape(reason)}[/]")
-    elif summary:
-        console.print(
-            f"[{WARNING}]Confirm[/] [bold]{escape(summary)}[/bold] [{DIM}]— {escape(reason)}[/]"
-        )
-    else:
-        console.print(f"[{WARNING}]Confirm:[/] [{DIM}]{escape(reason)}[/]")
-    answer = confirm("Proceed? [Y/n] ").strip().lower()
-    if answer not in {"", "y", "yes"}:
-        _emit_decision(
-            action_type=result.action_type,
-            policy_verdict="ask",
-            outcome="aborted",
-            trust_mode=trust_mode,
-            reason="user_declined",
-            user_prompted=True,
-        )
-        console.print(f"[{DIM}]cancelled.[/]")
-        return False
-
-    _emit_decision(
-        action_type=result.action_type,
-        policy_verdict="ask",
-        outcome="allowed",
-        trust_mode=trust_mode,
-        reason="user_confirmed",
-        user_prompted=True,
+    return ConfirmationPlan(
+        outcome=ConfirmationOutcome.NEEDS_CONFIRMATION,
+        result=result,
     )
-    return True
 
 
 def evaluate_slash_command() -> ExecutionPolicyResult:
@@ -276,7 +216,10 @@ def evaluate_llm_runtime_switch(*, action_type: str) -> ExecutionPolicyResult:
 
 
 __all__ = [
-    "DEFAULT_CONFIRM_FN",
+    "ActionExecutionMode",
+    "ActionExecutionPlan",
+    "ConfirmationOutcome",
+    "ConfirmationPlan",
     "ExecutionPolicyResult",
     "ExecutionVerdict",
     "evaluate_code_agent_launch",
@@ -284,5 +227,7 @@ __all__ = [
     "evaluate_llm_runtime_switch",
     "evaluate_slash_command",
     "evaluate_synthetic_test_launch",
-    "execution_allowed",
+    "plan_investigation_execution",
+    "plan_slash_execution",
+    "resolve_confirmation",
 ]

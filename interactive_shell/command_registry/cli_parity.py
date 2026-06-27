@@ -15,8 +15,8 @@ from rich.console import Console
 from rich.markup import escape
 
 from interactive_shell.command_registry.suggestions import closest_choice
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
-from interactive_shell.harness.orchestration.action_executor import (
+from interactive_shell.command_registry.types import SlashCommand
+from interactive_shell.harness.orchestration.subprocess_runner import (
     SYNTHETIC_TEST_TIMEOUT_SECONDS,
     start_background_cli_task,
 )
@@ -289,7 +289,6 @@ COMMANDS: list[SlashCommand] = [
         "Run the interactive onboarding wizard.",
         _cmd_onboard,
         usage=("/onboard", "/onboard local_llm"),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/remote",
@@ -302,7 +301,6 @@ COMMANDS: list[SlashCommand] = [
             "/remote pull",
             "/remote trigger",
         ),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/tests",
@@ -310,7 +308,6 @@ COMMANDS: list[SlashCommand] = [
         _cmd_tests,
         usage=("/tests", "/tests list", "/tests run", "/tests synthetic"),
         first_arg_completions=tuple((name, f"/tests {name}") for name in _TEST_SUBCOMMANDS),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/guardrails",
@@ -322,26 +319,22 @@ COMMANDS: list[SlashCommand] = [
             "/guardrails rules",
             "/guardrails test",
         ),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/update",
         "Check for a newer version and update if available.",
         _cmd_update,
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/uninstall",
         "Remove OpenSRE and all local data from this machine.",
         _cmd_uninstall,
-        execution_tier=ExecutionTier.ELEVATED,
     ),
     SlashCommand(
         "/config",
         "Show or edit local OpenSRE config.",
         _cmd_config,
         usage=("/config show", "/config set <key> <value>"),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/messaging",
@@ -353,21 +346,18 @@ COMMANDS: list[SlashCommand] = [
             "/messaging revoke",
             "/messaging status",
         ),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/hermes",
         "Live-tail Hermes logs and send incidents to Telegram.",
         _cmd_hermes,
         usage=("/hermes watch",),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/cron",
         "Manage cron-driven scheduled deliveries.",
         _cmd_cron,
         usage=("/cron list", "/cron add", "/cron remove <id>", "/cron run <id>", "/cron logs <id>"),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/watchdog",
@@ -375,13 +365,11 @@ COMMANDS: list[SlashCommand] = [
         _cmd_watchdog,
         usage=("/watchdog --pid <pid> [--max-rss <size>] [--max-cpu <percent>]",),
         examples=("/watchdog --pid 123 --max-rss 1G",),
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/debug",
         "run targeted runtime diagnostics",
         _cmd_debug,
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/misses",
@@ -393,6 +381,5 @@ COMMANDS: list[SlashCommand] = [
             "/misses export --out <dir>",
             "/misses convert <miss_id>",
         ),
-        execution_tier=ExecutionTier.SAFE,
     ),
 ]

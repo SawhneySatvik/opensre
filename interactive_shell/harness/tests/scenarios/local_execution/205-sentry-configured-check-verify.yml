@@ -16,7 +16,6 @@ notes:
 - "Regression for #3103: current-state configuration questions should execute the verifier, not suggest a CLI command."
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

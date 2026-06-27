@@ -22,9 +22,9 @@ should be predictable, interruptible, explainable, and safe by default.
 | `command_registry/` | slash-command definitions, argument validation, command dispatch | long-running implementation details better placed in services/runtime modules |
 | `session/` | `ReplSession`, runtime context assembly, and session persistence (storage backends + cross-session repo) | UI rendering, prompt text, and runtime task scheduling |
 | `runtime/` | background tasks, lifecycle/`ReplState`, controller/entrypoint support modules (lazily re-exports the `session/` surface for back-compat) | UI rendering, prompt text, and session persistence |
-| `orchestration/` | action planning, execution policy, action executor, deterministic command detection, and interaction models | raw UI formatting |
-| `shell/` | shell command parsing, allow/deny policy, subprocess execution | slash-command execution |
-| `chat/` | assistant/help/follow-up answer surfaces and shared LLM prompt rules | direct mutation of runtime state outside the action executor |
+| `orchestration/` | action planning, execution policy, subprocess runner, deterministic command detection, and interaction models | raw UI formatting |
+| `tools/shell/` | shell command parsing, shell execution policy, subprocess execution, and the `run_shell_command`/`run_cd`/`run_pwd` runner (next to the `shell_run` tool in `tools/shell_tool.py`) | slash-command execution |
+| `chat/` | assistant/help/follow-up answer surfaces and shared LLM prompt rules | direct mutation of runtime state outside the subprocess runner |
 | `references/` | CLI/docs/source/AGENTS reference loading and caching | generated model prose |
 | `config/` | interactive-shell config loading and tool catalog metadata | global app config unrelated to the REPL |
 | `harness/state/` | conversation context helpers and shared harness state (history, data store) | prompt rendering and session persistence (now owned by `session/`) |
@@ -71,33 +71,28 @@ owning area rather than adding more logic to the caller.
     `usage` tuple.
   - **Verify before push:**
     `uv run python -m pytest tests/interactive_shell/command_registry/test_slash_catalog.py -q`
-- Always assign the correct `ExecutionTier`:
-  - `EXEMPT`: only meta commands that must never prompt, such as exit/trust
-    controls.
-  - `SAFE`: read-only, local, low-cost informational commands.
-  - `ELEVATED`: mutating, destructive, expensive, networked, verification, or
-    process-control commands.
 - Use `validate_args` for cheap pre-policy validation so bad arguments do not
   trigger confirmations or side effects.
 - Send command execution through the central dispatch and execution-policy
   helpers. Do not bypass `execution_policy.py` for new commands.
 - **Alpha allow-all execution policy (current behavior):** the REPL runs with
   **no command guardrails**. `execution_policy.py` resolves every action to
-  `allow` with **no confirmation prompt** — all slash/`opensre` commands (any
-  tier, including `ELEVATED`), investigations, synthetic tests, code-agent
-  launches, LLM runtime switches, and **all** shell commands run immediately, in
-  any context (TTY or not, trust mode or not). There is **no shell-command
-  safety policy**: the read-only/mutating/restricted classification and the
-  `deny` floor were removed (`shell_policy.py` deleted; parsing-only helpers live
-  in `orchestration/shell_parsing.py`). Mutating commands (`rm`/`mv`/`docker`),
-  `restricted` commands (`sudo`, `systemctl`, `kill`, `dd`, …), shell operators
-  (`| && ; > <`), and command substitution all run; the `!` prefix is honored
-  but optional. The only shell input still rejected is genuinely empty input (a
-  bare `!` or whitespace). Do **not** re-add a shell allowlist or deny floor
-  while in alpha — see `docs/interactive-shell-action-policy.md`. Keep assigning
-  accurate `ExecutionTier` values anyway: the tier still feeds analytics, help
-  text, and any future opt-in stricter policy, and `trust_mode` plus the `ask`
-  confirmation UX are retained as an unused hook for that purpose.
+  `allow` with **no confirmation prompt** — all slash/`opensre` commands,
+  investigations, synthetic tests, code-agent launches, LLM runtime switches, and
+  **all** shell commands run immediately, in any context (TTY or not, trust mode
+  or not). There is **no shell-command safety policy**: the
+  read-only/mutating/restricted classification and the `deny` floor were removed
+  (`shell_policy.py` deleted; parsing/policy/execution live under
+  `tools/shell/`). Mutating commands (`rm`/`mv`/`docker`), `restricted` commands
+  (`sudo`, `systemctl`, `kill`, `dd`, …), shell operators (`| && ; > <`), and
+  command substitution all run; the `!` prefix is honored but optional. The only
+  shell input still rejected is genuinely empty input (a bare `!` or whitespace).
+  Do **not** re-add a shell allowlist or deny floor while in alpha — see
+  `docs/interactive-shell-action-policy.md`. The former `ExecutionTier`
+  classification was removed because it gated nothing under default-allow; if an
+  opt-in stricter policy is reintroduced after alpha, gate it in
+  `execution_policy.py` (the `ask` verdict, confirmation UX, and `trust_mode` are
+  retained as the hook), not via a planner-stage denial.
 - Non-TTY behavior under default-allow: actions no longer fail closed on
   non-interactive stdin (there is nothing to confirm). The fail-closed path only
   applies if a verdict is explicitly `ask`, which the default policy does not

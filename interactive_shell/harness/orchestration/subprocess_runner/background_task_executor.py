@@ -23,7 +23,7 @@ from .task_streaming import (
     _SYNTHETIC_DIAG_CHARS,
     _SYNTHETIC_POLL_SECONDS,
     SHELL_COMMAND_TIMEOUT_SECONDS,
-    _ae_resolve,
+    _sr_resolve,
     _join_task_output_streams,
     _pump_task_pty,
     _should_use_pty,
@@ -198,7 +198,7 @@ def start_background_cli_task(
             if code == 0:
                 task.mark_completed()
             else:
-                diag = _ae_resolve("read_diag", read_diag)(stderr_buf)
+                diag = _sr_resolve("read_diag", read_diag)(stderr_buf)
                 error_msg = f"exit code {code}" + (f": {diag}" if diag else "")
                 outcome_headline = f"command failed (exit {code})"
                 task.mark_failed(error_msg)

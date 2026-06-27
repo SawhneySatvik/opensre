@@ -18,7 +18,6 @@ notes:
   the verb "investigate". The sample alert must be LLM-decided, not folded into investigation_start.
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

@@ -14,15 +14,7 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
-from interactive_shell.harness.orchestration.execution_policy import (
-    evaluate_synthetic_test_launch,
-    execution_allowed,
-)
-from interactive_shell.runtime import ReplSession, TaskKind, TaskRecord
-from interactive_shell.ui import DIM, ERROR, HIGHLIGHT
-from interactive_shell.utils.error_handling.exception_reporting import report_exception
-
-from .task_streaming import (
+from interactive_shell.harness.orchestration.subprocess_runner.task_streaming import (
     _SYNTHETIC_DIAG_CHARS,
     _SYNTHETIC_POLL_SECONDS,
     SYNTHETIC_TEST_TIMEOUT_SECONDS,
@@ -32,6 +24,13 @@ from .task_streaming import (
     read_diag,
     terminate_child_process,
 )
+from interactive_shell.harness.orchestration.execution_policy import (
+    evaluate_synthetic_test_launch,
+    execution_allowed,
+)
+from interactive_shell.runtime import ReplSession, TaskKind, TaskRecord
+from interactive_shell.ui import DIM, ERROR, HIGHLIGHT
+from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
 DEFAULT_SYNTHETIC_SCENARIO = "001-replication-lag"
 

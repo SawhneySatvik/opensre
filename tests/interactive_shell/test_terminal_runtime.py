@@ -434,7 +434,7 @@ def test_run_text_investigation_uses_background_launcher_when_mode_enabled(
 ) -> None:
     from rich.console import Console
 
-    from interactive_shell.harness.orchestration.action_executor.investigation_runner import (
+    from interactive_shell.tools.investigation_tool import (
         run_text_investigation,
     )
 

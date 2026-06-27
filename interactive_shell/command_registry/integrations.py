@@ -7,7 +7,7 @@ from rich.markup import escape
 
 import interactive_shell.command_registry.repl_data as repl_data
 from interactive_shell.command_registry.cli_parity import run_cli_command
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import (
     BOLD_BRAND,
@@ -433,7 +433,6 @@ COMMANDS: list[SlashCommand] = [
         "Verify configured integration connectivity.",
         _cmd_verify,
         usage=("/verify", "/verify <service>"),
-        execution_tier=ExecutionTier.ELEVATED,
     ),
     SlashCommand(
         "/integrations",
@@ -448,7 +447,6 @@ COMMANDS: list[SlashCommand] = [
         ),
         notes=("In a TTY, bare /integrations opens an interactive menu.",),
         first_arg_completions=_INTEGRATIONS_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     ),
     SlashCommand(
         "/mcp",
@@ -457,7 +455,6 @@ COMMANDS: list[SlashCommand] = [
         usage=("/mcp", "/mcp list", "/mcp connect", "/mcp disconnect"),
         notes=("In a TTY, bare /mcp opens an interactive menu.",),
         first_arg_completions=_MCP_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     ),
 ]
 

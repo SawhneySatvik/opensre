@@ -12,7 +12,7 @@ from rich.markup import escape
 from rich.text import Text
 
 import config.constants.platform as _platform
-from interactive_shell.harness.orchestration.action_executor.task_streaming import (
+from interactive_shell.harness.orchestration.subprocess_runner.task_streaming import (
     _MAX_COMMAND_OUTPUT_CHARS,
     SHELL_COMMAND_TIMEOUT_SECONDS,
 )
@@ -54,9 +54,7 @@ def run_shell_command(
 
     console.print(f"[bold]$ {escape(command)}[/bold]")
 
-    argv_builtin = argv_for_repl_builtin_detection(
-        parsed=parsed, is_windows=_platform.IS_WINDOWS
-    )
+    argv_builtin = argv_for_repl_builtin_detection(parsed=parsed, is_windows=_platform.IS_WINDOWS)
 
     if argv_builtin is not None and argv_builtin[0].lower() == "cd":
         run_cd_command(parsed.command, session, console)

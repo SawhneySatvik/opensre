@@ -22,7 +22,6 @@ SCENARIOS_DIR = TESTS_DIR / "scenarios"
 
 INTENT_CLASSES = frozenset(
     {
-        "deterministic",
         "chat_handoff",
         "local_execution",
         "investigation",
@@ -61,7 +60,6 @@ VALID_ACTION_SOURCES = frozenset({"deterministic", "llm"})
 VALID_TARGET_SURFACES = frozenset({"slash", "terminal", "investigation", "implementation"})
 
 INTENT_TO_BEHAVIOR_CLASS: dict[str, str] = {
-    "deterministic": "deterministic",
     "chat_handoff": "chat_handoff",
     "local_execution": "local_execution",
     "investigation": "investigations",
@@ -123,7 +121,6 @@ class Scenario:
 @dataclass(frozen=True)
 class AnswerTurn:
     expected_kind: str
-    expected_command_text: str | None
 
 
 @dataclass(frozen=True)
@@ -591,6 +588,12 @@ def _parse_answer_yaml(answer_path: Path, *, scenario_id: str) -> Answer:
     if "expected_signals" in turn_raw:
         msg = f"{answer_path}: turn.expected_signals was removed; drop it from the fixture."
         raise ValueError(msg)
+    if "expected_command_text" in turn_raw:
+        msg = (
+            f"{answer_path}: turn.expected_command_text was removed along with the "
+            "deterministic command-detection layer; drop it from the fixture."
+        )
+        raise ValueError(msg)
 
     for removed_key in ("should_execute", "has_unhandled_clause", "fail_closed"):
         if removed_key in policy_raw:
@@ -673,17 +676,9 @@ def _parse_answer_yaml(answer_path: Path, *, scenario_id: str) -> Answer:
         label=f"{answer_path} history.expected",
     )
 
-    command_text = turn_raw.get("expected_command_text")
-    expected_command_text = (
-        str(command_text).strip()
-        if isinstance(command_text, str) and command_text.strip()
-        else None
-    )
-
     return Answer(
         turn=AnswerTurn(
             expected_kind=expected_kind,
-            expected_command_text=expected_command_text,
         ),
         policy=AnswerPolicy(
             executes_terminal_action=executes_terminal_action,

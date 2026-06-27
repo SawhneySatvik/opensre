@@ -6,7 +6,7 @@ import time
 
 from rich.console import Console
 
-from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
+from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.runtime import ReplSession
 from interactive_shell.ui.components.choice_menu import repl_choose_one, repl_tty_interactive
 from platform.terminal import theme as ui_theme
@@ -98,7 +98,6 @@ COMMANDS: list[SlashCommand] = [
         usage=("/theme", "/theme <name>"),
         examples=("/theme blue", "/theme green"),
         first_arg_completions=_THEME_FIRST_ARGS,
-        execution_tier=ExecutionTier.SAFE,
     )
 ]
 

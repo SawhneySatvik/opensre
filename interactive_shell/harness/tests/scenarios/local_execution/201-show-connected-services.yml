@@ -17,7 +17,6 @@ available_capabilities:
 notes: []
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: true
 planned_actions:

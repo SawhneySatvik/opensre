@@ -19,7 +19,7 @@ recurring source of precedence drift.
 1. There is no regex/keyword intent inference. Non-command turns are
    selected entirely by the shell action agent via native tool-calling.
 2. Tool selection is driven by the action-agent system prompt
-   (`.../orchestration/system_prompt.py`) and the per-tool descriptions
+   (`.../llm_context/system_prompt.py`) and the per-tool descriptions
    in the tool catalog (`interactive_shell/tools/*`). Keep both precise — they
    are the only selection signal.
 3. The action path does not post-hoc rewrite the model's tool calls. Tool calls
@@ -71,16 +71,15 @@ answered without adding keyword/regex rules. Two complementary mechanisms:
    `interactive_shell/chat/cli_agent.py`) lists the configured set as
    facts, letting the model answer directly when state is already known.
 2. LLM-driven discovery. The action-agent system prompt
-   (`.../orchestration/system_prompt.py`) lets the model, at its own
+   (`.../llm_context/system_prompt.py`) lets the model, at its own
    discretion, emit a read-only discovery action (for example
    `slash_invoke("/integrations", ["list"])` or `["verify"]`) to discover the
    answer instead of deflecting. There is no keyword mapping for this — the LLM
-   decides. Safety is provided by the existing execution-tier policy in
-   `execution_policy.py` (`resolve_slash_execution_tier`): `/integrations`
-   (list/show) is `SAFE` and auto-runs, while `/integrations verify` is
-   `ELEVATED` and prompts for confirmation. No fail-closed regex rule is
-   involved; the action agent decides whether to emit a discovery action and the
-   execution tier governs safety.
+   decides. Under the alpha allow-all policy every discovery action runs without
+   confirmation (`execution_policy.evaluate_slash_command` returns `allow`); the
+   former `ExecutionTier`/`resolve_slash_execution_tier` classification was
+   removed because it gated nothing. No fail-closed regex rule is involved; the
+   action agent decides whether to emit a discovery action.
 
 ### Observe→answer summary loop
 
@@ -183,10 +182,10 @@ What changed:
 
 - `shell_policy.py` (classification, allowlists, `classify_command`,
   `evaluate_policy`, `PolicyDecision`) was deleted. The pure parsing helpers it
-  also contained moved to `orchestration/shell_parsing.py`
-  (`parse_shell_command`, `argv_for_repl_builtin_detection`,
-  `ParsedShellCommand`).
-- `execution_policy.evaluate_shell_from_parsed` now returns `allow` for every
+  also contained moved to `tools/shell/parsing.py` (`parse_shell_command`,
+  `argv_for_repl_builtin_detection`, `ParsedShellCommand`), alongside the shell
+  execution policy in `tools/shell/policy.py`.
+- `tools.shell.policy.evaluate_shell_from_parsed` now returns `allow` for every
   command — read-only, mutating, `restricted` (`sudo`, `systemctl`, `kill`,
   `dd`, …), shell operators (`| && ; > <`), and command substitution
   (`` ` ``/`$(...)`). Commands that need a shell run through one automatically;

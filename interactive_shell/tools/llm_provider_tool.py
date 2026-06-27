@@ -11,9 +11,6 @@ from interactive_shell.harness.orchestration.execution_policy import (
     evaluate_llm_runtime_switch,
     execution_allowed,
 )
-from interactive_shell.harness.orchestration.execution_tier import (
-    ExecutionTier,
-)
 from interactive_shell.tools.tool_contracts import (
     ToolContext,
     ToolEntry,
@@ -81,7 +78,6 @@ TOOL_ENTRY = ToolEntry(
         properties={"target": _target_property_schema()},
         required=("target",),
     ),
-    execution_tier=ExecutionTier.ELEVATED,
     execute=execute_llm_provider_action,
     is_available=lambda session: capability_not_explicitly_disabled(session, "llm_provider"),
 )

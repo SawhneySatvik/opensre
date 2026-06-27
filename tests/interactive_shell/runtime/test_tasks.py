@@ -19,6 +19,7 @@ from interactive_shell.session import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
     ReplSession,
 )
+from interactive_shell.tools.synthetic.runner import watch_synthetic_subprocess
 from platform.common.task_types import TaskKind, TaskStatus
 
 
@@ -343,7 +344,7 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         monkeypatch.setattr(ae.threading, "Thread", _ImmediateThread)
 
@@ -355,7 +356,7 @@ class TestSyntheticSubprocessWatcher:
         task = session.task_registry.create(TaskKind.SYNTHETIC_TEST)
         task.mark_running()
         task.attach_process(proc)
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         assert task.status == TaskStatus.COMPLETED
         hist = session.history[-1]
         assert hist["type"] == "synthetic_test"
@@ -373,7 +374,7 @@ class TestSyntheticSubprocessWatcher:
         cancel_requested branch runs, so terminated_by_watcher stays False.
         The task must be COMPLETED, not CANCELLED — the process succeeded.
         """
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         monkeypatch.setattr(ae.threading, "Thread", _ImmediateThread)
 
@@ -400,7 +401,7 @@ class TestSyntheticSubprocessWatcher:
             pending[0] = 0  # process finishes naturally in the same window
 
         monkeypatch.setattr(ae.time, "sleep", _fake_sleep)
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         # terminated_by_watcher is False → honour exit code 0 → COMPLETED
         assert task.status == TaskStatus.COMPLETED
         assert sleeps
@@ -411,7 +412,7 @@ class TestSyntheticSubprocessWatcher:
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
         """cancel_requested is set while proc is still running; watcher terminates it."""
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         monkeypatch.setattr(ae.threading, "Thread", _ImmediateThread)
 
@@ -430,7 +431,7 @@ class TestSyntheticSubprocessWatcher:
         # Skip the sleep so the loop iterates immediately to the cancel branch.
         monkeypatch.setattr(ae.time, "sleep", lambda _: None)
 
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         assert task.status == TaskStatus.CANCELLED
         hist = session.history[-1]
         assert hist["type"] == "synthetic_test"
@@ -446,7 +447,7 @@ class TestSyntheticSubprocessWatcher:
         The watcher should mark the task COMPLETED, not CANCELLED, because we
         never called _terminate_child_process — the process was already gone.
         """
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         monkeypatch.setattr(ae.threading, "Thread", _ImmediateThread)
 
@@ -462,7 +463,7 @@ class TestSyntheticSubprocessWatcher:
         # Simulate /cancel arriving just as the watcher reads poll()
         task.cancel_requested.set()
 
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         assert task.status == TaskStatus.COMPLETED
 
     def test_watch_captures_stderr_on_failure(
@@ -471,7 +472,7 @@ class TestSyntheticSubprocessWatcher:
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
         """Diagnostic stderr output is included in mark_failed message."""
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         monkeypatch.setattr(ae.threading, "Thread", _ImmediateThread)
 
@@ -483,7 +484,7 @@ class TestSyntheticSubprocessWatcher:
         proc.returncode = 1
 
         stderr_buf.write(b"ConnectionError: database unreachable\n")
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         assert task.status == TaskStatus.FAILED
         assert "exit code 1" in (task.error or "")
         assert "ConnectionError" in (task.error or "")
@@ -494,7 +495,7 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         _DeferredSyntheticThread.pending.clear()
         monkeypatch.setattr(ae.threading, "Thread", _DeferredSyntheticThread)
@@ -507,7 +508,7 @@ class TestSyntheticSubprocessWatcher:
         task = session.task_registry.create(TaskKind.SYNTHETIC_TEST)
         task.mark_running()
         task.attach_process(proc)
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         assert len(_DeferredSyntheticThread.pending) == 1
         session.clear()
         _DeferredSyntheticThread.pending[0]()
@@ -519,7 +520,7 @@ class TestSyntheticSubprocessWatcher:
         monkeypatch: pytest.MonkeyPatch,
         stderr_buf: tempfile.SpooledTemporaryFile,  # type: ignore[type-arg]
     ) -> None:
-        import interactive_shell.harness.orchestration.action_executor as ae
+        import interactive_shell.harness.orchestration.subprocess_runner as ae
 
         _DeferredSyntheticThread.pending.clear()
         monkeypatch.setattr(ae.threading, "Thread", _DeferredSyntheticThread)
@@ -532,7 +533,7 @@ class TestSyntheticSubprocessWatcher:
         task = session.task_registry.create(TaskKind.SYNTHETIC_TEST)
         task.mark_running()
         task.attach_process(proc)
-        ae.watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
+        watch_synthetic_subprocess(task, proc, session, "rds_postgres", stderr_buf)
         _DeferredSyntheticThread.pending[0]()
         assert session.history[-1]["type"] == "synthetic_test"
         _DeferredSyntheticThread.pending.clear()

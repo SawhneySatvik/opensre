@@ -22,8 +22,8 @@ from interactive_shell.runtime import ReplSession
 from interactive_shell.ui import DIM, ERROR, WARNING, print_command_output
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
 
-from .background_tasks import start_background_cli_task as _start_background_cli_task_default
-from .task_streaming import SHELL_COMMAND_TIMEOUT_SECONDS, _ae_resolve
+from .background_task_executor import start_background_cli_task as _start_background_cli_task_default
+from .task_streaming import SHELL_COMMAND_TIMEOUT_SECONDS, _sr_resolve
 
 _OPENSRE_BLOCKED_SUBCOMMANDS: frozenset[str] = frozenset({"agent"})
 
@@ -159,14 +159,6 @@ def _opensre_confirmation_reason(tokens: list[str]) -> str:
     if tokens and tokens[0] == "fleet":
         return "this updates the local AI-agent registry"
     return "this opensre subcommand may change local config or infrastructure"
-
-
-def _should_run_opensre_in_foreground(tokens: list[str]) -> bool:
-    return _build_opensre_execution_plan(tokens).execution_mode in {
-        OpensreExecutionMode.FOREGROUND,
-        OpensreExecutionMode.FOREGROUND_STREAMING,
-    }
-
 
 def _build_opensre_execution_plan(tokens: list[str]) -> OpensreExecutionPlan:
     """Compute classification + execution mode from one canonical policy table."""
@@ -396,7 +388,7 @@ def run_opensre_cli_command_result(
         )
 
     session.record("cli_command", display_command)
-    _ae_resolve("start_background_cli_task", _start_background_cli_task_default)(
+    _sr_resolve("start_background_cli_task", _start_background_cli_task_default)(
         display_command=display_command,
         argv_list=argv_list,
         session=session,

@@ -15,7 +15,6 @@ notes:
 - 'P0 priority prompt (kubernetes_workload_health #1).'
 turn:
   expected_kind: agent
-  expected_command_text: null
 policy:
   executes_terminal_action: false
 planned_actions:

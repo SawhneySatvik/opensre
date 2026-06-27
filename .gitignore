@@ -60,6 +60,7 @@ coverage.xml
 *.cover
 *.log
 !tests/synthetic/hermes/**/*.log
+.turn-shard-logs/
 
 # Jupyter Notebook
 .ipynb_checkpoints

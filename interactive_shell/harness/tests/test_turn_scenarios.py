@@ -1,4 +1,4 @@
-"""Canonical turn scenario tests (deterministic + live LLM)."""
+"""Canonical turn scenario tests (live LLM planning and oracle)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from rich.console import Console
 from core.runtime import Agent, AgentTool, AgentToolContext
 from core.runtime.llm.agent_llm_client import ToolCall
 from interactive_shell.command_registry import SLASH_COMMANDS
-from interactive_shell.harness.orchestration.llm_context import (
+from interactive_shell.harness.llm_context import (
     build_action_system_prompt,
     build_action_user_message,
 )
@@ -58,9 +58,7 @@ class ExpectedAction(TypedDict):
 
 
 _ALL_CASES = load_all_scenarios()
-_LIVE_CASES = iter_scenarios_for_shard(
-    [case for case in _ALL_CASES if case.scenario.intent_class != "deterministic"]
-)
+_LIVE_CASES = iter_scenarios_for_shard(_ALL_CASES)
 _TOOL_TO_ACTION_KIND = {tool: kind for kind, tool in ACTION_KIND_TO_TOOL.items()}
 _LIVE_PLANNING_MAX_ITERATIONS = 3
 
