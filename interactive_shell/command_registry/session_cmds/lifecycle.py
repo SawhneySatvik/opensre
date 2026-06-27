@@ -24,20 +24,18 @@ def _cmd_new(session: ReplSession, console: Console, _args: list[str]) -> bool:
     accumulated_context so a resumed or in-progress conversation continues
     seamlessly in a fresh session file.
     """
-    from interactive_shell.harness.state.sessions.store import SessionStore
-
     saved_messages = list(session.cli_agent_messages)
     saved_context = dict(session.accumulated_context)
     saved_resumed_name = session.resumed_from_name
 
-    SessionStore.flush(session)
+    session.storage.flush(session)
     session.clear()
 
     session.cli_agent_messages = saved_messages
     session.accumulated_context = saved_context
     session.resumed_from_name = saved_resumed_name
 
-    SessionStore.open_session(session)
+    session.storage.open_session(session)
     console.print(
         f"[{DIM}]new session started[/] [{HIGHLIGHT}]—[/] [{DIM}]conversation context carried forward.[/]"
     )

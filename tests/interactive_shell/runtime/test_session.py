@@ -7,12 +7,12 @@ from pathlib import Path
 import pytest
 
 import config.constants as const_module
-from interactive_shell.runtime.core.session import (
+from interactive_shell.runtime.core.tasks import TaskRegistry
+from interactive_shell.session import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
     ReplSession,
-    _scenario_id_from_synthetic_label,
 )
-from interactive_shell.runtime.core.tasks import TaskRegistry
+from interactive_shell.session.state import _scenario_id_from_synthetic_label
 from platform.common.task_types import TaskKind
 
 

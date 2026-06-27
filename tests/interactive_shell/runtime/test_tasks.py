@@ -14,11 +14,11 @@ import pytest
 from rich.console import Console
 
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.runtime.core.session import (
+from interactive_shell.runtime.core.tasks import TaskRegistry
+from interactive_shell.session import (
     SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
     ReplSession,
 )
-from interactive_shell.runtime.core.tasks import TaskRegistry
 from platform.common.task_types import TaskKind, TaskStatus
 
 

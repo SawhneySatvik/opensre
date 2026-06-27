@@ -24,8 +24,8 @@ from interactive_shell import controller as controller_runtime
 from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
 from interactive_shell.runtime.core import state as loop_state
 from interactive_shell.runtime.core import turn_detection as loop_turn_detection
-from interactive_shell.runtime.core.session import ReplSession
 from interactive_shell.runtime.startup import initial_input as startup_initial_input
+from interactive_shell.session import ReplSession
 from interactive_shell.ui import input_prompt
 from interactive_shell.ui.components.cpr_stdin import (
     strip_cpr_escape_sequences,

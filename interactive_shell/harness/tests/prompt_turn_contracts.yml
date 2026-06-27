@@ -30,22 +30,6 @@
       text: "/help"
       ok: true
 
-- id: typoed_help_alias
-  input: "hlep"
-  expected_turn_kind: "agent"
-  expected_planned_actions:
-    - kind: "slash"
-      content: "/help"
-  expected_executed_actions:
-    - kind: "slash"
-      content: "/help"
-  expected_terminal_response_contains:
-    - "ran /help"
-  expected_session_history_delta:
-    - type: "slash"
-      text: "/help"
-      ok: true
-
 - id: docs_run_investigation
   input: "how do I run an investigation?"
   expected_turn_kind: "agent"

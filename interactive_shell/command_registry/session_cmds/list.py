@@ -20,9 +20,9 @@ from interactive_shell.ui.components.time_format import format_repl_duration, fo
 def _cmd_sessions(session: ReplSession, console: Console, _args: list[str]) -> bool:
     from datetime import UTC, datetime
 
-    from interactive_shell.harness.state.sessions.store import SessionStore
+    from interactive_shell.session import default_session_repo
 
-    entries = SessionStore.load_recent(20)
+    entries = default_session_repo().load_recent(20)
     if not entries:
         console.print(f"[{DIM}]No sessions recorded yet.[/]")
         return True

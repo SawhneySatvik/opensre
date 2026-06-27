@@ -18,7 +18,7 @@ from interactive_shell.harness.harness import (
 from interactive_shell.harness.orchestration.agent_actions import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from interactive_shell.utils.telemetry.recorder import LlmRunInfo
 
 _OBSERVATION = "Integration status from `/integrations`:\n- sentry: missing (Not configured.)"

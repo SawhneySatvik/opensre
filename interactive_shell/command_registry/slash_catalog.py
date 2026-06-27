@@ -9,7 +9,7 @@ from interactive_shell.command_registry.types import SlashCommand
 from interactive_shell.harness.orchestration.execution_tier import (
     ExecutionTier,
 )
-from interactive_shell.harness.orchestration.tool_contracts import (
+from interactive_shell.tools.tool_contracts import (
     object_schema,
     string_array_property,
     string_property,

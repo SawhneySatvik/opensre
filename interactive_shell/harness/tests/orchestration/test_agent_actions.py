@@ -13,28 +13,26 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
+import config.constants.platform as platform_module
 import interactive_shell.harness.orchestration.action_executor as action_executor
 import interactive_shell.harness.orchestration.action_executor.shell_execution as shell_execution
 import interactive_shell.harness.orchestration.agent_actions as agent_actions
-import interactive_shell.harness.orchestration.tools.implementation_tool as implementation_tool
-import interactive_shell.harness.orchestration.tools.llm_provider_tool as llm_provider_tool
-import interactive_shell.harness.orchestration.tools.slash_tool as slash_tool
+import interactive_shell.tools.implementation_tool as implementation_tool
+import interactive_shell.tools.llm_provider_tool as llm_provider_tool
+import interactive_shell.tools.slash_tool as slash_tool
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.harness.orchestration import (
-    intent_parser as intent_parser_module,
-)
-from interactive_shell.harness.orchestration.interaction_models import (
-    ActionKind,
+from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
     default_target_surface,
-)
-from interactive_shell.harness.orchestration.tool_registry import (
-    ACTION_KIND_TO_TOOL,
 )
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
+from interactive_shell.tools.tool_registry import (
+    ACTION_KIND_TO_TOOL,
+    ActionKind,
+)
 from platform.common.task_types import TaskKind, TaskStatus
 
 _ACTION_LLM_FACTORY_PATCH = (
@@ -1220,36 +1218,6 @@ def test_execute_cli_actions_dispatches_bang_pwd_through_builtin(monkeypatch: ob
     assert "explicit shell passthrough enabled" not in captured
 
 
-def test_execute_cli_actions_denies_restricted_shell_command() -> None:
-    """Default-allow still enforces the restricted ``deny`` floor (e.g. ``sudo``).
-
-    Under default-allow, mutating commands like ``rm`` run without a
-    confirmation prompt, but restricted commands must still be blocked outright
-    and recorded as ``ok=False``.
-    """
-    session = ReplSession()
-    console, buf = _capture()
-
-    assert (
-        agent_actions.execute_cli_actions("run `sudo rm -rf /tmp/demo`", session, console).handled
-        is True
-    )
-    assert session.history[-1] == {"type": "shell", "text": "sudo rm -rf /tmp/demo", "ok": False}
-    output = buf.getvalue()
-    assert "blocked" in output.lower()
-
-
-def test_execute_cli_actions_blocks_ambiguous_shell_operators() -> None:
-    session = ReplSession()
-    console, buf = _capture()
-
-    assert agent_actions.execute_cli_actions("run `ls | wc -l`", session, console).handled is True
-    assert session.history[-1] == {"type": "shell", "text": "ls | wc -l", "ok": False}
-    output = buf.getvalue()
-    assert "action blocked" in output.lower()
-    assert "shell operators" in output
-
-
 def test_execute_cli_actions_handles_path_with_spaces_run_phrase() -> None:
     session = ReplSession()
     console, buf = _capture()
@@ -1290,20 +1258,6 @@ def test_execute_cli_actions_backtick_shell_preserves_space_path_token(monkeypat
     # following the policy.py _strip_outer_quotes logic.
     expected_path = "/tmp/file with spaces.txt"
     assert calls[0][0] == ["cat", expected_path]
-
-
-def test_execute_cli_actions_rejects_malformed_shell_input() -> None:
-    session = ReplSession()
-    console, buf = _capture()
-
-    assert (
-        agent_actions.execute_cli_actions('run `cat "unterminated`', session, console).handled
-        is True
-    )
-    assert session.history[-1] == {"type": "shell", "text": 'cat "unterminated', "ok": False}
-    output = buf.getvalue()
-    assert "action blocked" in output.lower()
-    assert "could not parse command" in output
 
 
 def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) -> None:

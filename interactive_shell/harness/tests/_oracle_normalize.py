@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from interactive_shell.harness.orchestration.interaction_models import (
+from interactive_shell.harness.tests._planned_action import (
     PlannedAction,
 )
 

@@ -1,10 +1,11 @@
 """Unit tests for REPL execution policy composition.
 
-The REPL is default-allow: policy functions resolve to ``allow`` with no
-confirmation prompt, except for a hard ``deny`` floor (restricted shell commands
-and unparseable shell input). The ``ask`` verdict and its confirmation UX are
-retained for ``trust_mode`` / future opt-in stricter policy, so those paths are
-covered here using explicitly-constructed ``ask`` results.
+Alpha mode: policy functions resolve to ``allow`` with no confirmation prompt
+and there is no command guardrail. Shell evaluation allows every command
+(read-only, mutating, restricted, operators, substitution) and only rejects
+empty input. The ``ask`` verdict and its confirmation UX are retained for
+``trust_mode`` / future opt-in stricter policy, so those paths are covered here
+using explicitly-constructed ``ask`` results.
 """
 
 from __future__ import annotations
@@ -27,7 +28,7 @@ from interactive_shell.harness.orchestration.execution_policy import (
 from interactive_shell.harness.orchestration.execution_tier import (
     ExecutionTier,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 
 
 def _ask_result() -> ExecutionPolicyResult:
@@ -48,26 +49,34 @@ def test_read_only_shell_is_allow() -> None:
     assert r.action_type == "shell"
 
 
-def test_restricted_shell_is_deny() -> None:
+def test_restricted_shell_is_allow() -> None:
+    """Alpha mode removed the restricted deny floor; ``sudo`` now runs."""
     r = evaluate_shell_command("sudo ls /")
-    assert r.verdict == "deny"
+    assert r.verdict == "allow"
+    assert r.shell_classification == "unrestricted"
 
 
-def test_unparseable_shell_is_deny() -> None:
-    """Shell operators cannot be safely parsed, so they stay denied."""
+def test_operator_shell_is_allow() -> None:
+    """Shell operators run through a shell instead of being blocked."""
     r = evaluate_shell_command("ls | grep x")
-    assert r.verdict == "deny"
+    assert r.verdict == "allow"
 
 
 def test_mutating_shell_is_allow() -> None:
     r = evaluate_shell_command("rm -rf /tmp/x")
     assert r.verdict == "allow"
-    assert r.shell_classification == "mutating"
+    assert r.shell_classification == "unrestricted"
 
 
 def test_passthrough_shell_is_allow() -> None:
     r = evaluate_shell_command("!echo hi")
     assert r.verdict == "allow"
+
+
+def test_empty_shell_input_is_deny() -> None:
+    """Only genuinely empty input is rejected (input validation, not a guardrail)."""
+    r = evaluate_shell_command("!")
+    assert r.verdict == "deny"
 
 
 def test_slash_exempt_is_allow() -> None:
@@ -177,12 +186,13 @@ def test_deny_verdict_blocks() -> None:
     session = ReplSession()
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
-    r = evaluate_shell_command("sudo rm -rf /")
+    # Empty input is the only shell deny path remaining in alpha mode.
+    r = evaluate_shell_command("!")
     assert not execution_allowed(
         r,
         session=session,
         console=console,
-        action_summary="sudo rm -rf /",
+        action_summary="!",
         is_tty=True,
     )
     assert "blocked" in buf.getvalue()

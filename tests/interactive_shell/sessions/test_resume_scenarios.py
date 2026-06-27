@@ -19,8 +19,9 @@ from config.config import (
     resolve_llm_settings_verbose,
 )
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.harness.state.sessions.store import SessionStore
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import JsonlSessionStorage, ReplSession
+
+SessionStore = JsonlSessionStorage()
 
 
 def _capture() -> tuple[Console, io.StringIO]:
@@ -77,10 +78,7 @@ def isolated_sessions(tmp_path: Path) -> Path:
     """Sessions directory with SessionStore patched for the test."""
     directory = tmp_path / "sessions"
     directory.mkdir()
-    with patch(
-        "interactive_shell.harness.state.sessions.store._sessions_dir",
-        return_value=directory,
-    ):
+    with patch("config.constants.OPENSRE_HOME_DIR", tmp_path):
         yield directory
 
 

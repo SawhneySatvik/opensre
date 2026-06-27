@@ -20,11 +20,6 @@ from rich.console import Console
 LIVE_INTEGRATION_SENTINEL = "@live"
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.harness.orchestration.tool_contracts import ToolExecutor
-from interactive_shell.harness.orchestration.tool_registry import (
-    ACTION_KIND_TO_TOOL,
-    REGISTRY,
-)
 from interactive_shell.harness.tests._oracle_normalize import (
     normalize_history_entry,
     normalize_response_text,
@@ -35,7 +30,12 @@ from interactive_shell.harness.tests.scenario_loader import (
     ScenarioCapabilities,
     ScenarioCase,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
+from interactive_shell.tools.tool_contracts import ToolExecutor
+from interactive_shell.tools.tool_registry import (
+    ACTION_KIND_TO_TOOL,
+    REGISTRY,
+)
 from interactive_shell.utils.telemetry import PromptRecorder
 from platform.analytics.repl_context import bind_cli_session_id, reset_cli_session_id
 

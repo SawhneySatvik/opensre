@@ -20,7 +20,6 @@ from interactive_shell.ui.components.rendering import (
 )
 from interactive_shell.ui.streaming.console import StreamingConsole
 from interactive_shell.ui.tables import (
-    print_planned_actions,
     render_integrations_table,
     render_mcp_table,
 )
@@ -286,22 +285,3 @@ def test_render_mcp_table_renders_content(
     )
 
     assert "github" in capsys.readouterr().out
-
-
-def test_print_planned_actions_formats_kinds() -> None:
-    from interactive_shell.harness.orchestration.interaction_models import (
-        PlannedAction,
-    )
-
-    buf = io.StringIO()
-    console = Console(file=buf, force_terminal=False)
-    print_planned_actions(
-        console,
-        [
-            PlannedAction(kind="slash", content="/health", position=0),
-            PlannedAction(kind="shell", content="pwd", position=10),
-        ],
-    )
-    out = buf.getvalue()
-    assert "/health" in out
-    assert "pwd" in out

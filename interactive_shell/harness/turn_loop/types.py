@@ -11,7 +11,7 @@ from rich.console import Console
 from interactive_shell.harness.orchestration.agent_actions import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from interactive_shell.utils.telemetry import LlmRunInfo, PromptRecorder
 
 ObservationSource = Literal["terminal_action", "gather"]

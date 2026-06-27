@@ -18,11 +18,6 @@ from interactive_shell.harness.orchestration.execution_policy import (
     evaluate_synthetic_test_launch,
     execution_allowed,
 )
-from interactive_shell.harness.orchestration.synthetic_scenarios import (
-    DEFAULT_SYNTHETIC_SCENARIO,
-    SYNTHETIC_UNKNOWN_PREFIX,
-    list_rds_postgres_scenarios,
-)
 from interactive_shell.runtime import ReplSession, TaskKind, TaskRecord
 from interactive_shell.ui import DIM, ERROR, HIGHLIGHT
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -37,6 +32,8 @@ from .task_streaming import (
     read_diag,
     terminate_child_process,
 )
+
+DEFAULT_SYNTHETIC_SCENARIO = "001-replication-lag"
 
 _SYNTHETIC_SCENARIO_ID_RE = re.compile(r"^\d{3}-[a-z0-9][a-z0-9-]*$")
 
@@ -151,21 +148,6 @@ def run_synthetic_test(
     action_already_listed: bool = False,
 ) -> None:
     suite_spec = suite_name.strip().lower()
-
-    # The planner emits this sentinel when the user explicitly named a numeric
-    # scenario ID that isn't in the on-disk suite (e.g. "test 016" when only
-    # 000-015 exist). Surface the error before any execution-policy / subprocess
-    # work so we never silently launch the default scenario in its place.
-    if suite_spec.startswith(SYNTHETIC_UNKNOWN_PREFIX):
-        hint = suite_spec[len(SYNTHETIC_UNKNOWN_PREFIX) :]
-        console.print(f"[{ERROR}]no synthetic scenario matches[/] '{escape(hint)}'.")
-        available = list_rds_postgres_scenarios()
-        if available:
-            console.print(f"Available scenarios ({len(available)}):")
-            for name in available:
-                console.print(f"  • {name}")
-        session.record("synthetic_test", suite_name, ok=False)
-        return
 
     resolved_suite_name = ""
     resolved_scenario = DEFAULT_SYNTHETIC_SCENARIO

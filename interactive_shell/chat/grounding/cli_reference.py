@@ -161,9 +161,10 @@ def _interactive_shell_slash_hints() -> str:
     lines = [
         "In the interactive shell, describe an incident or paste alert JSON to run "
         + "a investigation pipeline, or chat with the terminal assistant for CLI help.",
-        "Deterministic shell commands are parsed to argv and run without a shell by default "
-        + "(safe/read-only allowlist only). Pipes, redirects, command substitution, mutating "
-        + "commands, and other cases need a leading ! for explicit full-shell passthrough.",
+        "Alpha mode runs every shell command with no guardrails: plain commands are parsed to "
+        + "argv and run without a shell, while pipes, redirects, command substitution, and a "
+        + "leading ! all run through a full shell. There is no read-only allowlist or blocked "
+        + "command list.",
         "Slash commands:",
         "",
     ]

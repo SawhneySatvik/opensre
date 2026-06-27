@@ -10,7 +10,7 @@ from interactive_shell.command_registry.slash_catalog import (
     slash_invoke_input_schema,
     slash_invoke_tool_description,
 )
-from interactive_shell.harness.orchestration.tool_registry import (
+from interactive_shell.tools.tool_registry import (
     REGISTRY,
 )
 

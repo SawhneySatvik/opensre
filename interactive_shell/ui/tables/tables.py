@@ -13,9 +13,6 @@ from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
 
-from interactive_shell.harness.orchestration.interaction_models import (
-    PlannedAction,
-)
 from interactive_shell.ui.components.rendering import (
     _prepare_tty_for_rich,
     print_repl_table,
@@ -202,29 +199,10 @@ def print_command_output(console: Console, output: str, *, style: str | None = N
     repl_print(console, Text(text) if style is None else Text(text, style=style))
 
 
-def print_planned_actions(console: Console, actions: list[PlannedAction]) -> None:
-    console.print(f"[{DIM}]Requested actions:[/]")
-    for index, action in enumerate(actions, start=1):
-        label = {
-            "llm_provider": "LLM provider",
-            "sample_alert": "sample alert",
-            "investigation": "investigation",
-            "shell": "shell",
-            "slash": "command",
-            "synthetic_test": "synthetic test",
-            "task_cancel": "cancel task",
-            "cli_command": "opensre",
-            "implementation": "implementation",
-            "assistant_handoff": "assistant handoff",
-        }[action.kind]
-        console.print(f"[{DIM}]{index}.[/] [{BOLD_BRAND}]{label}[/] {escape(action.content)}")
-
-
 __all__ = [
     "ColumnDef",
     "MCP_INTEGRATION_SERVICES",
     "print_command_output",
-    "print_planned_actions",
     "render_integrations_table",
     "render_mcp_table",
     "render_models_table",

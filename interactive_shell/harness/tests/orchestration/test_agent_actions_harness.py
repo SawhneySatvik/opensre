@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from rich.console import Console
 
-import interactive_shell.harness.orchestration.tools.slash_tool as slash_tool
+import interactive_shell.tools.slash_tool as slash_tool
 from interactive_shell.harness.orchestration.agent_actions import (
     ActionExecutionDeps,
     execute_cli_actions,
@@ -15,7 +15,7 @@ from interactive_shell.harness.tests.orchestration.action_execution_test_harness
     no_tool_response,
     tool_response,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 
 
 def test_execute_with_harness_runs_slash_tool_call(monkeypatch) -> None:

@@ -25,11 +25,14 @@ In simple terms:
   completion notification delivery.
 - `core/` holds the core runtime engine:
   - `state.py` — shared runtime state (`ReplState`, `SpinnerState`)
-  - `session.py` — per-REPL-process `ReplSession`
   - `token_accounting.py` — LLM token usage and run metadata
   - `turn_detection.py` — pure text classifiers for cancel, confirm, and correction detection
 - `core/tasks.py` owns the cross-session task registry surfaced via `/tasks` and
   `/cancel`.
+- Per-REPL-process session state (`ReplSession`) and runtime context assembly
+  (`ReplRuntimeContext`, `create_repl_runtime_context`) live in the top-level
+  `interactive_shell/session/` package, not in `core/`. `runtime/__init__.py`
+  lazily re-exports those names (see compatibility surface policy below).
 
 These instructions apply to `interactive_shell/runtime/` and all
 subdirectories. Parent `AGENTS.md` files still apply.
@@ -55,7 +58,6 @@ The runtime package is intentionally split into focused concerns:
 - `../entrypoint.py` — process/bootstrap boundary only.
 - `startup/initial_input.py` — scripted initial-input replay only.
 - `startup/first_launch_github.py` — first-launch GitHub sign-in gate only.
-- `core/session.py` — session-scoped REPL state only.
 - `core/tasks.py` — task registry + persistence only.
 - `core/token_accounting.py` — session-scoped LLM token accounting and run metadata only.
 
@@ -157,6 +159,14 @@ flowchart TD
 
 - `runtime/__init__.py` should be a thin export layer.
 - Do not duplicate business logic in `__init__.py`.
+- `runtime/__init__.py` lazily re-exports the session surface
+  (`ReplSession`, `ReplRuntimeContext`, `create_repl_runtime_context`, …) from
+  `interactive_shell.session` via `__getattr__` (PEP 562). This is the one
+  sanctioned indirection — it exists to avoid an import cycle
+  (`session.context` depends on `runtime.core.state`). New code should import
+  these names directly from `interactive_shell.session`; the re-export only
+  keeps existing `from interactive_shell.runtime import ReplSession` callers
+  working.
 - Do not re-add `_xxx` underscore aliases or wrapper functions for
   compatibility. Tests and callers should import canonical names from their
   owning submodule.

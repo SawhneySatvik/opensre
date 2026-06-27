@@ -20,20 +20,7 @@ from interactive_shell.harness.orchestration.action_prompt import (
 from interactive_shell.harness.orchestration.command_dispatch import (
     deterministic_command_text,
 )
-from interactive_shell.harness.orchestration.feature_flags import (
-    investigation_loop_enabled,
-)
-from interactive_shell.harness.orchestration.interaction_models import (
-    ActionKind,
-    default_target_surface,
-)
-from interactive_shell.harness.orchestration.tool_contracts import ToolContext
-from interactive_shell.harness.orchestration.tool_registry import (
-    ACTION_KIND_TO_TOOL,
-    REGISTRY,
-)
 from interactive_shell.harness.tests._ci_gates import (
-    skip_investigation_loop_disabled,
     skip_or_fail,
 )
 from interactive_shell.harness.tests._oracle_normalize import cli_command_payload_matches
@@ -45,11 +32,18 @@ from interactive_shell.harness.tests._oracle_runtime import (
     run_oracle_once,
     session_capabilities,
 )
+from interactive_shell.harness.tests._planned_action import default_target_surface
 from interactive_shell.harness.tests.scenario_loader import (
     ScenarioCase,
     iter_scenarios_for_shard,
     load_all_scenarios,
     read_shard_config,
+)
+from interactive_shell.tools.tool_contracts import ToolContext
+from interactive_shell.tools.tool_registry import (
+    ACTION_KIND_TO_TOOL,
+    REGISTRY,
+    ActionKind,
 )
 
 
@@ -79,25 +73,6 @@ _LIVE_PLANNING_MAX_ITERATIONS = 3
 
 def _slash_content(command: str, args: list[str]) -> str:
     return " ".join([command, *args]) if args else command
-
-
-def _expects_investigation(case: ScenarioCase) -> bool:
-    """True when a scenario expects the planner to dispatch a natural-language
-    investigation (``investigation_start``).
-
-    The investigation loop can be disabled in the interactive shell via
-    ``feature_flags.INTERACTIVE_SHELL_INVESTIGATION_ENABLED``. When it is off the
-    planner is not offered ``investigation_start``, so these scenarios no longer
-    apply and are skipped rather than asserted against the old behavior. Sample
-    alerts and synthetic runs are unaffected.
-    """
-    actions = (*case.answer.planned_actions, *case.answer.executed_actions)
-    return any(str(action.get("kind", "")).strip() == "investigation" for action in actions)
-
-
-def _skip_if_investigation_disabled(case: ScenarioCase) -> None:
-    if not investigation_loop_enabled() and _expects_investigation(case):
-        skip_investigation_loop_disabled()
 
 
 def _skip_if_live_integrations_unavailable(case: ScenarioCase) -> None:
@@ -470,7 +445,6 @@ def test_live_action_planning(
     here we only validate the planner's action list, with majority voting when a
     fixture sets ``runs > 1`` (same flake tolerance as the execution oracle).
     """
-    _skip_if_investigation_disabled(live_planning_case)
     runs = max(1, live_planning_case.answer.runs)
     failures: list[str] = []
     passed_count = 0
@@ -507,7 +481,6 @@ def test_live_turn_execution_oracle(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path_factory: pytest.TempPathFactory,
 ) -> None:
-    _skip_if_investigation_disabled(live_oracle_case)
     _skip_if_live_integrations_unavailable(live_oracle_case)
     runs = max(1, live_oracle_case.answer.runs)
     run_results: list[OracleRunResult] = []

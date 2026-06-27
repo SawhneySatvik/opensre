@@ -10,8 +10,9 @@ import pytest
 from rich.console import Console
 
 from interactive_shell.command_registry import dispatch_slash
-from interactive_shell.harness.state.sessions.store import SessionStore
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import JsonlSessionStorage, ReplSession
+
+SessionStore = JsonlSessionStorage()
 
 
 def _capture() -> tuple[Console, io.StringIO]:

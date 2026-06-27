@@ -4,22 +4,18 @@ from __future__ import annotations
 
 import re
 
-import pytest
 from rich.console import Console
 
 from cli.wizard.config import PROVIDER_BY_VALUE
 from interactive_shell.command_registry import SLASH_COMMANDS
-from interactive_shell.harness.orchestration import (
-    feature_flags,
-)
-from interactive_shell.harness.orchestration.tool_contracts import (
+from interactive_shell.session import ReplSession
+from interactive_shell.tools.tool_contracts import (
     ToolContext,
 )
-from interactive_shell.harness.orchestration.tool_registry import (
+from interactive_shell.tools.tool_registry import (
     ACTION_KIND_TO_TOOL,
     REGISTRY,
 )
-from interactive_shell.runtime.core.session import ReplSession
 
 # OpenAI's Chat Completions API rejects any tool name that does not match
 # this pattern with HTTP 400. Every OpenAI-compatible provider (OpenRouter,
@@ -151,40 +147,11 @@ def test_registry_agent_tools_exclude_unavailable_tool() -> None:
     assert "slash_invoke" not in names
 
 
-def test_investigation_hidden_from_planner_when_loop_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """With the natural-language investigation loop disabled (the default), the
-    planner must not be offered ``investigation_start`` -- so diagnostic prompts
-    fall through to the assistant instead of triggering the RCA pipeline."""
-    monkeypatch.setattr(feature_flags, "INTERACTIVE_SHELL_INVESTIGATION_ENABLED", False)
-    names = {spec["name"] for spec in REGISTRY.tool_specs_for_llm(ReplSession())}
-    assert "investigation_start" not in names
-    # Unrelated tools stay offered.
-    assert "alert_sample" in names
-    assert "assistant_handoff" in names
-
-
-def test_investigation_offered_to_planner_when_loop_enabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.setattr(feature_flags, "INTERACTIVE_SHELL_INVESTIGATION_ENABLED", True)
+def test_investigation_offered_to_planner() -> None:
+    """``investigation_start`` is always offered to the planner so diagnostic
+    prompts can trigger the RCA pipeline from the REPL."""
     names = {spec["name"] for spec in REGISTRY.tool_specs_for_llm(ReplSession())}
     assert "investigation_start" in names
-
-
-def test_investigation_dispatch_not_gated_by_planner_selectability(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Hiding the tool from the planner must NOT block direct/programmatic
-    dispatch: ``is_available`` stays True while ``is_planner_selectable`` is the
-    only thing the disable flag flips."""
-    monkeypatch.setattr(feature_flags, "INTERACTIVE_SHELL_INVESTIGATION_ENABLED", False)
-    entry = REGISTRY.get("investigation_start")
-    assert entry is not None
-    session = ReplSession()
-    assert entry.is_available(session) is True
-    assert entry.is_planner_selectable(session) is False
 
 
 def test_investigation_tool_description_preserves_compound_slash_guidance() -> None:

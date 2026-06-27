@@ -11,8 +11,8 @@ from rich.console import Console
 
 from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.runtime.background.runner import drain_background_notices
-from interactive_shell.runtime.core.session import ReplSession
 from interactive_shell.runtime.core.state import ReplState, SpinnerState
+from interactive_shell.session import ReplSession
 from interactive_shell.ui.alerts import drain_and_render_incoming
 from tools.fleet_monitoring.sampler import start_sampler
 

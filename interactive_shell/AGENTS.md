@@ -20,13 +20,14 @@ should be predictable, interruptible, explainable, and safe by default.
 | `controller.py` | top-level REPL wiring | feature-specific business logic or compatibility-only forwarding |
 | `entrypoint.py` | process/bootstrap boundary for starting the REPL | per-turn dispatch/runtime logic |
 | `command_registry/` | slash-command definitions, argument validation, command dispatch | long-running implementation details better placed in services/runtime modules |
-| `runtime/` | `ReplSession`, background tasks, lifecycle state | UI rendering and prompt text |
+| `session/` | `ReplSession`, runtime context assembly, and session persistence (storage backends + cross-session repo) | UI rendering, prompt text, and runtime task scheduling |
+| `runtime/` | background tasks, lifecycle/`ReplState`, controller/entrypoint support modules (lazily re-exports the `session/` surface for back-compat) | UI rendering, prompt text, and session persistence |
 | `orchestration/` | action planning, execution policy, action executor, deterministic command detection, and interaction models | raw UI formatting |
 | `shell/` | shell command parsing, allow/deny policy, subprocess execution | slash-command execution |
 | `chat/` | assistant/help/follow-up answer surfaces and shared LLM prompt rules | direct mutation of runtime state outside the action executor |
 | `references/` | CLI/docs/source/AGENTS reference loading and caching | generated model prose |
 | `config/` | interactive-shell config loading and tool catalog metadata | global app config unrelated to the REPL |
-| `harness/state/` | conversation context helpers and shared state persistence | prompt rendering |
+| `harness/state/` | conversation context helpers and shared harness state (history, data store) | prompt rendering and session persistence (now owned by `session/`) |
 | `ui/` | Rich/prompt-toolkit rendering, theme, menus, streaming output, and domain views such as `incoming_alerts.py` (receiver/queue/listener lifecycle lives in `core.domain.alerts.inbox`) | business logic or network calls |
 
 When a change crosses these boundaries, prefer extracting a small helper in the
@@ -80,18 +81,23 @@ owning area rather than adding more logic to the caller.
   trigger confirmations or side effects.
 - Send command execution through the central dispatch and execution-policy
   helpers. Do not bypass `execution_policy.py` for new commands.
-- **Default-allow execution policy (current behavior):** the REPL is
-  default-allow. `execution_policy.py` resolves every action to `allow` with **no
-  confirmation prompt** — all slash/`opensre` commands (any tier, including
-  `ELEVATED`), investigations, synthetic tests, code-agent launches, LLM runtime
-  switches, and inferred shell commands (including `!` passthrough and mutating
-  commands such as `rm`/`mv`/`docker`) run immediately, in any context (TTY or
-  not, trust mode or not). The only hard `deny` floor that remains is
-  `restricted` shell commands (`sudo`, `systemctl`, `kill`, `dd`, …) and shell
-  input that cannot be safely parsed (operators `| && ; > <`, command
-  substitution). Keep assigning accurate `ExecutionTier` values anyway: the tier
-  still feeds analytics, help text, and any future opt-in stricter policy, and
-  `trust_mode` plus the `ask` confirmation UX are retained for that purpose.
+- **Alpha allow-all execution policy (current behavior):** the REPL runs with
+  **no command guardrails**. `execution_policy.py` resolves every action to
+  `allow` with **no confirmation prompt** — all slash/`opensre` commands (any
+  tier, including `ELEVATED`), investigations, synthetic tests, code-agent
+  launches, LLM runtime switches, and **all** shell commands run immediately, in
+  any context (TTY or not, trust mode or not). There is **no shell-command
+  safety policy**: the read-only/mutating/restricted classification and the
+  `deny` floor were removed (`shell_policy.py` deleted; parsing-only helpers live
+  in `orchestration/shell_parsing.py`). Mutating commands (`rm`/`mv`/`docker`),
+  `restricted` commands (`sudo`, `systemctl`, `kill`, `dd`, …), shell operators
+  (`| && ; > <`), and command substitution all run; the `!` prefix is honored
+  but optional. The only shell input still rejected is genuinely empty input (a
+  bare `!` or whitespace). Do **not** re-add a shell allowlist or deny floor
+  while in alpha — see `docs/interactive-shell-action-policy.md`. Keep assigning
+  accurate `ExecutionTier` values anyway: the tier still feeds analytics, help
+  text, and any future opt-in stricter policy, and `trust_mode` plus the `ask`
+  confirmation UX are retained as an unused hook for that purpose.
 - Non-TTY behavior under default-allow: actions no longer fail closed on
   non-interactive stdin (there is nothing to confirm). The fail-closed path only
   applies if a verdict is explicitly `ask`, which the default policy does not
@@ -123,7 +129,7 @@ owning area rather than adding more logic to the caller.
     agent path runs it. New raw-stdin picker/wizard commands the action agent can emit
     must be added to
     `_INTERACTIVE_PICKER_MENUS` / `_INTERACTIVE_PICKER_SUBCOMMANDS` in
-    `orchestration/tools/slash_tool.py`.
+    `interactive_shell/tools/slash_tool.py`.
 
 ## Action Selection And Execution
 

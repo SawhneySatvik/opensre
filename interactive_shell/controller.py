@@ -16,12 +16,7 @@ from rich.markup import escape
 from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.harness.harness import ShellHarness
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
-from interactive_shell.runtime.core.context import (
-    ReplRuntimeContext,
-    create_repl_runtime_context,
-)
 from interactive_shell.runtime.core.prompt_manager import PromptManager
-from interactive_shell.runtime.core.session import ReplSession
 from interactive_shell.runtime.core.state import (
     PROMPT_REFRESH_INTERVAL_S,
     ReplState,
@@ -43,6 +38,11 @@ from interactive_shell.runtime.input.actions import (
 from interactive_shell.runtime.utils.input_policy import (
     turn_needs_exclusive_stdin,
     turn_should_show_spinner,
+)
+from interactive_shell.session import (
+    ReplRuntimeContext,
+    ReplSession,
+    create_repl_runtime_context,
 )
 from interactive_shell.ui import ERROR, WARNING
 from interactive_shell.ui.components.cpr_stdin import drain_stale_cpr_bytes

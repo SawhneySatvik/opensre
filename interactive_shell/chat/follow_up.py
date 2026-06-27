@@ -18,7 +18,7 @@ from interactive_shell.utils.telemetry import LlmRunInfo
 _logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from interactive_shell.runtime.core.session import ReplSession
+    from interactive_shell.session import ReplSession
 
 # Keep at most this many Q&A pairs in follow-up history (matches cli_agent cap).
 _MAX_FOLLOW_UP_TURNS = 12

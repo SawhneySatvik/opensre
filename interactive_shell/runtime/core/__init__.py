@@ -1,21 +1,12 @@
-"""Core runtime engine for the interactive shell."""
+"""Core runtime engine for the interactive shell.
+
+Session state and context now live in ``interactive_shell.session``; this
+package owns the remaining runtime engine concerns (task registry, mutable
+runtime state, prompt manager, token accounting, turn detection).
+"""
 
 from __future__ import annotations
 
-from interactive_shell.runtime.core.context import (
-    ReplRuntimeContext,
-    ReplSessionBootstrapSpec,
-    create_repl_runtime_context,
-    prepare_repl_session,
-)
-from interactive_shell.runtime.core.session import ReplSession
 from interactive_shell.runtime.core.tasks import TaskRegistry
 
-__all__ = [
-    "ReplRuntimeContext",
-    "ReplSession",
-    "ReplSessionBootstrapSpec",
-    "TaskRegistry",
-    "create_repl_runtime_context",
-    "prepare_repl_session",
-]
+__all__ = ["TaskRegistry"]

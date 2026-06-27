@@ -1,29 +1,27 @@
 """Central execution policy (allow / ask / deny) for interactive REPL actions.
 
-Default-allow policy
---------------------
-This REPL is **default-allow**: actions run without a confirmation prompt. Every
-policy decision below resolves to ``allow`` except for a small hard ``deny``
-floor. There is intentionally no friction for normal use — slash/``opensre``
-commands, investigations, synthetic tests, code-agent launches, LLM runtime
-switches, and inferred shell commands (including ``!`` passthrough and mutating
-commands like ``rm``/``mv``) all run immediately, in any context (TTY or not,
-trust mode or not).
+Alpha mode: allow everything
+----------------------------
+OpenSRE is in **alpha**, and the interactive REPL runs with **no command
+guardrails** so developer velocity stays high. Every policy decision below
+resolves to ``allow`` and nothing prompts for confirmation: slash/``opensre``
+commands (any tier), investigations, synthetic tests, code-agent launches, LLM
+runtime switches, and shell commands of every kind — read-only, mutating,
+``restricted`` (``sudo``, ``systemctl``, ``kill``, ``dd`` …), shell operators
+(``| && ; > <``), and command substitution (`` ` ``/``$(...)``) — all run
+immediately, in any context (TTY or not, trust mode or not).
 
-Remaining hard ``deny`` floor (the only things the policy still blocks):
-
-* ``restricted`` shell commands (``sudo``, ``su``, ``systemctl``, ``kill``,
-  ``dd``, ``mkfs``, ``mount`` …) — see ``shell_policy.py``.
-* Shell input that cannot be safely parsed (shell operators ``| && ; > <``,
-  command substitution `` ` ``/``$(...)``, quoting errors). These are denied
-  because the policy cannot reason about what they would run, not because the
-  action is gated. Use ``!<command>`` for explicit passthrough.
+There is intentionally **no shell-command safety policy**: the former
+read-only / mutating / restricted classification and its deny floor were removed
+(see ``docs/interactive-shell-action-policy.md``). The only thing shell
+evaluation still rejects is genuinely empty input (a bare ``!`` or whitespace),
+which is input validation rather than a guardrail.
 
 The ``ask`` verdict and its confirmation UX (``execution_allowed``) are retained
-so that ``trust_mode`` and any future opt-in stricter policy still work, but the
-default policy functions here no longer emit ``ask``. To make the REPL fully
-unrestricted (no ``deny`` floor at all), change ``evaluate_shell_from_parsed``
-to allow ``restricted``/unparseable input as well.
+so that ``trust_mode`` and any future opt-in stricter policy still have a hook,
+but the policy functions here never emit ``ask``. If guardrails are
+reintroduced after alpha, gate them here at the execution stage (not the
+planner).
 """
 
 from __future__ import annotations
@@ -37,13 +35,12 @@ from typing import Literal
 from rich.console import Console
 from rich.markup import escape
 
-import interactive_shell.harness.orchestration.intent_parser as _intent_parser
+import config.constants.platform as _platform
 from interactive_shell.harness.orchestration.execution_tier import (
     ExecutionTier,
 )
-from interactive_shell.harness.orchestration.shell_policy import (
+from interactive_shell.harness.orchestration.shell_parsing import (
     ParsedShellCommand,
-    evaluate_policy,
     parse_shell_command,
 )
 from interactive_shell.runtime import ReplSession
@@ -239,66 +236,33 @@ def execution_allowed(
 
 
 def evaluate_shell_from_parsed(parsed: ParsedShellCommand) -> ExecutionPolicyResult:
-    """Like :func:`evaluate_shell_command` but reuses an existing parse result."""
-    d = evaluate_policy(parsed=parsed)
+    """Alpha mode: allow every shell command; only reject empty input.
 
+    There is no command classification or deny floor — any command (mutating,
+    ``restricted``, operators, substitution, passthrough) is allowed. A
+    ``parse_error`` only occurs for empty input (e.g. a bare ``!``), which is
+    rejected because there is nothing to run.
+    """
     if parsed.parse_error is not None:
         return ExecutionPolicyResult(
             verdict="deny",
             action_type="shell",
-            reason=d.reason,
-            hint=d.hint,
-            shell_classification=d.classification,
+            reason=parsed.parse_error,
+            hint="Enter a command to run.",
+            shell_classification="unrestricted",
         )
 
-    if parsed.passthrough:
-        return ExecutionPolicyResult(
-            verdict="allow",
-            action_type="shell",
-            reason=None,
-            hint=d.hint,
-            shell_classification=d.classification,
-        )
-
-    if d.allow:
-        return ExecutionPolicyResult(
-            verdict="allow",
-            action_type="shell",
-            reason=None,
-            shell_classification=d.classification,
-        )
-
-    if d.classification == "restricted":
-        return ExecutionPolicyResult(
-            verdict="deny",
-            action_type="shell",
-            reason=d.reason,
-            hint=d.hint,
-            shell_classification=d.classification,
-        )
-
-    if parsed.argv is None:
-        return ExecutionPolicyResult(
-            verdict="deny",
-            action_type="shell",
-            reason=d.reason or "failed to parse command.",
-            hint=d.hint,
-            shell_classification=d.classification,
-        )
-
-    # Default-allow: mutating / unknown inferred commands run without confirmation.
     return ExecutionPolicyResult(
         verdict="allow",
         action_type="shell",
         reason=None,
-        hint=d.hint,
-        shell_classification=d.classification,
+        shell_classification="unrestricted",
     )
 
 
 def plan_shell_execution(parsed: ParsedShellCommand) -> ActionExecutionPlan:
     policy = evaluate_shell_from_parsed(parsed)
-    classification = policy.shell_classification or "unknown"
+    classification = policy.shell_classification or "unrestricted"
     return ActionExecutionPlan(
         action_type="shell",
         classification=classification,
@@ -309,7 +273,7 @@ def plan_shell_execution(parsed: ParsedShellCommand) -> ActionExecutionPlan:
 
 def evaluate_shell_command(command: str) -> ExecutionPolicyResult:
     """Map shell policy + passthrough rules into allow/ask/deny."""
-    parsed = parse_shell_command(command, is_windows=_intent_parser.IS_WINDOWS)
+    parsed = parse_shell_command(command, is_windows=_platform.IS_WINDOWS)
     return evaluate_shell_from_parsed(parsed)
 
 

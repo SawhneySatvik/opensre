@@ -20,7 +20,7 @@ recurring source of precedence drift.
    selected entirely by the shell action agent via native tool-calling.
 2. Tool selection is driven by the action-agent system prompt
    (`.../orchestration/action_system_prompt.py`) and the per-tool descriptions
-   in the tool catalog (`.../orchestration/tools/*`). Keep both precise — they
+   in the tool catalog (`interactive_shell/tools/*`). Keep both precise — they
    are the only selection signal.
 3. The action path does not post-hoc rewrite the model's tool calls. Tool calls
    execute as first-class `AgentTool`s through the shared `core.runtime`
@@ -166,3 +166,35 @@ them; the fixture `policy` block now carries a single `executes_terminal_action`
 If write/mutating actions are introduced later, gate them with the
 execution-stage confirmation policy (`orchestration/execution_policy.py`), **not**
 an action-selection denial.
+
+### Removal of the shell-command safety policy (alpha)
+
+Addendum — Jun 27, 2026.
+
+**Decision:** while OpenSRE is in **alpha**, the interactive REPL runs **every**
+shell command with **no guardrails**. The shell-command safety policy — the
+read-only / mutating / restricted classification, the command allowlist, and the
+hard `deny` floor — has been removed. This is a deliberate trade-off: alpha
+prioritizes developer velocity over command sandboxing, and the REPL already
+runs on the developer's own machine with their own privileges.
+
+What changed:
+
+- `shell_policy.py` (classification, allowlists, `classify_command`,
+  `evaluate_policy`, `PolicyDecision`) was deleted. The pure parsing helpers it
+  also contained moved to `orchestration/shell_parsing.py`
+  (`parse_shell_command`, `argv_for_repl_builtin_detection`,
+  `ParsedShellCommand`).
+- `execution_policy.evaluate_shell_from_parsed` now returns `allow` for every
+  command — read-only, mutating, `restricted` (`sudo`, `systemctl`, `kill`,
+  `dd`, …), shell operators (`| && ; > <`), and command substitution
+  (`` ` ``/`$(...)`). Commands that need a shell run through one automatically;
+  the `!` prefix is still honored but no longer required to escape the old
+  operator block.
+- The **only** remaining non-execution outcome is genuinely empty input (a bare
+  `!` or whitespace), which is rejected as input validation, not as a guardrail.
+
+The `ask`/confirmation machinery (`execution_allowed`, `trust_mode`) is retained
+as an unused hook. If command guardrails are reintroduced after alpha, gate them
+here at the execution stage (`orchestration/execution_policy.py`) — never with an
+action-selection denial in the planner.

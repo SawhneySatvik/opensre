@@ -12,17 +12,17 @@ from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.orchestration.agent_actions import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.harness.orchestration.tools import (
-    investigation_tool as _investigation_tool,
-)
-from interactive_shell.harness.orchestration.tools import (
-    slash_tool as _slash_tool,
-)
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.runtime.core.session import ReplSession
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
+from interactive_shell.session import ReplSession
+from interactive_shell.tools import (
+    investigation_tool as _investigation_tool,
+)
+from interactive_shell.tools import (
+    slash_tool as _slash_tool,
+)
 
 
 def test_turn_needs_exclusive_stdin_for_bare_integration_menu(
@@ -282,9 +282,6 @@ class TestDispatchSpinnerBehavior:
             "/model show",
             "tests",
             "help",
-            # UI policy typo-corrects single-edit bare aliases before spinner gating.
-            "testts",
-            "hlep",
             "opensre investigate -i alert.json",
         ],
     )

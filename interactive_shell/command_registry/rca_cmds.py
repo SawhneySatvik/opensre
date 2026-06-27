@@ -13,8 +13,8 @@ from interactive_shell.command_registry.investigation import (
     write_investigation_export,
 )
 from interactive_shell.command_registry.types import ExecutionTier, SlashCommand
-from interactive_shell.harness.state.sessions.store import SessionStore
 from interactive_shell.runtime import ReplSession
+from interactive_shell.session import default_session_repo
 from interactive_shell.ui import (
     BOLD_BRAND,
     DIM,
@@ -74,7 +74,7 @@ def _print_rca_empty(console: Console) -> None:
 
 
 def _require_rca_records(console: Console) -> list[dict[str, object]] | None:
-    records = SessionStore.load_investigation_history()
+    records = default_session_repo().load_investigation_history()
     if not records:
         _print_rca_empty(console)
         return None
@@ -117,8 +117,9 @@ def _resolve_rca_record(
     *,
     records: list[dict[str, object]] | None = None,
 ) -> dict[str, object] | None:
+    repo = default_session_repo()
     if investigation_id:
-        loaded = SessionStore.load_investigation(investigation_id)
+        loaded = repo.load_investigation(investigation_id)
         if loaded is not None:
             return loaded
         if records:
@@ -128,14 +129,14 @@ def _resolve_rca_record(
                     return record
         return None
 
-    history = records or SessionStore.load_investigation_history()
+    history = records or repo.load_investigation_history()
     if not history:
         return None
     latest = history[0]
     inv_id = _investigation_id(latest)
     if not inv_id:
         return latest
-    return SessionStore.load_investigation(inv_id) or latest
+    return repo.load_investigation(inv_id) or latest
 
 
 def _strip_outer_quotes(value: str) -> str:
@@ -381,7 +382,7 @@ def _cmd_rca_show(
     if record is not None:
         resolved = record
     else:
-        loaded, match_count = SessionStore.lookup_investigation(investigation_id)
+        loaded, match_count = default_session_repo().lookup_investigation(investigation_id)
         if match_count != 1:
             _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
             return True
@@ -407,7 +408,7 @@ def _cmd_rca_save(
     dest_path: str,
 ) -> bool:
     if investigation_id:
-        record, match_count = SessionStore.lookup_investigation(investigation_id)
+        record, match_count = default_session_repo().lookup_investigation(investigation_id)
         if match_count != 1:
             _print_rca_lookup_failure(console, investigation_id, match_count=match_count)
             return True

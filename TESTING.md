@@ -65,7 +65,7 @@ def test_resume_restores_context():
 ## When NOT to use
 
 ❌ Logic testable with a mocked `Console` — keep those in `tests/cli/`  
-❌ Storage / state correctness — use `tmp_path` + `SessionStore` directly  
+❌ Storage / state correctness — use `tmp_path` + a session storage/repo backend directly  
 ❌ Tests that need a real LLM response — latency makes pty timing unreliable; use `make test-rca` instead  
 
 ## Two-phase pattern
@@ -74,11 +74,18 @@ For features that touch both storage and display, test each layer separately:
 
 ```python
 # Phase 1 — storage correctness (fast, no REPL)
-session = ReplSession()
-SessionStore.open_session(session)
+from interactive_shell.session import (
+    JsonlSessionStorage,
+    ReplSession,
+    default_session_repo,
+)
+
+storage = JsonlSessionStorage()
+session = ReplSession(storage=storage)
+storage.open_session(session)
 session.record("chat", "why is redis slow?")
-SessionStore.flush(session)
-data = SessionStore.load_session(session.session_id[:8])
+storage.flush(session)
+data = default_session_repo().load_session(session.session_id[:8])
 assert data["has_snapshot"] is True
 
 # Phase 2 — display correctness (ReplDriver)

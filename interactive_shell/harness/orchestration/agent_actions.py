@@ -17,11 +17,11 @@ from interactive_shell.harness.orchestration.action_prompt import (
     build_action_system_prompt,
     build_action_user_message,
 )
-from interactive_shell.harness.orchestration.tool_contracts import ToolContext
-from interactive_shell.harness.orchestration.tool_registry import REGISTRY
 from interactive_shell.harness.shell_harness import create_shell_action_harness
 from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
 from interactive_shell.runtime import ReplSession
+from interactive_shell.tools.tool_contracts import ToolContext
+from interactive_shell.tools.tool_registry import REGISTRY
 from interactive_shell.ui import BOLD_BRAND, DIM
 from interactive_shell.ui.streaming import render_response_header
 from interactive_shell.utils.error_handling.exception_reporting import report_exception

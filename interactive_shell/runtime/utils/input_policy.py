@@ -5,7 +5,7 @@ from __future__ import annotations
 from interactive_shell.harness.orchestration.command_dispatch import (
     deterministic_command_text,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from interactive_shell.ui.components.choice_menu import repl_tty_interactive
 
 _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(

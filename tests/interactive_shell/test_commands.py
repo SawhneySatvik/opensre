@@ -20,7 +20,7 @@ from interactive_shell.command_registry.investigation import (
 )
 from interactive_shell.command_registry.tasks_cmds import _validate_cancel_args
 from interactive_shell.runtime.background.models import BackgroundInvestigationRecord
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from interactive_shell.ui.tables.tool_catalog import ToolCatalogEntry
 from platform.common.task_types import TaskKind, TaskStatus
 
@@ -1577,14 +1577,15 @@ class TestResumeCommand:
         from unittest.mock import patch
 
         from interactive_shell.command_registry.session_cmds import _apply_resume_data
-        from interactive_shell.harness.state.sessions.store import SessionStore
+        from interactive_shell.session import JsonlSessionStorage, default_session_repo
 
+        SessionStore = JsonlSessionStorage()
         session = ReplSession()
         old_id = session.session_id
         target_id = "old-abc-1234567890"
 
         with patch(
-            "interactive_shell.harness.state.sessions.store._sessions_dir",
+            "interactive_shell.session.paths.sessions_dir",
             return_value=tmp_path,
         ):
             SessionStore.open_session(session)
@@ -1617,7 +1618,7 @@ class TestResumeCommand:
                 encoding="utf-8",
             )
 
-            data = SessionStore.load_session(target_id[:8])
+            data = default_session_repo().load_session(target_id[:8])
             assert data is not None
 
             console, buf = _capture()
@@ -1681,8 +1682,9 @@ class TestResumeCommand:
         from unittest.mock import patch
 
         from interactive_shell.command_registry.session_cmds import _apply_resume_data
-        from interactive_shell.harness.state.sessions.store import SessionStore
+        from interactive_shell.session import JsonlSessionStorage
 
+        SessionStore = JsonlSessionStorage()
         data = {
             "session_id": "display-test-abc123456789",
             "name": "My Session",
@@ -1702,7 +1704,7 @@ class TestResumeCommand:
         console, buf = _capture()
 
         with patch(
-            "interactive_shell.harness.state.sessions.store._sessions_dir",
+            "interactive_shell.session.paths.sessions_dir",
             return_value=tmp_path,
         ):
             SessionStore.open_session(session)

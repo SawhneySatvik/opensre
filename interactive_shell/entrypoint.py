@@ -13,10 +13,9 @@ from rich.console import Console
 from config.repl_config import ReplConfig
 from core.domain.alerts import inbox as _alert_inbox
 from interactive_shell.controller import InteractiveShellController
-from interactive_shell.harness.state.sessions.store import SessionStore
-from interactive_shell.runtime.core.context import create_repl_runtime_context
 from interactive_shell.runtime.startup.first_launch_github import require_startup_github_login
 from interactive_shell.runtime.startup.initial_input import run_initial_input
+from interactive_shell.session import create_repl_runtime_context
 from interactive_shell.ui import DIM, render_banner
 from interactive_shell.ui import input_prompt as _input_prompt
 from tools.fleet_monitoring.sweep import run_startup_sweep
@@ -70,7 +69,7 @@ async def repl_main(initial_input: str | None = None, _config: ReplConfig | None
         return run_initial_input(initial_input, session)
 
     # Open the session file now that we know this is an interactive REPL run.
-    SessionStore.open_session(session)
+    session.storage.open_session(session)
 
     try:
         with _alert_listener(cfg) as inbox:
@@ -78,7 +77,7 @@ async def repl_main(initial_input: str | None = None, _config: ReplConfig | None
             await InteractiveShellController(runtime_context).start_interactive_shell()
         return 0
     finally:
-        SessionStore.flush(session)
+        session.storage.flush(session)
 
 
 def run_repl(initial_input: str | None = None, config: ReplConfig | None = None) -> int:

@@ -11,12 +11,12 @@ from rich.console import Console
 from rich.markup import escape
 from rich.text import Text
 
-import interactive_shell.harness.orchestration.intent_parser as _intent_parser
+import config.constants.platform as _platform
 from interactive_shell.harness.orchestration.execution_policy import (
     execution_allowed,
     plan_shell_execution,
 )
-from interactive_shell.harness.orchestration.shell_policy import (
+from interactive_shell.harness.orchestration.shell_parsing import (
     argv_for_repl_builtin_detection,
     parse_shell_command,
 )
@@ -42,7 +42,7 @@ def run_shell_command(
     is_tty: bool | None = None,
     action_already_listed: bool = False,
 ) -> None:
-    parsed = parse_shell_command(command, is_windows=_intent_parser.IS_WINDOWS)
+    parsed = parse_shell_command(command, is_windows=_platform.IS_WINDOWS)
     plan = plan_shell_execution(parsed)
     if not execution_allowed(
         plan.policy,
@@ -59,7 +59,7 @@ def run_shell_command(
     console.print(f"[bold]$ {escape(command)}[/bold]")
 
     argv_builtin = argv_for_repl_builtin_detection(
-        parsed=parsed, is_windows=_intent_parser.IS_WINDOWS
+        parsed=parsed, is_windows=_platform.IS_WINDOWS
     )
 
     if argv_builtin is not None and argv_builtin[0].lower() == "cd":
@@ -69,8 +69,8 @@ def run_shell_command(
         run_pwd_command(parsed.command, session, console)
         return
 
-    use_shell = parsed.passthrough
-    if use_shell:
+    use_shell = parsed.use_shell
+    if parsed.passthrough:
         from interactive_shell.ui import DIM
 
         console.print(f"[{DIM}]explicit shell passthrough enabled[/]")
@@ -135,8 +135,8 @@ def run_cd_command(command: str, session: ReplSession, console: Console) -> None
         return value
 
     try:
-        tokens = shlex.split(command, posix=not _intent_parser.IS_WINDOWS)
-        if _intent_parser.IS_WINDOWS and len(tokens) > 1:
+        tokens = shlex.split(command, posix=not _platform.IS_WINDOWS)
+        if _platform.IS_WINDOWS and len(tokens) > 1:
             tokens = [tokens[0], *(_strip_outer_quotes(token) for token in tokens[1:])]
     except ValueError as exc:
         response_text = f"cd failed: {str(exc)}"
@@ -170,7 +170,7 @@ def run_cd_command(command: str, session: ReplSession, console: Console) -> None
 
 def run_pwd_command(command: str, session: ReplSession, console: Console) -> None:
     try:
-        tokens = shlex.split(command, posix=not _intent_parser.IS_WINDOWS)
+        tokens = shlex.split(command, posix=not _platform.IS_WINDOWS)
     except ValueError as exc:
         response_text = f"pwd failed: {str(exc)}"
 

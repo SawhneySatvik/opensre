@@ -163,10 +163,10 @@ class PromptRecorder:
 
         # Also write enriched turn to the session file so /resume can restore context.
         with contextlib.suppress(Exception):
-            from interactive_shell.harness.state.sessions.store import SessionStore
+            from interactive_shell.session import default_session_storage
 
             session_kind = _TURN_TO_SESSION_KIND.get(self._turn_kind, self._turn_kind)
-            SessionStore.append_turn_detail(
+            default_session_storage().append_turn_detail(
                 self._session_id,
                 session_kind,
                 self._prompt,

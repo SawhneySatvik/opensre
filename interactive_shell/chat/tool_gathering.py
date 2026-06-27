@@ -33,7 +33,7 @@ from interactive_shell.harness.state.conversation_history import (
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from interactive_shell.ui import DIM
 from interactive_shell.ui.output.tool_details import tool_short_label, tool_source_label
 from interactive_shell.utils.error_handling.exception_reporting import report_exception
@@ -161,9 +161,10 @@ def _persist_tool_calls(session: ReplSession, executed: list[tuple[Any, Any]]) -
     are redacted and bounded before writing; failures are swallowed so logging
     never breaks the turn.
     """
-    from interactive_shell.harness.state.sessions.store import SessionStore
+    from interactive_shell.session import default_session_storage
     from platform.observability.tool_trace import redact_sensitive
 
+    storage = default_session_storage()
     for tc, output in executed:
         with contextlib.suppress(Exception):
             body = (
@@ -174,7 +175,7 @@ def _persist_tool_calls(session: ReplSession, executed: list[tuple[Any, Any]]) -
             arguments = (
                 redact_sensitive(tc.input) if isinstance(tc.input, dict) else {"value": tc.input}
             )
-            SessionStore.append_tool_call(
+            storage.append_tool_call(
                 session.session_id,
                 tool=str(tc.name),
                 arguments=arguments,

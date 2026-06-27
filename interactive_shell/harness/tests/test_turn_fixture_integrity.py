@@ -8,18 +8,16 @@ from typing import cast
 
 import yaml
 
-from interactive_shell.harness.orchestration.interaction_models import (
-    ActionKind,
-)
-from interactive_shell.harness.orchestration.tool_registry import (
-    ACTION_KIND_TO_TOOL,
-    REGISTRY,
-)
 from interactive_shell.harness.tests.scenario_loader import (
     INTENT_TO_BEHAVIOR_CLASS,
     SCENARIOS_DIR,
     load_all_scenarios,
     validate_action_shape,
+)
+from interactive_shell.tools.tool_registry import (
+    ACTION_KIND_TO_TOOL,
+    REGISTRY,
+    ActionKind,
 )
 
 TESTS_DIR = Path(__file__).resolve().parent

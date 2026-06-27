@@ -11,14 +11,14 @@ from prompt_toolkit.output import DummyOutput
 from pydantic import ValidationError
 
 from interactive_shell.controller import InteractiveShellController
-from interactive_shell.runtime.core.context import (
+from interactive_shell.runtime.core.state import ReplState, SpinnerState, create_repl_mutable_state
+from interactive_shell.runtime.core.tasks import TaskRegistry
+from interactive_shell.session import (
     ReplRuntimeContext,
+    ReplSession,
     ReplSessionBootstrapSpec,
     create_repl_runtime_context,
 )
-from interactive_shell.runtime.core.session import ReplSession
-from interactive_shell.runtime.core.state import ReplState, SpinnerState, create_repl_mutable_state
-from interactive_shell.runtime.core.tasks import TaskRegistry
 
 
 def _prompt_session() -> PromptSession[str]:

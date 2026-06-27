@@ -34,7 +34,7 @@ from interactive_shell.harness.orchestration.action_executor import (
 from interactive_shell.harness.orchestration.action_executor.shell_execution import (
     ShellExecutionResult,
 )
-from interactive_shell.runtime.core.session import ReplSession
+from interactive_shell.session import ReplSession
 from platform.common.task_types import TaskKind, TaskStatus
 
 
@@ -172,18 +172,19 @@ def test_run_cd_command_reports_chdir_failure(monkeypatch: pytest.MonkeyPatch) -
     }
 
 
-def test_run_shell_command_records_when_policy_denies() -> None:
-    """Default-allow still blocks the restricted ``deny`` floor (e.g. ``sudo``).
+def test_run_shell_command_records_when_input_is_empty() -> None:
+    """Alpha mode allows every command; only empty input is rejected.
 
-    The command must not run, the REPL prints a ``blocked`` notice, and the
-    attempt is recorded as ``ok=False``.
+    A bare ``!`` has nothing to run, so the REPL prints a ``blocked`` notice,
+    never echoes a command, and records the attempt as ``ok=False``. (Restricted
+    commands like ``sudo`` are no longer blocked — there is no deny floor.)
     """
     session = ReplSession()
     buf = io.StringIO()
     console = Console(file=buf, force_terminal=False)
 
     run_shell_command(
-        "sudo rm -rf /nope",
+        "!",
         session,
         console,
         confirm_fn=lambda _p: "n",
@@ -192,9 +193,9 @@ def test_run_shell_command_records_when_policy_denies() -> None:
 
     out = buf.getvalue()
     assert "blocked" in out.lower()
-    # The denied command must never be echoed/executed.
-    assert "$ sudo" not in out
-    assert session.history[-1] == {"type": "shell", "text": "sudo rm -rf /nope", "ok": False}
+    # Nothing should be echoed/executed for empty input.
+    assert "$ " not in out
+    assert session.history[-1] == {"type": "shell", "text": "!", "ok": False}
 
 
 def test_run_claude_code_implementation_starts_tracked_task(
@@ -1049,40 +1050,6 @@ def test_run_synthetic_test_unknown_suite_records_failure() -> None:
 
     run_synthetic_test("nonexistent_suite", session, console)
     assert "unknown synthetic" in buf.getvalue().lower()
-    entry = session.history[-1]
-    assert entry["type"] == "synthetic_test"
-    assert entry["ok"] is False
-
-
-def test_run_synthetic_test_unknown_scenario_sentinel_does_not_launch(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``SYNTHETIC_UNKNOWN_PREFIX`` content reports the bad ID and skips Popen.
-
-    Regression: previously the planner silently substituted ``DEFAULT_SYNTHETIC_SCENARIO``
-    when the user asked for a non-existent numeric ID (e.g. "test 016"), so the
-    wrong scenario got launched. The executor must now refuse to launch and
-    report which scenarios are actually available.
-    """
-
-    def _popen_must_not_be_called(*_args: object, **_kwargs: object) -> object:
-        raise AssertionError("Popen should not be invoked for the unknown-scenario sentinel")
-
-    monkeypatch.setattr(
-        "interactive_shell.harness.orchestration.action_executor.subprocess.Popen",
-        _popen_must_not_be_called,
-    )
-
-    session = ReplSession()
-    buf = io.StringIO()
-    console = Console(file=buf, force_terminal=False)
-
-    run_synthetic_test("rds_postgres:unknown:016", session, console)
-
-    out = buf.getvalue()
-    assert "no synthetic scenario matches" in out.lower()
-    assert "016" in out
-    assert "001-replication-lag" in out, "available scenarios should be listed"
     entry = session.history[-1]
     assert entry["type"] == "synthetic_test"
     assert entry["ok"] is False

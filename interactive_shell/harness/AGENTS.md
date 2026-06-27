@@ -124,7 +124,7 @@ parses only fields the runner asserts on. Do **not** re-add decorative metadata.
   patterns/extractors, and the regex planner postprocessing overrides were
   removed. Do **not** reintroduce them: change tool selection by editing the
   action-agent system prompt (`orchestration/action_system_prompt.py`) and the per-tool
-  descriptions in `orchestration/tools/*`, never by adding pattern matching.
+  descriptions in `interactive_shell/tools/*`, never by adding pattern matching.
   Tool-call argument *validation* belongs to the first-class AgentTool runtime
   contract and tool availability gates; intent *classification* by regex is not.
 - When the action-agent prompt overflows, hand off to the conversational
