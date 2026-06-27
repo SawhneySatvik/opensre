@@ -11,13 +11,13 @@ from typing import Any
 from rich.console import Console
 from rich.markup import escape
 
+from core.runtime.agent import Agent
 from core.runtime.llm.agent_llm_client import AgentLLMResponse, ToolCall
 from integrations.llm_cli.failure_explain import is_context_length_overflow
 from interactive_shell.harness.orchestration.action_prompt import (
     build_action_system_prompt,
     build_action_user_message,
 )
-from interactive_shell.harness.shell_harness import create_shell_action_harness
 from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
 from interactive_shell.runtime import ReplSession
 from interactive_shell.tools.tool_contracts import ToolContext
@@ -258,14 +258,14 @@ def execute_cli_actions(
         system_prompt = build_action_system_prompt(session)
 
     try:
-        harness = create_shell_action_harness(
-            llm_factory=llm_factory,
-            system_prompt=system_prompt,
+        result = Agent(
+            llm=llm_factory(),
+            system=system_prompt,
             tools=tools,
+            resolved_integrations={},
             max_iterations=_MAX_ACTION_ITERATIONS,
             on_event=observer,
-        )
-        result = harness.prompt(user_message)
+        ).run([{"role": "user", "content": user_message}])
     except Exception as exc:
         if is_context_length_overflow(str(exc)):
             logger.debug(
