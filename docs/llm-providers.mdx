@@ -22,6 +22,7 @@ OpenSRE is provider-agnostic: bring your own model. Selection is controlled by t
 | Claude Code CLI| `claude-code`| `claude login` (CLI)            | Claude Code CLI default                       | Claude Code CLI default                         |
 | GitHub Copilot CLI| `copilot`| `copilot login` or `gh auth login` (CLI) | Copilot CLI default                           | Copilot CLI default                             |
 | Google Antigravity CLI| `antigravity-cli`| `agy` (browser OAuth, OS keyring) | Whatever the local `agy` config is set to (switch via `/models` inside agy) | same as reasoning model |
+| Pi CLI (BYOK)| `pi`          | provider API key env or `pi` → `/login` | Pi configured model (`PI_MODEL` to override) | same as reasoning model |
 
 OpenSRE distinguishes two model slots per provider:
 
@@ -302,6 +303,37 @@ CLI adapters.
 
 > **Not to be confused with `groq`.** The `grok-cli` provider is xAI's Grok Build CLI. The
 > separate `groq` provider is the Groq HTTP API (a different company); the two are unrelated.
+
+### Pi CLI
+
+```bash
+export LLM_PROVIDER=pi
+# Authenticate Pi separately. Either path works — the adapter detects both:
+pi                       # then run /login for an OAuth subscription or to store a key
+# …or export a provider API key Pi understands (BYOK), e.g. for Gemini:
+export GEMINI_API_KEY=...
+
+export PI_MODEL=google/gemini-2.5-flash-lite  # provider/model; unset → Pi configured default
+export PI_BIN=                                # explicit path to the `pi` binary (optional)
+```
+
+Requires the [Pi CLI](https://pi.dev) (`npm i -g @earendil-works/pi-coding-agent`). Pi is
+bring-your-own-key across ~30 providers, so `PI_MODEL` uses the `provider/model` form
+(for example `google/gemini-2.5-flash-lite`, `anthropic/claude-haiku-4-5`, `openai/gpt-4o-mini`);
+run `pi --list-models` for the full catalog. If `PI_MODEL` is unset, OpenSRE omits `--model`
+and Pi uses its configured default. If `PI_BIN` is unset, the binary is resolved via `PATH`
+and known install locations.
+
+Invocations run as `pi -p PROMPT` (non-interactive print mode), so each OpenSRE call is a
+single headless turn with no TTY.
+
+**Auth detection:** Pi has no non-interactive auth-status command, so OpenSRE detects auth
+from state: (1) a supported provider API key in the environment (`GEMINI_API_KEY`,
+`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, …) → authenticated; (2) otherwise, credentials stored
+in `~/.pi/agent/auth.json` (written by `pi`'s `/login`, covering OAuth subscriptions and
+stored keys) → authenticated; (3) neither → not authenticated. Provider API keys are forwarded
+**only** to the Pi subprocess, never via the shared CLI env allowlist, so they cannot leak into
+other CLI adapters.
 
 See [`integrations/llm_cli/AGENTS.md`](https://github.com/Tracer-Cloud/opensre/blob/main/integrations/llm_cli/AGENTS.md) for the adapter pattern used to add new CLI providers.
 

@@ -79,6 +79,43 @@ COPILOT_CLI_ENV_KEYS: Final[tuple[str, ...]] = (
     "GITHUB_TOKEN",
 )
 
+# Pi CLI (pi.dev) is bring-your-own-key across ~30 providers; it reads a
+# per-provider API-key env var (see https://pi.dev/docs/latest/providers).
+# These are secrets, so — like the Grok/Copilot tuples above — they are
+# forwarded *exclusively* via the Pi adapter's ``CLIInvocation.env`` and are
+# NOT covered by the ``PI_`` entry in ``_SAFE_SUBPROCESS_ENV_PREFIXES`` (that
+# prefix only carries Pi's own non-secret ``PI_*`` config vars). Keep this list
+# aligned with Pi's provider catalog when it adds providers.
+PI_PROVIDER_ENV_KEYS: Final[tuple[str, ...]] = (
+    "ANTHROPIC_API_KEY",
+    "ANT_LING_API_KEY",
+    "AZURE_OPENAI_API_KEY",
+    "OPENAI_API_KEY",
+    "DEEPSEEK_API_KEY",
+    "NVIDIA_API_KEY",
+    "GEMINI_API_KEY",
+    "MISTRAL_API_KEY",
+    "GROQ_API_KEY",
+    "CEREBRAS_API_KEY",
+    "CLOUDFLARE_API_KEY",
+    "XAI_API_KEY",
+    "OPENROUTER_API_KEY",
+    "AI_GATEWAY_API_KEY",
+    "ZAI_API_KEY",
+    "ZAI_CODING_CN_API_KEY",
+    "OPENCODE_API_KEY",
+    "HF_TOKEN",
+    "FIREWORKS_API_KEY",
+    "TOGETHER_API_KEY",
+    "KIMI_API_KEY",
+    "MINIMAX_API_KEY",
+    "MINIMAX_CN_API_KEY",
+    "XIAOMI_API_KEY",
+    "XIAOMI_TOKEN_PLAN_CN_API_KEY",
+    "XIAOMI_TOKEN_PLAN_AMS_API_KEY",
+    "XIAOMI_TOKEN_PLAN_SGP_API_KEY",
+)
+
 
 def nonempty_env_values(keys: tuple[str, ...]) -> dict[str, str]:
     """Return ``{name: value}`` for keys with non-empty stripped values in ``os.environ``."""

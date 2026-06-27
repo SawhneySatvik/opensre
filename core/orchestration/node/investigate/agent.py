@@ -303,7 +303,14 @@ class ConnectedInvestigationAgent(Agent[RegisteredTool]):
                 stagnant_iterations = 0
             else:
                 stagnant_iterations += 1
-                messages.append({"role": "user", "content": STAGNATION_NUDGE})
+                if messages and messages[-1].get("role") == "user":
+                    last_content = messages[-1]["content"]
+                    if isinstance(last_content, list):
+                        last_content.append({"type": "text", "text": STAGNATION_NUDGE})
+                    else:
+                        messages[-1]["content"] = f"{last_content}\n\n{STAGNATION_NUDGE}"
+                else:
+                    messages.append({"role": "user", "content": STAGNATION_NUDGE})
                 if stagnant_iterations >= MAX_STAGNANT_ITERATIONS:
                     logger.warning(
                         "[agent] %d consecutive duplicate-only iterations — forcing "

@@ -17,6 +17,10 @@ def _sources() -> list[GroundingSource]:
     return [GroundingSource(name="unit", stats_fn=lambda: CacheStats(name="unit", hits=1))]
 
 
+def _sources() -> list[GroundingSource]:
+    return [GroundingSource(name="unit", stats_fn=lambda: {"hits": 1})]
+
+
 def test_log_skips_when_tracer_verbose_unset(
     monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
 ) -> None:

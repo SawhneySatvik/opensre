@@ -71,6 +71,12 @@ def _grok_cli_factory() -> LLMCLIAdapter:
     return GrokCLIAdapter()
 
 
+def _pi_factory() -> LLMCLIAdapter:
+    from integrations.llm_cli.pi_cli import PiAdapter
+
+    return PiAdapter()
+
+
 CLI_PROVIDER_REGISTRY: dict[str, CLIProviderRegistration] = {
     "codex": CLIProviderRegistration(adapter_factory=_codex_factory, model_env_key="CODEX_MODEL"),
     "cursor": CLIProviderRegistration(
@@ -95,6 +101,7 @@ CLI_PROVIDER_REGISTRY: dict[str, CLIProviderRegistration] = {
     "grok-cli": CLIProviderRegistration(
         adapter_factory=_grok_cli_factory, model_env_key="GROK_CLI_MODEL"
     ),
+    "pi": CLIProviderRegistration(adapter_factory=_pi_factory, model_env_key="PI_MODEL"),
 }
 
 

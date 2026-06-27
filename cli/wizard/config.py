@@ -425,6 +425,24 @@ GROK_CLI_MODELS = (
 )
 
 
+def _pi_adapter_factory() -> LLMCLIAdapter:
+    from integrations.llm_cli.pi_cli import PiAdapter
+
+    return PiAdapter()
+
+
+# Pi is BYOK/multi-provider; models use the ``provider/model`` form. These are a
+# convenience shortlist — ``allow_custom_models=True`` lets users type any model
+# (and PI_MODEL overrides at runtime). Run ``pi --list-models`` for the full set.
+PI_MODELS = (
+    ModelOption(value="", label="CLI default (no --model; use Pi configured model)"),
+    ModelOption(value="google/gemini-2.5-flash-lite", label="google/gemini-2.5-flash-lite"),
+    ModelOption(value="google/gemini-2.5-flash", label="google/gemini-2.5-flash"),
+    ModelOption(value="anthropic/claude-haiku-4-5", label="anthropic/claude-haiku-4-5"),
+    ModelOption(value="openai/gpt-4o-mini", label="openai/gpt-4o-mini"),
+)
+
+
 KIMI_MODELS = (
     ModelOption(
         value="",
@@ -676,6 +694,19 @@ SUPPORTED_PROVIDERS = (
         credential_kind="cli",
         credential_secret=False,
         adapter_factory=_grok_cli_adapter_factory,
+        allow_custom_models=True,
+    ),
+    ProviderOption(
+        value="pi",
+        label="Pi CLI (pi.dev, BYOK multi-provider)",
+        group="Local CLI providers",
+        api_key_env="",
+        model_env="PI_MODEL",
+        default_model="",
+        models=PI_MODELS,
+        credential_kind="cli",
+        credential_secret=False,
+        adapter_factory=_pi_adapter_factory,
         allow_custom_models=True,
     ),
     ProviderOption(

@@ -64,6 +64,13 @@ _SAFE_SUBPROCESS_ENV_PREFIXES = (
     "ANTIGRAVITY_",
     "OPENCODE_",
     "KIMI_",
+    # Pi CLI (pi.dev) non-secret config vars (e.g. ``PI_AGENT_DIR`` /
+    # ``PI_CONFIG_DIR``, ``PI_BIN``, ``PI_MODEL``). Pi's per-provider API keys
+    # are NOT ``PI_``-prefixed (they are ``ANTHROPIC_API_KEY`` etc.) and are
+    # forwarded only via the Pi adapter's ``CLIInvocation.env`` — see
+    # ``PI_PROVIDER_ENV_KEYS`` in ``env_overrides.py`` — so this prefix carries
+    # no secrets.
+    "PI_",
     # NOTE: deliberately NO ``COPILOT_`` entry. ``COPILOT_GITHUB_TOKEN`` is a
     # GitHub PAT; if we forwarded it via this prefix allowlist it would leak
     # into every other CLI subprocess (Codex, Kimi, Claude Code, etc.). All

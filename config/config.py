@@ -171,6 +171,7 @@ LLMProvider = Literal[
     "kimi",
     "copilot",
     "grok-cli",
+    "pi",
 ]
 
 KEYLESS_LLM_PROVIDERS = frozenset(
@@ -186,6 +187,7 @@ KEYLESS_LLM_PROVIDERS = frozenset(
         "kimi",
         "copilot",
         "grok-cli",
+        "pi",
     }
 )
 LLM_PROVIDER_API_KEY_ENVS = {
@@ -452,6 +454,7 @@ class LLMSettings(StrictConfigModel):
             "kimi",
             "copilot",
             "grok-cli",
+            "pi",
         )
         if provider in valid_providers:
             return provider
