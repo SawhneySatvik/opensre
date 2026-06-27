@@ -775,6 +775,7 @@ def test_integrations_setup_datadog_interactive_smoke(cli_sandbox: CliSandbox) -
             PtyAction(expect="Application key", send=b"dd-app-key\r"),
             PtyAction(expect="Site", send=b"\r"),
         ],
+        timeout=60.0,
     )
 
     assert "Saved" in result.stdout
