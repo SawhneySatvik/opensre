@@ -13,3 +13,8 @@ alwaysApply: true
   fixture updates approved as behavior changes.
 - Prefer full live turn commands such as:
   - `uv run python -m pytest interactive_shell/harness/tests/test_turn_scenarios.py`
+- For fast local iteration you MAY narrow the suite with the opt-in `--turn-select`
+  flag / `TURN_SELECT` env var (`complex:N` for the most complex scenarios, `sample:N`
+  for a random sample). This still runs live — it is not a `-k "not live_llm"`-style
+  bypass. The full suite remains the default and the required validation pass; never
+  set the selection in CI, and never use it to skip a scenario that is failing.

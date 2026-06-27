@@ -6,12 +6,17 @@ import ast
 from pathlib import Path
 from typing import cast
 
+import pytest
 import yaml
 
 from interactive_shell.harness.tests.scenario_loader import (
     INTENT_TO_BEHAVIOR_CLASS,
     SCENARIOS_DIR,
+    SelectionSpec,
     load_all_scenarios,
+    parse_selection_spec,
+    scenario_complexity,
+    select_cases,
     validate_action_shape,
 )
 from interactive_shell.tools.tool_registry import (
@@ -239,6 +244,64 @@ def test_turn_test_modules_do_not_use_mock_patterns() -> None:
         "No-mocks policy violated in turn tests. "
         "Remove mock usage from canonical turn suites.\n" + "\n".join(violations)
     )
+
+
+def test_parse_selection_spec_variants() -> None:
+    assert parse_selection_spec(None) is None
+    assert parse_selection_spec("") is None
+    assert parse_selection_spec("   ") is None
+    assert parse_selection_spec("complex:5") == SelectionSpec(mode="complex", count=5)
+    assert parse_selection_spec("sample:10%") == SelectionSpec(mode="sample", fraction=0.1)
+    assert parse_selection_spec("complex:0.25") == SelectionSpec(mode="complex", fraction=0.25)
+    # A bare mode defaults to the 5% fast slice.
+    assert parse_selection_spec("complex") == SelectionSpec(mode="complex", fraction=0.05)
+
+
+def test_parse_selection_spec_rejects_bad_input() -> None:
+    for bad in ("bogus:5", "complex:0", "sample:-1", "sample:101%", "sample:0%"):
+        with pytest.raises(ValueError):
+            parse_selection_spec(bad)
+
+
+def test_select_cases_none_returns_all() -> None:
+    cases = load_all_scenarios()
+    assert select_cases(cases, spec=None) == cases
+
+
+def test_select_cases_count_preserves_order_and_is_deterministic() -> None:
+    cases = load_all_scenarios()
+    first = select_cases(cases, spec="sample:3", seed=7)
+    second = select_cases(cases, spec="sample:3", seed=7)
+    assert len(first) == 3
+    assert [c.scenario.id for c in first] == [c.scenario.id for c in second]
+    order = {c.scenario.id: i for i, c in enumerate(cases)}
+    selected_positions = [order[c.scenario.id] for c in first]
+    assert selected_positions == sorted(selected_positions)
+
+
+def test_select_cases_complex_picks_the_top_scored() -> None:
+    cases = load_all_scenarios()
+    selected = select_cases(cases, spec="complex:5")
+    assert len(selected) == 5
+    selected_ids = {c.scenario.id for c in selected}
+    selected_scores = [scenario_complexity(c) for c in selected]
+    other_scores = [scenario_complexity(c) for c in cases if c.scenario.id not in selected_ids]
+    assert min(selected_scores) >= max(other_scores)
+
+
+def test_select_cases_percentage_rounds_up() -> None:
+    cases = load_all_scenarios()
+    # 5% of 61 scenarios rounds up to 4.
+    assert len(select_cases(cases, spec="complex:5%")) == 4
+
+
+def test_scenario_complexity_ranks_compound_above_chat_handoff() -> None:
+    cases = {case.scenario.intent_class: case for case in load_all_scenarios()}
+    compound = cases.get("compound")
+    chat = cases.get("chat_handoff")
+    assert compound is not None
+    assert chat is not None
+    assert scenario_complexity(compound) > scenario_complexity(chat)
 
 
 def test_turn_tests_are_fully_colocated() -> None:

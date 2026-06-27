@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 from pathlib import Path
 from typing import Any, NotRequired, TypedDict, cast
 
@@ -35,6 +36,7 @@ from interactive_shell.harness.tests.scenario_loader import (
     iter_scenarios_for_shard,
     load_all_scenarios,
     read_shard_config,
+    select_cases,
 )
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import (
@@ -325,19 +327,30 @@ def test_planning_match_collapses_handoff_only_retries() -> None:
     assert _planning_actions_for_match(actual, handoff_expected) == actual[:1]
 
 
+def _resolve_selected_cases(config: pytest.Config) -> list[ScenarioCase]:
+    """Apply the opt-in ``--turn-select`` / ``TURN_SELECT`` subset to the shard.
+
+    Defaults to the full sharded suite (``_LIVE_CASES``) so CI and unflagged
+    local runs are unchanged; the flag/env only narrows it for fast iteration.
+    """
+    spec = config.getoption("--turn-select", default=None) or os.getenv("TURN_SELECT")
+    seed_raw = config.getoption("--turn-select-seed", default=None) or os.getenv("TURN_SELECT_SEED")
+    seed = int(str(seed_raw)) if seed_raw else 1337
+    spec_text = str(spec) if spec else None
+    return select_cases(_LIVE_CASES, spec=spec_text, seed=seed)
+
+
 def pytest_generate_tests(metafunc: pytest.Metafunc) -> None:
-    if "live_planning_case" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "live_planning_case",
-            _LIVE_CASES,
-            ids=[case.scenario.id for case in _LIVE_CASES],
-        )
-    if "live_oracle_case" in metafunc.fixturenames:
-        metafunc.parametrize(
-            "live_oracle_case",
-            _LIVE_CASES,
-            ids=[case.scenario.id for case in _LIVE_CASES],
-        )
+    wants_planning = "live_planning_case" in metafunc.fixturenames
+    wants_oracle = "live_oracle_case" in metafunc.fixturenames
+    if not (wants_planning or wants_oracle):
+        return
+    selected = _resolve_selected_cases(metafunc.config)
+    ids = [case.scenario.id for case in selected]
+    if wants_planning:
+        metafunc.parametrize("live_planning_case", selected, ids=ids)
+    if wants_oracle:
+        metafunc.parametrize("live_oracle_case", selected, ids=ids)
 
 
 def test_shard_selection_is_non_empty() -> None:

@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import math
 import os
+import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -771,6 +773,134 @@ def iter_scenarios_for_shard(
     return [case for offset, case in enumerate(cases) if offset % shard_total == shard_index]
 
 
+_INTENT_COMPLEXITY_WEIGHT: dict[str, float] = {
+    "compound": 5.0,
+    "complex_shell_prompts": 4.0,
+    "remote": 4.0,
+    "investigation": 3.0,
+    "follow_up": 2.0,
+    "local_execution": 1.5,
+    "chat_handoff": 1.0,
+    "non_actionable": 0.5,
+}
+_LIVE_INTEGRATION_SENTINEL = "@live"
+_SELECT_MODES = frozenset({"sample", "complex"})
+_DEFAULT_SELECT_FRACTION = 0.05
+
+
+def scenario_complexity(case: ScenarioCase) -> float:
+    """Heuristic difficulty/cost score for ranking live turn scenarios.
+
+    Higher means "more worth running when you can only afford a few": multi-step
+    plans, majority-vote ``runs`` (the dominant live cost), gather-loop tool
+    contracts, real ``@live`` integration calls, and prior-state/long prompts all
+    push the score up. Used by ``select_cases`` in ``complex`` mode.
+    """
+    scenario = case.scenario
+    answer = case.answer
+    score = _INTENT_COMPLEXITY_WEIGHT.get(scenario.intent_class, 1.0)
+    score += 3.0 * len(answer.planned_actions)
+    score += 2.0 * len(answer.executed_actions)
+    # Majority-vote fixtures issue ``runs`` LLM calls per test in BOTH the
+    # planning and oracle suites, so this is the single biggest time multiplier.
+    score += 2.0 * max(0, answer.runs - 1)
+    contract = answer.gathered_tools_contract
+    if contract is not None:
+        score += float(
+            len(contract.must_call_any)
+            + len(contract.must_call_all)
+            + len(contract.must_not_call)
+            + len(contract.must_return_valid_data)
+            + len(contract.must_return_valid_data_any)
+        )
+    override = scenario.session.resolved_integrations or {}
+    score += 2.0 * sum(
+        1 for value in override.values() if str(value).strip() == _LIVE_INTEGRATION_SENTINEL
+    )
+    if scenario.session.has_prior_state:
+        score += 1.0
+    score += min(len(scenario.input.prompt) / 200.0, 2.0)
+    return score
+
+
+@dataclass(frozen=True)
+class SelectionSpec:
+    """Parsed ``--turn-select`` / ``TURN_SELECT`` request.
+
+    Exactly one of ``count`` (absolute) or ``fraction`` (0 < f <= 1) is set.
+    """
+
+    mode: str
+    fraction: float | None = None
+    count: int | None = None
+
+
+def parse_selection_spec(spec: str | None) -> SelectionSpec | None:
+    """Parse a selection spec like ``complex:5``, ``sample:0.1``, or ``complex``.
+
+    Returns ``None`` for an empty/unset spec (meaning "run everything"). The
+    count component may be an absolute integer (``6``), a percentage (``5%``), or
+    a fraction (``0.05``); a bare ``complex``/``sample`` defaults to 5%.
+    """
+    if spec is None:
+        return None
+    text = spec.strip().lower()
+    if not text:
+        return None
+    mode, sep, raw = text.partition(":")
+    mode = mode.strip()
+    if mode not in _SELECT_MODES:
+        msg = f"Invalid turn selection mode {mode!r}; expected one of {sorted(_SELECT_MODES)}."
+        raise ValueError(msg)
+    raw = raw.strip()
+    if not sep or not raw:
+        return SelectionSpec(mode=mode, fraction=_DEFAULT_SELECT_FRACTION)
+    if raw.endswith("%"):
+        percent = float(raw[:-1])
+        if not 0.0 < percent <= 100.0:
+            msg = f"Turn selection percentage must be in (0, 100]; got {raw!r}."
+            raise ValueError(msg)
+        return SelectionSpec(mode=mode, fraction=percent / 100.0)
+    value = float(raw)
+    if value <= 0.0:
+        msg = f"Turn selection count must be positive; got {raw!r}."
+        raise ValueError(msg)
+    if value < 1.0:
+        return SelectionSpec(mode=mode, fraction=value)
+    return SelectionSpec(mode=mode, count=int(value))
+
+
+def select_cases(
+    cases: list[ScenarioCase],
+    *,
+    spec: str | SelectionSpec | None,
+    seed: int = 1337,
+) -> list[ScenarioCase]:
+    """Return a subset of ``cases`` for fast local iteration.
+
+    ``spec`` selects either the most complex cases (``complex:N``) or a random
+    sample (``sample:N``). ``None``/empty returns every case (the default, so CI
+    and the full local suite are unchanged). Selected cases keep their original
+    ordering for stable, readable test ids.
+    """
+    parsed = spec if isinstance(spec, SelectionSpec) else parse_selection_spec(spec)
+    if parsed is None or not cases:
+        return list(cases)
+    if parsed.count is not None:
+        count = parsed.count
+    else:
+        fraction = parsed.fraction if parsed.fraction is not None else _DEFAULT_SELECT_FRACTION
+        count = math.ceil(len(cases) * fraction)
+    count = max(1, min(count, len(cases)))
+    if parsed.mode == "complex":
+        ranked = sorted(cases, key=lambda case: (scenario_complexity(case), case.scenario.id))
+        chosen = ranked[len(ranked) - count :]
+    else:
+        chosen = random.Random(seed).sample(cases, count)
+    order = {case.scenario.id: index for index, case in enumerate(cases)}
+    return sorted(chosen, key=lambda case: order[case.scenario.id])
+
+
 __all__ = [
     "Answer",
     "AnswerPolicy",
@@ -782,10 +912,14 @@ __all__ = [
     "ScenarioCase",
     "ScenarioInput",
     "ScenarioSession",
+    "SelectionSpec",
     "load_all_scenarios",
     "load_scenario_case",
     "load_scenarios_for_class",
     "iter_scenarios_for_shard",
+    "parse_selection_spec",
     "read_shard_config",
+    "scenario_complexity",
+    "select_cases",
     "validate_action_shape",
 ]

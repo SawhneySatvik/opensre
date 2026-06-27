@@ -41,6 +41,34 @@ _TURN_TEST_DEFAULT_ENV = {
 }
 
 
+def pytest_addoption(parser: pytest.Parser) -> None:
+    """Register opt-in selection flags for the live turn scenario suite.
+
+    These shrink the suite for fast LOCAL iteration only. Default is the full
+    sharded suite; CI must not set them (see CI.md section 6).
+    """
+    group = parser.getgroup("turn scenarios")
+    group.addoption(
+        "--turn-select",
+        action="store",
+        default=None,
+        help=(
+            "Run a subset of live turn scenarios for fast local iteration. "
+            "Format '<mode>:<n>' where mode is 'complex' (most complex) or "
+            "'sample' (random), and n is a count, a fraction, or a percentage "
+            "(e.g. 'complex:5', 'sample:0.1', 'sample:10' followed by a percent "
+            "sign). Defaults to the full sharded suite; also settable via the "
+            "TURN_SELECT env var."
+        ),
+    )
+    group.addoption(
+        "--turn-select-seed",
+        action="store",
+        default=None,
+        help="Random seed for '--turn-select=sample:*' (default: TURN_SELECT_SEED or 1337).",
+    )
+
+
 def pytest_configure(config: pytest.Config) -> None:  # noqa: ARG001
     """Load project settings for co-located turn tests."""
     load_env(_ENV_PATH, override=False)
