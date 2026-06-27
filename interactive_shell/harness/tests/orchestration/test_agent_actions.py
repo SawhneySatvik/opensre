@@ -1277,12 +1277,22 @@ def test_execute_cli_actions_counts_planned_and_executed(monkeypatch: object) ->
 
     session = ReplSession()
     console, _ = _capture()
-    result = agent_actions.execute_cli_actions("run `pwd`", session, console)
+    # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent,
+    # not from execute_cli_actions directly. Drive the full turn with a no-op
+    # answer agent so no real LLM is invoked.
+    result = agent_actions.handle_message_with_agent(
+        "run `pwd`",
+        session,
+        console,
+        recorder=None,
+        answer_agent=lambda *_a, **_k: None,
+    )
 
-    assert result.handled is True
-    assert result.planned_count == 1
-    assert result.executed_count == 1
-    assert result.executed_success_count == 1
+    action_result = result.action_result
+    assert action_result.handled is True
+    assert action_result.planned_count == 1
+    assert action_result.executed_count == 1
+    assert action_result.executed_success_count == 1
     assert captured_planned == [(1, False)]
     assert captured_executed == [(1, 1, 1)]
 
@@ -1345,14 +1355,22 @@ def test_execute_cli_actions_executes_matched_clause_ignoring_unhandled(
 
     session = ReplSession()
     console, _ = _capture()
-    result = agent_actions.execute_cli_actions("check health", session, console)
+    # Analytics now fire from ShellTurnAccounting inside handle_message_with_agent.
+    result = agent_actions.handle_message_with_agent(
+        "check health",
+        session,
+        console,
+        recorder=None,
+        answer_agent=lambda *_a, **_k: None,
+    )
 
     # The unhandled flag no longer denies the turn: the matched /health runs.
-    assert result.handled is True
-    assert result.planned_count == 1
-    assert result.executed_count == 1
-    assert result.executed_success_count == 1
-    assert result.has_unhandled_clause is False
+    action_result = result.action_result
+    assert action_result.handled is True
+    assert action_result.planned_count == 1
+    assert action_result.executed_count == 1
+    assert action_result.executed_success_count == 1
+    assert action_result.has_unhandled_clause is False
     assert captured_planned == [(1, False)]
     assert captured_executed == [(1, 1, 1)]
 

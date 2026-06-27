@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import enum
 import random
 import threading
 import time
@@ -17,9 +18,30 @@ from platform.terminal import theme as ui_theme
 PROMPT_REFRESH_INTERVAL_S = 0.25
 
 
+class TurnPhase(enum.Enum):
+    """Explicit lifecycle phase of the current interactive-shell turn.
+
+    ``phase`` is the declared turn intent and is authoritative for the
+    confirmation and cancelling states. ``is_dispatch_running()`` remains
+    derived from the asyncio task (the runtime truth of the in-flight turn),
+    because a task can settle on its own without an explicit transition.
+    """
+
+    IDLE = "idle"
+    DISPATCHING = "dispatching"
+    AWAITING_CONFIRMATION = "awaiting_confirmation"
+    CANCELLING = "cancelling"
+
+
 @dataclass
 class ReplState:
-    """Shared runtime state for prompt loop, queue worker, and cancel handlers."""
+    """Shared runtime state for prompt loop, queue worker, and cancel handlers.
+
+    Single source of truth for the active dispatch task, cancellation event,
+    confirmation lifecycle, exit request, and the explicit ``TurnPhase``.
+    Mutate turn state through the transition methods below rather than poking
+    raw fields, so ``phase`` stays consistent with the cancellation primitives.
+    """
 
     queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     current_task: asyncio.Task[None] | None = None
@@ -29,12 +51,16 @@ class ReplState:
     confirm_event: threading.Event | None = None
     confirm_response: list[str] = field(default_factory=list)
     confirm_prompt_text: str = ""
+    phase: TurnPhase = TurnPhase.IDLE
 
     def is_dispatch_running(self) -> bool:
         return self.current_task is not None and not self.current_task.done()
 
     def is_awaiting_confirmation(self) -> bool:
-        return self.confirm_event is not None
+        return self.phase is TurnPhase.AWAITING_CONFIRMATION
+
+    def is_cancelling(self) -> bool:
+        return self.phase is TurnPhase.CANCELLING
 
     def deliver_confirmation(self, answer: str) -> None:
         if self.confirm_event is None:
@@ -49,28 +75,58 @@ class ReplState:
         self.exit_requested = True
 
     def begin_confirmation(self, event: threading.Event, prompt_text: str = "") -> None:
+        # Reset the response list BEFORE publishing ``confirm_event`` so a
+        # concurrent ``deliver_confirmation`` cannot have its answer clobbered.
+        # ``phase`` is set before the publish so a parked worker is observable
+        # as awaiting confirmation the instant the event is visible.
         self.confirm_response = []
         self.confirm_prompt_text = prompt_text
+        self.phase = TurnPhase.AWAITING_CONFIRMATION
         self.confirm_event = event
 
     def clear_confirmation(self) -> None:
         self.confirm_event = None
         self.confirm_response = []
         self.confirm_prompt_text = ""
+        # Only a normal confirmation completion returns to dispatching/idle; a
+        # cancel in progress must keep its CANCELLING phase.
+        if self.phase is TurnPhase.AWAITING_CONFIRMATION:
+            self.phase = TurnPhase.DISPATCHING if self.is_dispatch_running() else TurnPhase.IDLE
 
     def start_dispatch(self, *, task: asyncio.Task[None], cancel_event: threading.Event) -> None:
         self.current_task = task
         self.current_cancel_event = cancel_event
+        self.phase = TurnPhase.DISPATCHING
+
+    def attach_turn_task(self, task: asyncio.Task[None]) -> None:
+        """Mark a queued turn task as the active dispatch (queue worker entry)."""
+        self.current_task = task
+        self.phase = TurnPhase.DISPATCHING
+
+    def attach_cancel_event(self, cancel_event: threading.Event) -> None:
+        """Park a cancel event for a dispatch that has no asyncio task."""
+        self.current_cancel_event = cancel_event
+        self.phase = TurnPhase.DISPATCHING
 
     def clear_current_task(self, task: asyncio.Task[None] | None = None) -> None:
         if task is None or self.current_task is task:
             self.current_task = None
+            self.phase = TurnPhase.IDLE
 
     def finish_dispatch(self, cancel_event: threading.Event) -> None:
         if self.current_cancel_event is cancel_event:
             self.current_cancel_event = None
+        self.phase = TurnPhase.IDLE
 
     def cancel_current_dispatch(self) -> None:
+        # Mark the cancel intent first, but only when there is something to
+        # cancel, so an idle no-op call does not leave a stale CANCELLING phase.
+        if (
+            self.current_cancel_event is not None
+            or self.confirm_event is not None
+            or self.is_dispatch_running()
+        ):
+            self.phase = TurnPhase.CANCELLING
         if self.current_cancel_event is not None:
             self.current_cancel_event.set()
         if self.confirm_event is not None:
@@ -182,5 +238,6 @@ __all__ = [
     "ReplMutableState",
     "ReplState",
     "SpinnerState",
+    "TurnPhase",
     "create_repl_mutable_state",
 ]

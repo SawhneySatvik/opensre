@@ -20,8 +20,8 @@ from prompt_toolkit.input.defaults import create_pipe_input
 from prompt_toolkit.keys import Keys
 from prompt_toolkit.output import DummyOutput
 
-from interactive_shell.harness import controller as controller_runtime
 from interactive_shell.command_registry import SLASH_COMMANDS, dispatch_slash
+from interactive_shell.harness import controller as controller_runtime
 from interactive_shell.runtime.core import state as loop_state
 from interactive_shell.runtime.core import turn_detection as loop_turn_detection
 from interactive_shell.runtime.startup import initial_input as startup_initial_input
@@ -950,6 +950,74 @@ class TestReplState:
         # No active dispatch → no cancel event parked.
         assert state.current_cancel_event is None
         assert state.queue.empty()
+        assert state.phase is loop_state.TurnPhase.IDLE
+
+    def test_phase_transitions_dispatch_to_idle(self) -> None:
+        async def _scenario() -> None:
+            state = loop_state.ReplState()
+
+            async def _noop() -> None:
+                return None
+
+            task = asyncio.create_task(_noop())
+            cancel = threading.Event()
+            state.start_dispatch(task=task, cancel_event=cancel)
+            assert state.phase is loop_state.TurnPhase.DISPATCHING
+            await task
+            state.finish_dispatch(cancel)
+            assert state.phase is loop_state.TurnPhase.IDLE
+            state.clear_current_task()
+            assert state.phase is loop_state.TurnPhase.IDLE
+
+        asyncio.run(_scenario())
+
+    def test_confirmation_phase_round_trips_to_dispatching(self) -> None:
+        async def _scenario() -> None:
+            state = loop_state.ReplState()
+
+            async def _waits() -> None:
+                await asyncio.sleep(1.0)
+
+            task = asyncio.create_task(_waits())
+            state.start_dispatch(task=task, cancel_event=threading.Event())
+            state.begin_confirmation(threading.Event(), "Proceed? ")
+            assert state.is_awaiting_confirmation() is True
+            assert state.phase is loop_state.TurnPhase.AWAITING_CONFIRMATION
+            # A normal confirmation completion returns to dispatching (task alive).
+            state.clear_confirmation()
+            assert state.is_awaiting_confirmation() is False
+            assert state.phase is loop_state.TurnPhase.DISPATCHING
+            task.cancel()
+
+        asyncio.run(_scenario())
+
+    def test_clear_confirmation_returns_to_idle_without_active_task(self) -> None:
+        state = loop_state.ReplState()
+        state.begin_confirmation(threading.Event(), "Proceed? ")
+        assert state.phase is loop_state.TurnPhase.AWAITING_CONFIRMATION
+        state.clear_confirmation()
+        assert state.phase is loop_state.TurnPhase.IDLE
+
+    def test_cancel_sets_cancelling_phase(self) -> None:
+        state = loop_state.ReplState()
+        state.current_cancel_event = threading.Event()
+        state.cancel_current_dispatch()
+        assert state.phase is loop_state.TurnPhase.CANCELLING
+
+    def test_cancel_during_confirmation_keeps_cancelling_phase(self) -> None:
+        state = loop_state.ReplState()
+        state.current_cancel_event = threading.Event()
+        state.begin_confirmation(threading.Event(), "Proceed? ")
+        state.cancel_current_dispatch()
+        assert state.phase is loop_state.TurnPhase.CANCELLING
+        # The confirmation cleanup must NOT downgrade an in-progress cancel.
+        state.clear_confirmation()
+        assert state.phase is loop_state.TurnPhase.CANCELLING
+
+    def test_idle_cancel_does_not_set_cancelling_phase(self) -> None:
+        state = loop_state.ReplState()
+        state.cancel_current_dispatch()
+        assert state.phase is loop_state.TurnPhase.IDLE
 
     def test_is_dispatch_running_tracks_task_lifecycle(self) -> None:
         async def _scenario() -> None:

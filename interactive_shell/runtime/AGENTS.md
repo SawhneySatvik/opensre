@@ -103,9 +103,23 @@ flowchart TD
   - cancellation event
   - confirmation event/response lifecycle
   - exit requests
-- Use `ReplState` helpers (`start_dispatch`, `finish_dispatch`,
-  `begin_confirmation`, `clear_confirmation`, `cancel_current_dispatch`) rather
-  than direct field mutation where possible.
+  - the explicit turn `phase` (`TurnPhase`: `IDLE`, `DISPATCHING`,
+    `AWAITING_CONFIRMATION`, `CANCELLING`)
+- Mutate turn state through the `ReplState` transition methods, never by poking
+  raw fields from other modules:
+  - `start_dispatch` / `attach_turn_task` / `attach_cancel_event` -> `DISPATCHING`
+  - `begin_confirmation` -> `AWAITING_CONFIRMATION`; `clear_confirmation` returns
+    to `DISPATCHING`/`IDLE` (and never clobbers an in-progress `CANCELLING`)
+  - `cancel_current_dispatch` -> `CANCELLING` (only when there is something to
+    cancel) then signals the cancel/confirm events and `task.cancel`
+  - `finish_dispatch` / `clear_current_task` -> `IDLE`
+- `phase` is authoritative for confirmation and cancelling. `is_dispatch_running()`
+  stays derived from the asyncio task (the runtime truth of the in-flight turn);
+  `is_awaiting_confirmation()` and `is_cancelling()` are derived from `phase`.
+- Do not reorder the signaling inside `cancel_current_dispatch` or move the
+  `confirm_response` reset after the `confirm_event` publish in
+  `begin_confirmation`; both orderings are load-bearing for cancellation and
+  confirmation race-safety.
 - `SpinnerState` owns spinner rendering state only; it must not depend on
   runtime task management.
 
@@ -123,6 +137,14 @@ flowchart TD
 - Put cancel/confirm/correction text classifiers in `core/turn_detection.py`.
 - Put stdin blocking and spinner decisions in `utils/input_policy.py`.
 - Keep prompt-mediated confirmation waiting in `controller.py`.
+- Turn accounting is consolidated behind `ShellTurnAccounting` in
+  `harness/controller.py`, invoked inside `handle_message_with_agent`. It owns
+  action-agent analytics, terminal-turn aggregate telemetry, prompt-recorder
+  flush, conversational-turn persistence, and the final assistant-intent stamp.
+  `execute_cli_actions` returns facts only (`TerminalActionExecutionResult` with
+  `accounting_status` of `completed` / `not_run`) and emits no analytics itself.
+  Do not re-scatter accounting back into `execute_cli_actions` or standalone
+  `_record_*` helpers.
 
 ## Controller rules
 
@@ -201,5 +223,8 @@ flowchart TD
   `runtime/` refactors.
 - Keep interruption semantics unchanged:
   - Esc or bare cancel commands interrupt active dispatch
-  - confirmation prompts are cancel-safe and never silently auto-confirm
+  - cancellation moves the turn to `TurnPhase.CANCELLING` and signals both the
+    cancel event and any pending confirmation event before `task.cancel`
+  - confirmation prompts are cancel-safe and never silently auto-confirm; a
+    cancel during confirmation must not be downgraded back to `DISPATCHING`
 - Preserve observability semantics (turn telemetry and turn summaries).

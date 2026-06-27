@@ -86,6 +86,11 @@ _EXECUTED_HISTORY_TYPES = {
     "cli_command",
 }
 
+# Distinguishes the two zero-count outcomes that need different analytics:
+# a normal action-agent run that completed without planning actions ("completed"),
+# versus a run that never produced actions because it failed/overflowed ("not_run").
+ActionAccountingStatus = Literal["completed", "not_run"]
+
 
 @dataclass(frozen=True)
 class TerminalActionExecutionResult:
@@ -95,6 +100,7 @@ class TerminalActionExecutionResult:
     has_unhandled_clause: bool
     handled: bool
     response_text: str = ""
+    accounting_status: ActionAccountingStatus = "completed"
 
 
 @dataclass(frozen=True)
@@ -196,44 +202,6 @@ def _default_llm_factory() -> Any:
     return agent_llm_client.get_agent_llm()
 
 
-def _record_success_analytics(summary: TerminalActionExecutionResult) -> None:
-    """Emit the planned/policy/executed analytics for a completed action turn."""
-    from platform.analytics.cli import (
-        capture_repl_execution_policy_decision,
-        capture_terminal_actions_executed,
-        capture_terminal_actions_planned,
-    )
-
-    capture_terminal_actions_planned(
-        planned_count=summary.planned_count,
-        has_unhandled_clause=False,
-    )
-    capture_repl_execution_policy_decision(
-        {
-            "policy_stage": "shell_action_agent",
-            "policy_trace": "agent_tool_calls" if summary.planned_count else "assistant_handoff",
-            "planned_count": summary.planned_count,
-            "has_unhandled_clause": False,
-        }
-    )
-    capture_terminal_actions_executed(
-        planned_count=summary.planned_count,
-        executed_count=summary.executed_count,
-        executed_success_count=summary.executed_success_count,
-    )
-
-
-def _record_failure_analytics() -> None:
-    """Emit the executed-analytics no-op used when a turn never ran any action."""
-    from platform.analytics.cli import capture_terminal_actions_executed
-
-    capture_terminal_actions_executed(
-        planned_count=0,
-        executed_count=0,
-        executed_success_count=0,
-    )
-
-
 def execute_cli_actions(
     message: str,
     session: ReplSession,
@@ -286,18 +254,18 @@ def execute_cli_actions(
             on_event=observer,
         ).run([{"role": "user", "content": user_message}])
     except Exception as exc:
-        _record_failure_analytics()
         if is_context_length_overflow(str(exc)):
             log.debug("shell action prompt overflow; falling through to assistant", exc_info=True)
-            return TerminalActionExecutionResult(0, 0, 0, False, False)
-        else:
-            error_text = str(exc)
-            report_exception(exc, context="interactive_shell.action_agent", expected=True)
-            _render_action_agent_error(console, error_text)
-            _persist_action_agent_error(session, message, error_text)
-            session.record("cli_agent", message, ok=False)
-        _record_failure_analytics()
-        return TerminalActionExecutionResult(0, 0, 0, True, True, response_text=error_text)
+            return TerminalActionExecutionResult(0, 0, 0, False, False, accounting_status="not_run")
+
+        error_text = str(exc)
+        report_exception(exc, context="interactive_shell.action_agent", expected=True)
+        _render_action_agent_error(console, error_text)
+        _persist_action_agent_error(session, message, error_text)
+        session.record("cli_agent", message, ok=False)
+        return TerminalActionExecutionResult(
+            0, 0, 0, True, True, response_text=error_text, accounting_status="not_run"
+        )
 
     executed_entries = [
         item
@@ -312,7 +280,7 @@ def execute_cli_actions(
     if handled:
         console.print()
 
-    summary = TerminalActionExecutionResult(
+    return TerminalActionExecutionResult(
         planned_count,
         executed_count,
         executed_success_count,
@@ -320,8 +288,6 @@ def execute_cli_actions(
         handled,
         response_text=response_text,
     )
-    _record_success_analytics(summary)
-    return summary
 
 
 _AGENT_TURN_KIND = "agent"
@@ -348,43 +314,91 @@ def _response_text(run: LlmRunInfo | None) -> str:
     return run.response_text if run is not None and run.response_text else ""
 
 
-def _record_terminal_turn_telemetry(
-    action_result: TerminalActionExecutionResult,
-    session: ReplSession,
-) -> None:
-    """Update session terminal aggregates and emit the turn-summary analytics event."""
-    fallback_to_llm = not action_result.handled
-    snapshot = session.record_terminal_turn(
-        executed_count=action_result.executed_count,
-        executed_success_count=action_result.executed_success_count,
-        fallback_to_llm=fallback_to_llm,
-    )
-    capture_terminal_turn_summarized(
-        planned_count=action_result.planned_count,
-        executed_count=action_result.executed_count,
-        executed_success_count=action_result.executed_success_count,
-        fallback_to_llm=fallback_to_llm,
-        session_turn_index=snapshot.turn_index,
-        session_fallback_count=snapshot.fallback_count,
-        session_action_success_percent=snapshot.action_success_percent,
-        session_fallback_rate_percent=snapshot.fallback_rate_percent,
-    )
+@dataclass
+class ShellTurnAccounting:
+    """Single owner of a shell turn's accounting side effects.
 
+    Separates "what happened" (decided by the turn flow) from "how it is
+    accounted for": action-agent analytics, terminal-turn aggregate telemetry,
+    prompt-recorder flushing, conversational-turn persistence, and the final
+    assistant-intent stamp.
+    """
 
-def _finalize_turn(
-    session: ReplSession,
-    recorder: PromptRecorder | None,
-    text: str,
-    result: ShellTurnResult,
-) -> ShellTurnResult:
-    """Flush the recorder, persist the turn, and stamp the session intent in one place."""
-    if recorder is not None:
-        recorder.set_response(result.assistant_response_text, result.llm_run)
-        recorder.flush()
-    if result.llm_run is not None:
-        session.record("cli_agent", text)
-    session.last_assistant_intent = result.final_intent
-    return result
+    session: ReplSession
+    text: str
+    recorder: PromptRecorder | None
+
+    def record_action_result(self, action_result: TerminalActionExecutionResult) -> None:
+        """Emit action-agent analytics and update terminal-turn aggregates."""
+        self._record_action_analytics(action_result)
+        self._record_terminal_turn(action_result)
+
+    def finalize(self, result: ShellTurnResult) -> ShellTurnResult:
+        """Flush the recorder, persist the turn, and stamp the session intent."""
+        self._flush_prompt_recorder(result)
+        if result.llm_run is not None:
+            self.session.record("cli_agent", self.text)
+        self.session.last_assistant_intent = result.final_intent
+        return result
+
+    def _record_action_analytics(self, action_result: TerminalActionExecutionResult) -> None:
+        from platform.analytics.cli import (
+            capture_repl_execution_policy_decision,
+            capture_terminal_actions_executed,
+            capture_terminal_actions_planned,
+        )
+
+        if action_result.accounting_status == "not_run":
+            capture_terminal_actions_executed(
+                planned_count=0,
+                executed_count=0,
+                executed_success_count=0,
+            )
+            return
+
+        capture_terminal_actions_planned(
+            planned_count=action_result.planned_count,
+            has_unhandled_clause=action_result.has_unhandled_clause,
+        )
+        capture_repl_execution_policy_decision(
+            {
+                "policy_stage": "shell_action_agent",
+                "policy_trace": (
+                    "agent_tool_calls" if action_result.planned_count else "assistant_handoff"
+                ),
+                "planned_count": action_result.planned_count,
+                "has_unhandled_clause": action_result.has_unhandled_clause,
+            }
+        )
+        capture_terminal_actions_executed(
+            planned_count=action_result.planned_count,
+            executed_count=action_result.executed_count,
+            executed_success_count=action_result.executed_success_count,
+        )
+
+    def _record_terminal_turn(self, action_result: TerminalActionExecutionResult) -> None:
+        fallback_to_llm = not action_result.handled
+        snapshot = self.session.record_terminal_turn(
+            executed_count=action_result.executed_count,
+            executed_success_count=action_result.executed_success_count,
+            fallback_to_llm=fallback_to_llm,
+        )
+        capture_terminal_turn_summarized(
+            planned_count=action_result.planned_count,
+            executed_count=action_result.executed_count,
+            executed_success_count=action_result.executed_success_count,
+            fallback_to_llm=fallback_to_llm,
+            session_turn_index=snapshot.turn_index,
+            session_fallback_count=snapshot.fallback_count,
+            session_action_success_percent=snapshot.action_success_percent,
+            session_fallback_rate_percent=snapshot.fallback_rate_percent,
+        )
+
+    def _flush_prompt_recorder(self, result: ShellTurnResult) -> None:
+        if self.recorder is None:
+            return
+        self.recorder.set_response(result.assistant_response_text, result.llm_run)
+        self.recorder.flush()
 
 
 def handle_message_with_agent(
@@ -410,6 +424,8 @@ def handle_message_with_agent(
     gather_evidence = gather_evidence or gather_tool_evidence
     answer_agent = answer_agent or answer_cli_agent
 
+    accounting = ShellTurnAccounting(session=session, text=text, recorder=recorder)
+
     # Clear any observation left by a prior turn so only this turn's discovery
     # output can trigger a summary pass.
     session.last_command_observation = None
@@ -421,7 +437,7 @@ def handle_message_with_agent(
         confirm_fn=confirm_fn,
         is_tty=is_tty,
     )
-    _record_terminal_turn_telemetry(action_result, session)
+    accounting.record_action_result(action_result)
 
     observation = session.last_command_observation
 
@@ -483,7 +499,7 @@ def handle_message_with_agent(
             llm_run=run,
         )
 
-    return _finalize_turn(session, recorder, text, result)
+    return accounting.finalize(result)
 
 
 @dataclass(frozen=True)
@@ -661,7 +677,7 @@ class AgentTurnRunner:
         if current_task is not None:
             self.state.start_dispatch(task=current_task, cancel_event=dispatch_cancel)
         else:
-            self.state.current_cancel_event = dispatch_cancel
+            self.state.attach_cancel_event(dispatch_cancel)
 
         await emit(AgentEvent(type="turn_start", text=text))
         try:
@@ -750,7 +766,7 @@ async def run_agent_turn_queue(
             return
 
         turn_task = asyncio.create_task(run_turn(text))
-        state.current_task = turn_task
+        state.attach_turn_task(turn_task)
         try:
             await turn_task
         except asyncio.CancelledError:
@@ -896,12 +912,14 @@ def request_confirmation_via_prompt(state: ReplState, prompt_text: str) -> str:
 
 
 __all__ = [
+    "ActionAccountingStatus",
     "ActionExecutionDeps",
     "AgentEvent",
     "AgentEventSink",
     "AgentTurnRunner",
     "DispatchCancelled",
     "InteractiveShellController",
+    "ShellTurnAccounting",
     "ShellTurnResult",
     "TerminalActionExecutionResult",
     "execute_cli_actions",
