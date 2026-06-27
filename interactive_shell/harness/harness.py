@@ -25,11 +25,6 @@ from interactive_shell.harness.llm_context import (
     build_action_user_message,
 )
 from interactive_shell.harness.state.conversation_history import MAX_CONVERSATION_MESSAGES
-from interactive_shell.turn_accounting import (
-    ShellTurnAccounting,
-    ShellTurnResult,
-    TerminalActionExecutionResult,
-)
 from interactive_shell.runtime.background.workers import BackgroundTaskManager
 from interactive_shell.runtime.core.state import (
     PROMPT_REFRESH_INTERVAL_S,
@@ -53,6 +48,11 @@ from interactive_shell.session import (
 )
 from interactive_shell.tools.tool_contracts import ToolContext
 from interactive_shell.tools.tool_registry import REGISTRY
+from interactive_shell.turn_accounting import (
+    ShellTurnAccounting,
+    ShellTurnResult,
+    TerminalActionExecutionResult,
+)
 from interactive_shell.ui import ERROR, WARNING
 from interactive_shell.ui.action_rendering import ActionRenderObserver
 from interactive_shell.ui.components.cpr_stdin import drain_stale_cpr_bytes

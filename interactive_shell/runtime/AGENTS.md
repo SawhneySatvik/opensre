@@ -138,7 +138,7 @@ flowchart TD
 - Put stdin blocking and spinner decisions in `utils/input_policy.py`.
 - Keep prompt-mediated confirmation waiting in `controller.py`.
 - Turn accounting is consolidated behind `ShellTurnAccounting` in
-  `harness/turn_accounting.py` (alongside the `TerminalActionExecutionResult`
+  `interactive_shell/turn_accounting.py` (alongside the `TerminalActionExecutionResult`
   and `ShellTurnResult` turn data model), invoked from `handle_message_with_agent`
   in `harness/harness.py`. It owns action-agent analytics, terminal-turn aggregate
   telemetry, prompt-recorder flush, conversational-turn persistence, and the final

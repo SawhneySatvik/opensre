@@ -13,10 +13,10 @@ import io
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
-from interactive_shell.harness.turn_accounting import (
+from interactive_shell.session import ReplSession
+from interactive_shell.turn_accounting import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.session import ReplSession
 from interactive_shell.utils.telemetry.recorder import LlmRunInfo
 
 _OBSERVATION = "Integration status from `/integrations`:\n- sentry: missing (Not configured.)"

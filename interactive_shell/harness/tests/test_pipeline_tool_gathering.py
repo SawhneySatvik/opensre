@@ -9,10 +9,10 @@ from typing import Any
 from rich.console import Console
 
 from interactive_shell.harness.harness import handle_message_with_agent
+from interactive_shell.session import ReplSession
 from interactive_shell.turn_accounting import (
     TerminalActionExecutionResult,
 )
-from interactive_shell.session import ReplSession
 
 
 def _console() -> Console:

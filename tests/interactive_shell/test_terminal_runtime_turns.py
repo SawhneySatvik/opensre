@@ -12,9 +12,6 @@ from interactive_shell.harness.harness import handle_message_with_agent
 from interactive_shell.harness.tests.orchestration.action_execution_test_harness import (
     FakeActionLLM,
 )
-from interactive_shell.harness.turn_accounting import (
-    TerminalActionExecutionResult,
-)
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
 from interactive_shell.session import ReplSession
 from interactive_shell.tools import (
@@ -22,6 +19,9 @@ from interactive_shell.tools import (
 )
 from interactive_shell.tools import (
     slash_tool as _slash_tool,
+)
+from interactive_shell.turn_accounting import (
+    TerminalActionExecutionResult,
 )
 
 
