@@ -262,7 +262,6 @@ def execute_cli_actions(
         # `deterministic_command_text`, slash-command parsing, or regex intent
         # matching here. Slash execution still belongs to the `slash_invoke`
         # AgentTool selected by the action agent.
-
         def llm_factory() -> _StaticToolCallLLM:
             return _StaticToolCallLLM(
                 [ToolCall(id="direct_shell_0", name="shell_run", input={"command": bang_command})]
@@ -287,11 +286,9 @@ def execute_cli_actions(
             on_event=observer,
         ).run([{"role": "user", "content": user_message}])
     except Exception as exc:
+        _record_failure_analytics()
         if is_context_length_overflow(str(exc)):
-            log.debug(
-                "shell action prompt overflow; falling through to assistant", exc_info=True
-            )
-            _record_failure_analytics()
+            log.debug("shell action prompt overflow; falling through to assistant", exc_info=True)
             return TerminalActionExecutionResult(0, 0, 0, False, False)
         else:
             error_text = str(exc)
@@ -428,12 +425,12 @@ def handle_message_with_agent(
 
     observation = session.last_command_observation
 
-    # Path 1: a successful terminal action left discovery output worth summarizing.
     if (
         action_result.handled
         and observation is not None
         and action_result.executed_success_count > 0
     ):
+        # Path 1: a successful terminal action left discovery output worth summarizing.
         with apply_reasoning_effort(session.reasoning_effort):
             run = answer_agent(
                 text,
@@ -443,62 +440,50 @@ def handle_message_with_agent(
                 is_tty=is_tty,
                 tool_observation=observation,
             )
-        return _finalize_turn(
-            session,
-            recorder,
-            text,
-            ShellTurnResult(
-                final_intent="cli_agent_summarized",
-                action_result=action_result,
-                assistant_response_text=_response_text(run),
-                llm_run=run,
-            ),
+        result = ShellTurnResult(
+            final_intent="cli_agent_summarized",
+            action_result=action_result,
+            assistant_response_text=_response_text(run),
+            llm_run=run,
         )
-
-    if action_result.handled:
-        return _finalize_turn(
-            session,
-            recorder,
-            text,
-            ShellTurnResult(
-                final_intent="cli_agent_handled",
-                action_result=action_result,
-                assistant_response_text=action_result.response_text,
-            ),
+    elif action_result.handled:
+        # Path 2: the action fully handled the turn; stop without the LLM.
+        result = ShellTurnResult(
+            final_intent="cli_agent_handled",
+            action_result=action_result,
+            assistant_response_text=action_result.response_text,
         )
-
-    with apply_reasoning_effort(session.reasoning_effort):
-        gathered = gather_evidence(text, session, console, is_tty=is_tty)
-        if gathered:
-            run = answer_agent(
-                text,
-                session,
-                console,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                tool_observation=gathered,
-                tool_observation_on_screen=False,
-            )
-        else:
-            run = answer_agent(
-                text,
-                session,
-                console,
-                confirm_fn=confirm_fn,
-                is_tty=is_tty,
-                tool_observation=None,
-            )
-    return _finalize_turn(
-        session,
-        recorder,
-        text,
-        ShellTurnResult(
+    else:
+        # Path 3: nothing was handled; gather evidence and answer.
+        with apply_reasoning_effort(session.reasoning_effort):
+            gathered = gather_evidence(text, session, console, is_tty=is_tty)
+            if gathered:
+                run = answer_agent(
+                    text,
+                    session,
+                    console,
+                    confirm_fn=confirm_fn,
+                    is_tty=is_tty,
+                    tool_observation=gathered,
+                    tool_observation_on_screen=False,
+                )
+            else:
+                run = answer_agent(
+                    text,
+                    session,
+                    console,
+                    confirm_fn=confirm_fn,
+                    is_tty=is_tty,
+                    tool_observation=None,
+                )
+        result = ShellTurnResult(
             final_intent="cli_agent_fallback",
             action_result=action_result,
             assistant_response_text=_response_text(run),
             llm_run=run,
-        ),
-    )
+        )
+
+    return _finalize_turn(session, recorder, text, result)
 
 
 @dataclass(frozen=True)
@@ -530,8 +515,8 @@ def _resolve_runtime_context(
             return session
         return ReplRuntimeContext(
             session=session.session,
-            state=state or session.state,
-            spinner=spinner or session.spinner,
+            state=state if state is not None else session.state,
+            spinner=spinner if spinner is not None else session.spinner,
             pt_session=pt_session if pt_session is not None else session.pt_session,
             inbox=inbox if inbox is not None else session.inbox,
         )
@@ -810,7 +795,7 @@ class InteractiveShellController:
             session=self.session,
             state=self.state,
             spinner=self.spinner,
-            invalidate_prompt=self.prompt.invalidate_prompt,
+            invalidate_prompt=lambda: self.prompt.invalidate_prompt(),
         )
         self.echo_console = Console(highlight=False, force_terminal=True, color_system="truecolor")
         self.input_reader = PromptInputReader(
