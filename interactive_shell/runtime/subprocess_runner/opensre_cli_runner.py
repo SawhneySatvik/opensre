@@ -37,14 +37,27 @@ def _sys_executable_is_python() -> bool:
     return Path(sys.executable).name.lower().startswith(_PYTHON_EXECUTABLE_PREFIXES)
 
 
+def _current_opensre_entrypoint() -> str | None:
+    """Return the current ``opensre`` launcher when the REPL was started by one."""
+    argv0 = sys.argv[0].strip() if sys.argv else ""
+    if not argv0:
+        return None
+    if Path(argv0).name.lower() != "opensre":
+        return None
+    return argv0
+
+
 def build_opensre_cli_argv(args: list[str]) -> list[str]:
     """Return argv for re-entering the OpenSRE Click CLI.
 
-    Editable/dev installs should use ``python -m cli`` so child processes run
-    against this checkout. Frozen release binaries have ``sys.executable`` set
-    to the ``opensre`` executable itself; passing ``-m cli`` there would send
-    ``-m`` to Click, which fails before the requested subcommand can run.
+    When the interactive shell itself was launched through an ``opensre`` entrypoint,
+    reuse that entrypoint. Some packaged/script launchers have Python-looking
+    executables but still forward ``-m`` to Click, which fails before slash-command
+    delegates like ``/onboard`` can run. Direct ``python -m cli`` development runs
+    keep using the module path so child processes run against this checkout.
     """
+    if entrypoint := _current_opensre_entrypoint():
+        return [entrypoint, *args]
     if getattr(sys, "frozen", False) or not _sys_executable_is_python():
         return [sys.executable, *args]
     return [sys.executable, "-m", "cli", *args]

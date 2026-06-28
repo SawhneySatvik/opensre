@@ -2324,6 +2324,40 @@ class TestRunCliCommand:
         assert m.run_cli_command(console, ["onboard"]) is True
         assert captured == [["/tmp/opensre", "onboard"]]
 
+    def test_script_entrypoint_delegate_reuses_opensre_without_module_flags(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Console-script launchers should be re-entered as ``opensre ...``.
+
+        Some installed launchers expose a Python-looking ``sys.executable`` but
+        pass ``-m`` through to Click. Reusing the current ``opensre`` entrypoint
+        avoids turning ``/onboard`` into ``opensre -m cli onboard``.
+        """
+        from interactive_shell.command_registry import cli_parity as m
+        from interactive_shell.runtime.subprocess_runner import opensre_cli_runner
+
+        captured: list[list[str]] = []
+
+        monkeypatch.setattr(opensre_cli_runner.sys, "argv", ["/tmp/bin/opensre"])
+        monkeypatch.setattr(opensre_cli_runner.sys, "executable", "/tmp/bin/python3")
+        monkeypatch.setattr(opensre_cli_runner.sys, "frozen", False, raising=False)
+
+        def _fake_run(
+            cmd: list[str],
+            *,
+            check: bool,
+        ) -> subprocess.CompletedProcess[str]:
+            del check
+            captured.append(cmd)
+            return subprocess.CompletedProcess(cmd, 0)
+
+        monkeypatch.setattr(m.subprocess, "run", _fake_run)
+        console, _ = _capture()
+
+        assert m.run_cli_command(console, ["onboard"]) is True
+        assert captured == [["/tmp/bin/opensre", "onboard"]]
+
 
 class TestCliDelegatedCommands:
     """Coverage for commands that simply delegate to the underlying Click CLI."""
