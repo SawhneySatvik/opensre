@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import io
 
 import pytest
@@ -13,6 +14,7 @@ from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,
 )
 from interactive_shell.runtime.shell_turn_execution import execute_shell_turn
+from interactive_shell.runtime.turn_host import run_agent_turn_queue
 from interactive_shell.runtime.utils import input_policy as loop_input_policy
 from tests.core.agent.orchestration.action_execution_test_harness import (
     FakeActionLLM,
@@ -153,6 +155,36 @@ def test_turn_needs_exclusive_stdin_for_config(
         )
         is True
     )
+
+
+def test_queued_literal_quit_requests_runtime_exit() -> None:
+    async def _scenario() -> None:
+        from interactive_shell.runtime.core.state import ReplState
+
+        state = ReplState()
+        session = ReplSession()
+        console = Console(file=io.StringIO(), force_terminal=False, highlight=False)
+
+        async def _run_turn(text: str) -> None:
+            await asyncio.to_thread(
+                execute_shell_turn,
+                text,
+                session,
+                console,
+                recorder=None,
+                confirm_fn=None,
+                is_tty=None,
+                request_exit=state.request_exit,
+            )
+
+        worker = asyncio.create_task(run_agent_turn_queue(state=state, run_turn=_run_turn))
+        await state.queue.put("/quit")
+        await asyncio.wait_for(state.queue.join(), timeout=1)
+        await asyncio.wait_for(worker, timeout=1)
+
+        assert state.exit_requested is True
+
+    asyncio.run(_scenario())
 
 
 def test_execute_shell_turn_nitro_prompt_uses_cli_agent_actions(

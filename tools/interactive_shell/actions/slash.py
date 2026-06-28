@@ -56,6 +56,20 @@ def _slash_drives_interactive_picker(name: str, slash_args: list[str]) -> bool:
     return (name, slash_args[0].lower()) in _INTERACTIVE_PICKER_SUBCOMMANDS
 
 
+def _dispatch_and_translate_exit(command: str, ctx: ToolContext, **kwargs: Any) -> bool:
+    should_continue = dispatch_slash(
+        command,
+        ctx.session,
+        ctx.console,
+        confirm_fn=ctx.confirm_fn,
+        is_tty=ctx.is_tty,
+        **kwargs,
+    )
+    if not should_continue and ctx.request_exit is not None:
+        ctx.request_exit()
+    return True
+
+
 def execute_slash_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     command = str(args.get("command", "")).strip()
     raw_args = args.get("args")
@@ -63,14 +77,9 @@ def execute_slash_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     full_command = " ".join([command, *parsed_args]) if parsed_args else command
     stripped = full_command.strip()
     if stripped == "/" or not stripped:
-        return bool(
-            dispatch_slash(
-                stripped or "/",
-                ctx.session,
-                ctx.console,
-                confirm_fn=ctx.confirm_fn,
-                is_tty=ctx.is_tty,
-            )
+        return _dispatch_and_translate_exit(
+            stripped or "/",
+            ctx,
         )
 
     parts = stripped.split()
@@ -78,14 +87,9 @@ def execute_slash_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
     slash_args = parts[1:]
     cmd = SLASH_COMMANDS.get(name)
     if cmd is None:
-        return bool(
-            dispatch_slash(
-                stripped,
-                ctx.session,
-                ctx.console,
-                confirm_fn=ctx.confirm_fn,
-                is_tty=ctx.is_tty,
-            )
+        return _dispatch_and_translate_exit(
+            stripped,
+            ctx,
         )
 
     if _slash_drives_interactive_picker(name, slash_args):
@@ -110,15 +114,10 @@ def execute_slash_tool(args: dict[str, Any], ctx: ToolContext) -> bool:
         return True
 
     ctx.console.print(f"[bold]$ {escape(stripped)}[/bold]")
-    return bool(
-        dispatch_slash(
-            stripped,
-            ctx.session,
-            ctx.console,
-            confirm_fn=ctx.confirm_fn,
-            is_tty=ctx.is_tty,
-            policy_precleared=True,
-        )
+    return _dispatch_and_translate_exit(
+        stripped,
+        ctx,
+        policy_precleared=True,
     )
 
 

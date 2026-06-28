@@ -148,6 +148,7 @@ class InteractiveShellController:
             state=self.state,
             spinner=self.spinner,
             invalidate_prompt=lambda: self.prompt.invalidate_prompt(),
+            request_exit=self.prompt.request_exit,
         )
         self.echo_console = Console(highlight=False, force_terminal=True, color_system="truecolor")
         self.input_reader = PromptInputReader(

@@ -65,9 +65,16 @@ class ShellOutputSink:
 class ShellToolProvider:
     """:class:`core.agent_harness.ports.ToolProvider` backed by the shell tool registry."""
 
-    def __init__(self, session: ReplSession, console: Console) -> None:
+    def __init__(
+        self,
+        session: ReplSession,
+        console: Console,
+        *,
+        request_exit: Callable[[], None] | None = None,
+    ) -> None:
         self._session = session
         self._console = console
+        self._request_exit = request_exit
 
     def action_tools(
         self, *, confirm_fn: Callable[[str], str] | None, is_tty: bool | None
@@ -77,6 +84,7 @@ class ShellToolProvider:
             console=self._console,
             confirm_fn=confirm_fn,
             is_tty=is_tty,
+            request_exit=self._request_exit,
             action_already_listed=True,
         )
         return REGISTRY.agent_tools_for_context(ctx)

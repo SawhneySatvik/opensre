@@ -44,6 +44,7 @@ def run_action_tool_turn(
     *,
     confirm_fn: Callable[[str], str] | None = None,
     is_tty: bool | None = None,
+    request_exit: Callable[[], None] | None = None,
     deps: ToolCallingDeps | None = None,
     turn_ctx: TurnContext | None = None,
 ) -> ToolCallingTurnResult:
@@ -57,7 +58,7 @@ def run_action_tool_turn(
         message,
         session,
         output=ShellOutputSink(console),
-        tools=ShellToolProvider(session, console),
+        tools=ShellToolProvider(session, console, request_exit=request_exit),
         confirm_fn=confirm_fn,
         is_tty=is_tty,
         deps=effective_deps,
@@ -106,6 +107,7 @@ def execute_shell_turn(
     recorder: PromptRecorder | None,
     confirm_fn: Callable[[str], str] | None = None,
     is_tty: bool | None = None,
+    request_exit: Callable[[], None] | None = None,
     execute_actions: RunActionToolTurn | None = None,
     gather_evidence: GatherEvidence | None = None,
     answer_agent: AnswerShellQuestion | None = None,
@@ -133,7 +135,13 @@ def execute_shell_turn(
         turn_ctx: TurnContext | None = None,
     ) -> ToolCallingTurnResult:
         return _execute(
-            t, session, console, confirm_fn=confirm_fn, is_tty=is_tty, turn_ctx=turn_ctx
+            t,
+            session,
+            console,
+            confirm_fn=confirm_fn,
+            is_tty=is_tty,
+            request_exit=request_exit,
+            turn_ctx=turn_ctx,
         )
 
     def answer_bound(t: str, **kwargs: Any) -> LlmRunInfo | None:

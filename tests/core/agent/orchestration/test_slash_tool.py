@@ -110,3 +110,27 @@ def test_non_picker_slash_commands_run_inline_even_in_a_tty(
     assert dispatched == [expected]
     assert session.pending_prompt_default is None
     assert session.pending_prompt_autosubmit is False
+
+
+def test_exit_slash_requests_runtime_exit(monkeypatch: pytest.MonkeyPatch) -> None:
+    dispatched: list[str] = []
+
+    def _fake_dispatch(command: str, *_args: object, **_kwargs: object) -> bool:
+        dispatched.append(command)
+        return False
+
+    monkeypatch.setattr(slash_tool, "dispatch_slash", _fake_dispatch)
+
+    requested_exit: list[bool] = []
+    ctx, _buf, _session = _ctx()
+    ctx = ToolContext(
+        session=ctx.session,
+        console=ctx.console,
+        request_exit=lambda: requested_exit.append(True),
+    )
+
+    handled = slash_tool.execute_slash_tool({"command": "/quit", "args": []}, ctx)
+
+    assert handled is True
+    assert dispatched == ["/quit"]
+    assert requested_exit == [True]

@@ -62,6 +62,7 @@ class AgentTurnRuntime:
     state: ReplState
     spinner: SpinnerState
     invalidate_prompt: Callable[[], None]
+    request_exit: Callable[[], None] | None = None
 
 
 async def run_agent_turn(runtime: AgentTurnRuntime, text: str) -> None:
@@ -127,6 +128,7 @@ async def _run_agent_turn_loop(
             output=output,
             recorder=recorder,
             confirm=confirm,
+            request_exit=runtime.request_exit,
         )
     except asyncio.CancelledError:
         await emit(AgentEvent(type="turn_interrupted"))
@@ -148,6 +150,7 @@ async def _execute_agent_turn(
     output: StreamingConsole,
     recorder: PromptRecorder | None,
     confirm: Callable[[str], str],
+    request_exit: Callable[[], None] | None,
 ) -> None:
     with _bound_cli_session(session.session_id):
         await asyncio.to_thread(
@@ -158,6 +161,7 @@ async def _execute_agent_turn(
             recorder=recorder,
             confirm_fn=confirm,
             is_tty=None,
+            request_exit=request_exit,
         )
 
 
@@ -171,12 +175,14 @@ class AgentTurnRunner:
         state: ReplState,
         spinner: SpinnerState,
         invalidate_prompt: Callable[[], None],
+        request_exit: Callable[[], None] | None = None,
     ) -> None:
         self.runtime = AgentTurnRuntime(
             session=session,
             state=state,
             spinner=spinner,
             invalidate_prompt=invalidate_prompt,
+            request_exit=request_exit or state.request_exit,
         )
 
     @property

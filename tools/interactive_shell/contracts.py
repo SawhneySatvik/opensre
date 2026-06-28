@@ -22,6 +22,7 @@ class ToolContext:
     console: Console
     confirm_fn: Callable[[str], str] | None = None
     is_tty: bool | None = None
+    request_exit: Callable[[], None] | None = None
     # Defaults False to match ``execution_allowed`` and the ``run_*`` helpers:
     # nothing has been listed yet, so the confirmation UX should show the action
     # summary. The tool-calling turn dispatcher (``run_action_tool_turn``) passes
