@@ -20,7 +20,7 @@ from rich.console import Console
 LIVE_INTEGRATION_SENTINEL = "@live"
 
 from core.agent_harness.session import ReplSession
-from interactive_shell.agent_shell.agent import handle_message_with_agent
+from interactive_shell.agent_shell.turn_entry import handle_message_with_agent
 from interactive_shell.tools.tool_contracts import ToolExecutor
 from interactive_shell.tools.tool_registry import (
     REGISTRY,

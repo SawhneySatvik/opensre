@@ -4,7 +4,7 @@ The bounded think -> call-tools -> observe loop lives in the decoupled
 :func:`core.agent_harness.evidence_agent.gather_tool_evidence`. This module is the terminal adapter:
 it renders each gathering step to the console and persists the gathered tool
 calls into the shell's session storage, then hands the collected observation back
-to :func:`interactive_shell.agent_shell.core.agent_harness.answer_cli_agent`.
+to :func:`interactive_shell.agent_shell.turn_entry.answer_cli_agent`.
 """
 
 from __future__ import annotations

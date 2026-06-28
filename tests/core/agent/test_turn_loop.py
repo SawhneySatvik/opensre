@@ -8,7 +8,8 @@ from typing import Any
 from rich.console import Console
 
 from core.agent_harness.session import ReplSession
-from interactive_shell.agent_shell.agent import AgentTurnRunner, handle_message_with_agent
+from interactive_shell.agent_shell.agent import AgentTurnRunner
+from interactive_shell.agent_shell.turn_entry import handle_message_with_agent
 from interactive_shell.runtime.core.state import ReplState, SpinnerState
 from interactive_shell.runtime.core.turn_accounting import (
     ToolCallingTurnResult,

@@ -22,7 +22,7 @@ import interactive_shell.tools.shell.execution as shell_execution
 import interactive_shell.tools.slash_tool as slash_tool
 from core.agent_harness.session import ReplSession
 from core.llm.agent_llm_client import AgentLLMResponse, ToolCall
-from interactive_shell.agent_shell.agent import handle_message_with_agent
+from interactive_shell.agent_shell.turn_entry import handle_message_with_agent
 from interactive_shell.tools.tool_registry import (
     TOOL_KIND_TO_NAME,
     ToolKind,
