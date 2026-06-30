@@ -32,6 +32,15 @@ class TestPythonExecutionToolMetadata:
         assert "github_token" not in props
         assert "github_token" in registered.injected_params
 
+    def test_github_star_velocity_skill_guidance_is_attached(self) -> None:
+        clear_tool_registry_cache()
+        registered = get_registered_tool_map("chat")["execute_python_code"]
+        marker = "Stargazers are returned **oldest first**"
+        assert "Workflow guidance:" in registered.description
+        assert '<skill name="github-star-velocity"' in registered.skill_guidance
+        assert marker in registered.skill_guidance
+        assert marker in registered.description
+
 
 class TestPythonExecutionToolExecution:
     def test_successful_execution_returns_stdout(self) -> None:

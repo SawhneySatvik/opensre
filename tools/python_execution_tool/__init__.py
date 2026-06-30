@@ -21,8 +21,9 @@ class PythonExecutionTool(BaseTool):
     description = (
         "Execute generated Python code in a restricted subprocess, capture stdout, stderr, "
         "exceptions, and timeout state, and return the result to the agent. Network access is "
-        "blocked by default; opt in only for approved API-backed analysis such as GitHub star "
-        "velocity."
+        "blocked by default; opt in only for approved API-backed analysis. When workflow "
+        "guidance lists skills, read each skill description and follow the one that matches "
+        "the user's request."
     )
     use_cases = [
         "Compute metrics or summaries from structured evidence already in context",
