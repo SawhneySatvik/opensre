@@ -57,4 +57,19 @@ description: "Frequently asked questions about OpenSRE"
     Anonymous telemetry can be disabled with <code>OPENSRE_NO_TELEMETRY=1</code>. For vulnerability
     reports, email <code>support@opensre.com</code>.
   </Accordion>
+  
+<Accordion title="Does OpenSRE work without AWS?">
+  Yes. AWS is completely optional. You can run a full investigation using
+  only Grafana, Datadog, or any other supported observability integration.
+  AWS is only needed if you want to pull CloudTrail logs, RDS metrics, or
+  other AWS-specific evidence into your investigations.
+</Accordion>
+
+<Accordion title="Can I use Gemini, DeepSeek, or Ollama instead of Anthropic/OpenAI?">
+  Yes. Set <code>LLM_PROVIDER</code> to the provider of your choice
+  (e.g. <code>gemini</code>, <code>deepseek</code>, <code>ollama</code>) and add
+  the matching API key. All supported providers and their env var names are
+  listed in <code>.env.example</code>.
+</Accordion>
+
 </AccordionGroup>

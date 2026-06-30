@@ -1,19 +1,124 @@
 ---
 title: "Grafana"
+description: "Connect Grafana so OpenSRE can query Loki logs, Tempo traces, Prometheus metrics, and alert rules during investigations"
 ---
 
-### Step 1: Create a token
+OpenSRE queries Grafana to retrieve logs (Loki), traces (Tempo), metrics (Prometheus), alert rules, and annotations — correlating observability signals with infrastructure alerts to identify root causes faster.
 
-Official documentation:[ <u>How to add a token to a service account in Grafana</u>](https://grafana.com/docs/grafana/latest/administration/service-accounts/#add-a-token-to-a-service-account-in-grafana)
+## Prerequisites
 
-### Step 2: Connect Grafana to OpenSRE
+- Grafana instance (cloud or self-hosted)
+- Service account with at least **Viewer** role
 
-1. In OpenSRE, go to **Integrations** → **Grafana**
-2. Enter a name
-3. Enter the endpoint URL for your Grafana instance
-4. Paste your [<u>API Key</u>](https://app.datadoghq.com/account/login?next=%2Forganization-settings%2Fapi-keys) from Grafana
-5. Click **Save**.
+## Setup
 
-   <Frame>
-     ![Connect Grafana](/images/connect_grafana.png)
-   </Frame>
+### Option 1: Interactive CLI
+
+```bash
+opensre integrations setup grafana
+```
+
+Provide your instance URL (e.g. `https://myorg.grafana.net`) and service account token when prompted.
+
+### Option 2: Environment variables
+
+Add to your `.env`:
+
+```bash
+GRAFANA_INSTANCE_URL=https://myorg.grafana.net
+GRAFANA_READ_TOKEN=glsa_your_service_account_token
+GRAFANA_LOKI_DATASOURCE_UID=abc123          # optional, speeds up log queries
+GRAFANA_TEMPO_DATASOURCE_UID=def456         # optional, speeds up trace queries
+```
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `GRAFANA_INSTANCE_URL` | — | **Required.** Full URL of your Grafana instance |
+| `GRAFANA_READ_TOKEN` | — | **Required.** Service account token with Viewer role |
+| `GRAFANA_LOKI_DATASOURCE_UID` | — | Pin a specific Loki datasource UID |
+| `GRAFANA_TEMPO_DATASOURCE_UID` | — | Pin a specific Tempo datasource UID |
+| `GRAFANA_INSTANCES` | — | JSON array for [multi-instance setups](/multi-instance-integrations) |
+
+### Option 3: Persistent store
+
+```json
+{
+  "version": 1,
+  "integrations": [
+    {
+      "id": "grafana-prod",
+      "service": "grafana",
+      "status": "active",
+      "credentials": {
+        "endpoint": "https://myorg.grafana.net",
+        "api_key": "glsa_your_service_account_token"
+      }
+    }
+  ]
+}
+```
+
+## Creating a service account token
+
+1. In Grafana, go to **Administration** → **Users and access** → **Service accounts**
+2. Click **Add service account**
+3. Set the role to **Viewer** (read-only is sufficient)
+4. Open the new service account and click **Add service account token**
+5. Copy the generated token — it is only shown once
+
+Official docs: [Add a token to a service account in Grafana](https://grafana.com/docs/grafana/latest/administration/service-accounts/#add-a-token-to-a-service-account-in-grafana)
+
+<Info>
+For a **local Grafana** instance, point `GRAFANA_INSTANCE_URL` at a localhost address
+(e.g. `http://localhost:3000`). OpenSRE detects the local hostname and switches to anonymous /
+basic auth automatically — the token value is discarded, but `GRAFANA_READ_TOKEN` must still be
+set to any non-empty placeholder (e.g. `local`) so the integration registers.
+Run `make grafana-local-up` to start the bundled local stack.
+</Info>
+
+## Verify
+
+```bash
+opensre integrations verify grafana
+```
+
+Expected output:
+
+```
+Service: grafana
+Status:  passed
+Detail:  Connected to https://myorg.grafana.net and discovered loki, prometheus, tempo datasources.
+```
+
+The verify command probes `/api/datasources` and confirms at least one Loki, Tempo, or Prometheus
+datasource is reachable. If no supported datasources are found, the status is `failed` even though
+the connection succeeded.
+
+## Multi-instance
+
+To connect multiple Grafana instances (e.g. prod and staging), use `GRAFANA_INSTANCES`:
+
+```bash
+GRAFANA_INSTANCES='[
+  {"name":"prod",    "tags":{"env":"prod"},    "endpoint":"https://prod.grafana.net",    "api_key":"..."},
+  {"name":"staging", "tags":{"env":"staging"}, "endpoint":"https://staging.grafana.net", "api_key":"..."}
+]'
+```
+
+See [Multi-instance integrations](/multi-instance-integrations) for full details.
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| **401 Unauthorized** | Token is invalid or expired — regenerate the service account token |
+| **403 Forbidden** | Service account role is below Viewer — increase permissions in Grafana |
+| **Connected, but no datasources discovered** | No Loki, Tempo, or Prometheus datasources exist in the instance — check Grafana's **Data sources** page |
+| **Connection refused / timeout** | Check `GRAFANA_INSTANCE_URL` — ensure the host is reachable and the URL has no trailing slash |
+| **Local instance not connecting** | Ensure `GRAFANA_INSTANCE_URL` points to a localhost address (e.g. `http://localhost:3000`) — local mode is detected from the endpoint hostname, not the token value. Confirm `make grafana-local-up` is running |
+
+## Security best practices
+
+- Use a **service account** with **Viewer** role — never use a personal or admin account token.
+- Store the token in `.env`, not in source code.
+- Rotate tokens periodically via **Administration** → **Service accounts**.
