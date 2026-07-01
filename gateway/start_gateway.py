@@ -54,7 +54,7 @@ def build_gateway_agent(
     config = AgentConfig(
         llm=None,
         system=_SYSTEM_PROMPT_BASE,
-        tools=list(tools),
+        tools=tuple(tools),
         resolved_integrations=resolved_integrations,
         max_iterations=6,
     )
