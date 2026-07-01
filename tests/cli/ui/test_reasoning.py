@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from infra.deployment.remote.reasoning import reasoning_text, tool_display_name
+from surfaces.cli.ui.renderer.reasoning import reasoning_text, tool_display_name
 
 
 class TestToolDisplayName:

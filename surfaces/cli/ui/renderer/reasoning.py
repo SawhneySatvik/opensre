@@ -1,4 +1,4 @@
-"""Map remote streaming events to human-readable reasoning steps.
+"""Map streaming investigation events to human-readable reasoning steps.
 
 Translates fine-grained ``events``-mode callbacks (tool calls, LLM
 reasoning, chain transitions) into short status strings suitable for

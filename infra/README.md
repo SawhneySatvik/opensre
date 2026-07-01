@@ -12,7 +12,7 @@ workstream; if you're looking for the bench environment specifically, jump to
 | [`ci/`](ci/) | Local CI helpers — branch-scoped test mapping ([`test_scope_rules.py`](ci/test_scope_rules.py)) and runner ([`run_test_scope.py`](ci/run_test_scope.py)) used by `make test-scope`. |
 | [`scripts/`](scripts/) | One-time bootstrap scripts (e.g. [`bootstrap-bench-state.sh`](scripts/bootstrap-bench-state.sh) for the Terraform state backend). |
 | `docker-compose.*.yml` | Local development environments (database, RabbitMQ, testing). Not related to the AWS bench infra. |
-| `install-proxy/`, `opensre-dataset/` | Other infra utilities (unrelated to bench). |
+| `install-proxy/` | Install proxy utility (unrelated to bench). |
 
 ## Cloud-OpsBench infrastructure — resources system design
 

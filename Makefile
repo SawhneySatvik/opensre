@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: install onboard benchmark benchmark-update-readme test test-full demo alert-template investigate-alert opensre-hub-fetch opensre-hub-export opensre-hub-investigate verify-integrations check-docker grafana-local-up grafana-local-down grafana-local-seed clean lint format deploy deploy-lambda deploy-prefect deploy-flink destroy destroy-lambda destroy-prefect destroy-flink prefect-local-test simulate-k8s-alert test-k8s-local test-k8s test-k8s-datadog chaos-mesh-up chaos-mesh-down chaos-engineering-apply chaos-engineering-delete chaos-lab-up chaos-lab-down chaos-experiment-list chaos-experiment-up chaos-experiment-down deploy-dd-monitors cleanup-dd-monitors deploy-eks destroy-eks test-k8s-eks datadog-demo crashloop-demo regen-trigger-config test-rca test-rca-grafana test-synthetic test-rds-synthetic test-cli-smoke test-turn-live deploy-vercel destroy-vercel test-vercel deploy-ec2 destroy-ec2 test-ec2 deploy-ec2-hello destroy-ec2-hello deploy-remote destroy-remote deploy-bedrock destroy-bedrock test-bedrock download-cloudopsbench-hf mirror-cloudopsbench-s3 validate-cloudopsbench test-openclaw test-openclaw-synthetic test-hermes test-hermes-synthetic test-hermes-synthetic-only refresh-hermes-tuples
+.PHONY: install onboard benchmark benchmark-update-readme test test-full demo alert-template investigate-alert verify-integrations check-docker grafana-local-up grafana-local-down grafana-local-seed clean lint format deploy deploy-lambda deploy-prefect deploy-flink destroy destroy-lambda destroy-prefect destroy-flink prefect-local-test simulate-k8s-alert test-k8s-local test-k8s test-k8s-datadog chaos-mesh-up chaos-mesh-down chaos-engineering-apply chaos-engineering-delete chaos-lab-up chaos-lab-down chaos-experiment-list chaos-experiment-up chaos-experiment-down deploy-dd-monitors cleanup-dd-monitors deploy-eks destroy-eks test-k8s-eks datadog-demo crashloop-demo regen-trigger-config test-rca test-rca-grafana test-synthetic test-rds-synthetic test-cli-smoke test-turn-live deploy-vercel destroy-vercel test-vercel deploy-ec2 destroy-ec2 test-ec2 deploy-ec2-hello destroy-ec2-hello deploy-bedrock destroy-bedrock test-bedrock download-cloudopsbench-hf mirror-cloudopsbench-s3 validate-cloudopsbench test-openclaw test-openclaw-synthetic test-hermes test-hermes-synthetic test-hermes-synthetic-only refresh-hermes-tuples
 
 
 ifneq ($(wildcard .venv/bin/python),)
@@ -61,33 +61,11 @@ investigate-alert:
 	@[ -n "$(ALERT)" ] || { echo "Usage: make investigate-alert ALERT=/path/to/alert.json"; exit 1; }
 	opensre investigate --input "$(ALERT)"
 
-# Fetch first alert from Hugging Face tracer-cloud/opensre (needs Hub extra + network).
-# OPENSRE_QUERY_PREFIX=Telecom/query_alerts make opensre-hub-fetch
-# OPENSRE_HF_DATASET_ID=tracer-cloud/opensre is optional (same default as the app).
-OPENSRE_HUB_ALERT ?= /tmp/opensre-hub-alert.json
-OPENSRE_QUERY_PREFIX ?= Market/cloudbed-1/query_alerts
-# 0-based: second alert => OPENSRE_HUB_INDEX=1
-OPENSRE_HUB_INDEX ?= 0
-# Extra flags for investigate, e.g. omit --evaluate: OPENSRE_INVESTIGATE_FLAGS=
-OPENSRE_INVESTIGATE_FLAGS ?= --evaluate
-
 CLOUDOPSBENCH_HF_DATASET_ID ?= tracer-cloud/cloud-ops-bench-dataset
 CLOUDOPSBENCH_DATASET_DIR ?= tests/benchmarks/cloudopsbench
 CLOUDOPSBENCH_BENCHMARK_DIR ?= $(CLOUDOPSBENCH_DATASET_DIR)/benchmark
 CLOUDOPSBENCH_HF_INCLUDE ?= benchmark/**
 CLOUDOPSBENCH_LIMIT ?=
-
-opensre-hub-fetch:
-	$(PYTHON) infra/opensre-dataset/fetch_opensre_hub_alert.py --prefix "$(OPENSRE_QUERY_PREFIX)" --output "$(OPENSRE_HUB_ALERT)" --index $(OPENSRE_HUB_INDEX)
-
-# Batch: OPENSRE_EXPORT_DIR=./bank_alerts OPENSRE_EXPORT_LIMIT=30 make opensre-hub-export
-opensre-hub-export:
-	@[ -n "$(OPENSRE_EXPORT_DIR)" ] || { echo "Set OPENSRE_EXPORT_DIR (e.g. ./hub_alerts) and OPENSRE_EXPORT_LIMIT"; exit 1; }
-	@[ -n "$(OPENSRE_EXPORT_LIMIT)" ] || { echo "Set OPENSRE_EXPORT_LIMIT (e.g. 25)"; exit 1; }
-	$(PYTHON) infra/opensre-dataset/fetch_opensre_hub_alert.py --prefix "$(OPENSRE_QUERY_PREFIX)" --export-dir "$(OPENSRE_EXPORT_DIR)" --limit $(OPENSRE_EXPORT_LIMIT)
-
-opensre-hub-investigate: opensre-hub-fetch
-	opensre investigate -i "$(OPENSRE_HUB_ALERT)" $(OPENSRE_INVESTIGATE_FLAGS)
 
 verify-integrations:
 	uv run opensre integrations verify $(if $(SERVICE),$(SERVICE),) $(if $(SLACK_TEST),--send-slack-test,)
@@ -502,13 +480,6 @@ deploy-ec2-hello:
 destroy-ec2-hello:
 	$(PYTHON) -m tests.deployment.ec2.infrastructure_sdk.destroy_hello
 
-# ─── EC2 Remote (full investigation server) ──────────────────────────────────
-deploy-remote:
-	$(PYTHON) -m tests.deployment.ec2.infrastructure_sdk.deploy_remote
-
-destroy-remote:
-	$(PYTHON) -m tests.deployment.ec2.infrastructure_sdk.destroy_remote
-
 # Show help
 help:
 	@echo "Available commands:"
@@ -525,8 +496,6 @@ help:
 	@echo "  make test-ec2          - Run EC2 deployment tests"
 	@echo "  make deploy-ec2-hello  - Deploy hello-world on EC2 (<60s)"
 	@echo "  make destroy-ec2-hello - Terminate hello-world EC2 instance"
-	@echo "  make deploy-remote     - Deploy full investigation server on EC2"
-	@echo "  make destroy-remote    - Terminate remote investigation EC2 instance"
 	@echo ""
 	@echo "  DEPLOYMENT (AWS SDK - fast!)"
 	@echo "  make deploy          - Deploy all test case infrastructure"

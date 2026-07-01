@@ -7,7 +7,7 @@ import re
 from collections.abc import Callable
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT_PATH = ROOT / "pyproject.toml"
 APP_CONSTANTS_OPENSRE_PATH = ROOT / "config" / "constants" / "opensre.py"
 # Dated stable tags carry the v0.1 line prefix, e.g. v0.1.2026.6.26. Month and

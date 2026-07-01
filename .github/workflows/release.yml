@@ -8,7 +8,6 @@ on:
       - "infra/bench/**"
       - "infra/docker-compose*.yml"
       - "infra/install-proxy/**"
-      - "infra/opensre-dataset/**"
       - "infra/scripts/**"
       - "tests/**"
       - "**/*.md"
@@ -166,7 +165,7 @@ jobs:
 
       - name: Sync release version
         shell: bash
-        run: python infra/deployment/packaging/sync_release_version.py --tag "$TAG_NAME"
+        run: python platform/packaging/sync_release_version.py --tag "$TAG_NAME"
 
       - name: Build Python distributions
         run: |
@@ -244,7 +243,7 @@ jobs:
 
       - name: Sync binary version
         shell: bash
-        run: python infra/deployment/packaging/sync_release_version.py --version "$VERSION_NAME"
+        run: python platform/packaging/sync_release_version.py --version "$VERSION_NAME"
 
       - name: Install binary build dependencies
         shell: bash
