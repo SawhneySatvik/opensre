@@ -1,12 +1,11 @@
 # `infra/`
 
-Infrastructure code for opensre local development and shared CI helpers.
+Infrastructure code for opensre local development and deployment.
 
 ## What's here
 
 | Path | Purpose |
 | --- | --- |
-| [`ci/`](ci/) | Local CI helpers — branch-scoped test mapping ([`test_scope_rules.py`](ci/test_scope_rules.py)) and runner ([`run_test_scope.py`](ci/run_test_scope.py)) used by `make test-scope`. |
 | [`deployment/`](deployment/) | Deployment operations and external runtime entrypoints. |
 | [`scripts/`](scripts/) | One-time bootstrap scripts (e.g. [`bootstrap-bench-state.sh`](scripts/bootstrap-bench-state.sh) for the Cloud-OpsBench Terraform state backend). |
 | `docker-compose.*.yml` | Local development environments (database, RabbitMQ, testing). |

@@ -338,7 +338,7 @@ test-cov:
 # Run only the tests relevant to files changed on this branch (local use only).
 # Pass ARGS=--dry-run to preview the command without executing it.
 test-scope:
-	$(PYTHON) infra/ci/run_test_scope.py --base main $(ARGS)
+	$(PYTHON) .github/ci/run_test_scope.py --base main $(ARGS)
 
 # Run the CLI smoke suite against the installed opensre entrypoint.
 test-cli-smoke:
@@ -350,7 +350,7 @@ test-cli-smoke:
 #   make test-turn-live ARGS="--shards 4"
 #   make test-turn-live ARGS="--indexes 0,3"
 test-turn-live:
-	$(PYTHON) -m infra.ci.run_live_turn_shards $(ARGS)
+	$(PYTHON) .github/ci/run_live_turn_shards.py $(ARGS)
 
 # Run Grafana integration tests
 test-grafana:
@@ -441,14 +441,14 @@ typecheck:
 
 # Import graph: cycles + layering + forbidden direct edges (one command).
 check-imports:
-	$(PYTHON) infra/ci/check_imports.py
+	$(PYTHON) .github/ci/check_imports.py
 
 # Deprecated aliases — use ``check-imports`` instead.
 check-cycles check-layers: check-imports
 
 # Optional: full transitive layer contracts (when .importlinter.strict exists).
 check-imports-strict:
-	$(PYTHON) infra/ci/check_imports.py --strict
+	$(PYTHON) .github/ci/check_imports.py --strict
 
 check-layers-strict: check-imports-strict
 

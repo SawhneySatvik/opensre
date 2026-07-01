@@ -6,7 +6,7 @@ only (function-level lazy imports are intentional runtime breaks and
 not counted), then reports any strongly-connected component of size
 > 1, plus any single-module self-loop.
 
-Used by ``make check-imports`` (via :mod:`infra.ci.check_imports`) locally and by CI.
+Used by ``make check-imports`` (via ``check_imports``) locally and by CI.
 
 Exit codes:
     0 — zero cycles found

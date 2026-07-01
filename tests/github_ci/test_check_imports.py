@@ -1,4 +1,4 @@
-"""Tests for infra/ci/check_imports.py."""
+"""Tests for .github/ci/check_imports.py."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from unittest.mock import patch
 
-_CI_DIR = Path(__file__).resolve().parents[2] / "infra" / "ci"
+_CI_DIR = Path(__file__).resolve().parents[2] / ".github" / "ci"
 if str(_CI_DIR) not in sys.path:
     sys.path.insert(0, str(_CI_DIR))
 

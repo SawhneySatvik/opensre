@@ -2,9 +2,9 @@
 
 Orchestrates, in order:
 
-1. **Cycles** — module-load SCCs (:mod:`infra.ci.check_import_cycles`)
+1. **Cycles** — module-load SCCs (``check_import_cycles``)
 2. **Layers** — ``config`` independence via import-linter (``.importlinter``)
-3. **Direct edges** — forbidden top-level imports (:mod:`infra.ci.check_direct_imports`)
+3. **Direct edges** — forbidden top-level imports (``check_direct_imports``)
 
 Used by ``make check-imports``, ``make check``, and CI.
 

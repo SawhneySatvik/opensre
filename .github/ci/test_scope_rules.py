@@ -548,7 +548,7 @@ RULES: tuple[PathRule, ...] = (
     PathRule("uv.lock", (), always_escalate=True),
     PathRule("pytest.ini", (), always_escalate=True),
     PathRule("Makefile", (), always_escalate=True),
-    PathRule("infra/ci/", ("tests/infra_ci/",)),
+    PathRule(".github/ci/", ("tests/github_ci/",)),
 )
 
 

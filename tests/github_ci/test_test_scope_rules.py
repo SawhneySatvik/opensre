@@ -6,7 +6,7 @@ import importlib.util
 import sys
 from pathlib import Path
 
-_RULES_PATH = Path(__file__).resolve().parents[2] / "infra" / "ci" / "test_scope_rules.py"
+_RULES_PATH = Path(__file__).resolve().parents[2] / ".github" / "ci" / "test_scope_rules.py"
 
 
 def _rules_module():
@@ -93,7 +93,7 @@ def test_pipeline_always_escalates() -> None:
 
 def test_changed_test_file_is_targeted() -> None:
     rules = _rules_module()
-    path = "tests/infra_ci/test_test_scope_rules.py"
+    path = "tests/github_ci/test_test_scope_rules.py"
     escalate, targets, _ = rules.classify([path])
     assert not escalate
     assert targets == [path]
@@ -114,7 +114,7 @@ def test_reporting_rule_routes_to_tests_delivery() -> None:
 
 def test_all_rule_targets_are_tuples_not_bare_strings() -> None:
     # A single target written as ("x") is a str, not a tuple — classify() would
-    # then iterate it character by character. infra/ci is outside the mypy paths
+    # then iterate it character by character. .github/ci is outside the mypy paths
     # so this footgun isn't caught by typecheck; guard it here for every rule.
     rules = _rules_module()
     for rule in rules.RULES:

@@ -13,10 +13,10 @@ to a log file and the exit codes are aggregated into a final summary.
 
 Usage:
 
-    uv run python -m infra.ci.run_live_turn_shards            # all 8 shards
-    uv run python -m infra.ci.run_live_turn_shards --shards 4
-    uv run python -m infra.ci.run_live_turn_shards --indexes 0,3
-    uv run python -m infra.ci.run_live_turn_shards -- -x      # extra pytest args
+    uv run python .github/ci/run_live_turn_shards.py            # all 8 shards
+    uv run python .github/ci/run_live_turn_shards.py --shards 4
+    uv run python .github/ci/run_live_turn_shards.py --indexes 0,3
+    uv run python .github/ci/run_live_turn_shards.py -- -x      # extra pytest args
 """
 
 from __future__ import annotations

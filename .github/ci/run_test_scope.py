@@ -5,7 +5,7 @@ Usage
 -----
     make test-scope
     make test-scope ARGS=--dry-run
-    python infra/ci/run_test_scope.py [--dry-run] [--base <ref>]
+    python .github/ci/run_test_scope.py [--dry-run] [--base <ref>]
 
 Exit codes mirror pytest: 0 = all pass, non-zero = failure or config error.
 """

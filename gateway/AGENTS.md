@@ -9,7 +9,7 @@ gateway implementation and regressions together. New gateway unit tests should
 be added under `gateway/tests/`.
 
 Pytest discovers these tests through `pytest.ini`; scoped CI maps changes under
-`gateway/` to `gateway/tests/` through `infra/ci/test_scope_rules.py`.
+`gateway/` to `gateway/tests/` through `.github/ci/test_scope_rules.py`.
 
 ## Gateway Agent Dispatch Architecture
 

@@ -2,10 +2,10 @@
 
 Unlike import-linter (which flags transitive chains), this checker only
 looks at top-level ``import`` / ``from … import`` statements — the same
-AST walk as :mod:`infra.ci.check_import_cycles`. That makes it practical to
+AST walk as ``check_import_cycles``. That makes it practical to
 enforce layering incrementally: fix a direct edge, keep the contract.
 
-Used by ``make check-imports`` (and :mod:`infra.ci.check_imports`) alongside
+Used by ``make check-imports`` (and ``check_imports``) alongside
 import-linter's config contract.
 """
 
@@ -149,7 +149,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {violation.edge}")
     print(
         "\nFix by moving shared code to a lower layer (platform/common, core/contracts) "
-        "or add a temporary baseline entry in infra/ci/check_direct_imports.py "
+        "or add a temporary baseline entry in .github/ci/check_direct_imports.py "
         "with a linked issue — do not use function-level lazy imports to hide "
         "new direct edges."
     )
