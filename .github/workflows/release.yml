@@ -5,8 +5,7 @@ on:
     branches: [main]
     paths-ignore:
       - "docs/**"
-      - "infra/bench/**"
-      - "infra/docker-compose*.yml"
+      - "tests/benchmarks/cloudopsbench/infra/**"
       - "infra/install-proxy/**"
       - "infra/scripts/**"
       - "tests/**"

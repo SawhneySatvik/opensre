@@ -360,17 +360,19 @@ test-grafana:
 # Spin up the local RabbitMQ stack (broker + publisher + slow consumer), wait
 # for a backlog to accumulate, then exercise the read-only diagnostic tools
 # against the real broker.  Used for the screen-video demo; NOT part of CI.
+RABBITMQ_COMPOSE = tests/e2e/rabbitmq/docker-compose.yml
+
 rabbitmq-local-up:
 	@echo "Starting local RabbitMQ stack (broker + publisher + slow consumer)..."
-	docker compose -f infra/docker-compose.rabbitmq.yml up -d
+	docker compose -f $(RABBITMQ_COMPOSE) up -d
 	@echo "Waiting for broker to become healthy..."
-	@until docker compose -f infra/docker-compose.rabbitmq.yml ps rabbitmq | grep -q "(healthy)"; do sleep 2; done
+	@until docker compose -f $(RABBITMQ_COMPOSE) ps rabbitmq | grep -q "(healthy)"; do sleep 2; done
 	@echo "Broker healthy.  Letting backlog build for 20s..."
 	@sleep 20
 	@echo "Ready."
 
 rabbitmq-local-down:
-	docker compose -f infra/docker-compose.rabbitmq.yml down -v
+	docker compose -f $(RABBITMQ_COMPOSE) down -v
 
 # Run OpenClaw integration + tool E2E tests (mocked transport, no live OpenClaw needed)
 test-openclaw:

@@ -6,12 +6,12 @@
 #   - a deliberately-slow consumer so a backlog builds up within seconds
 #
 # Run:
-#   docker compose -f infra/docker-compose.rabbitmq.yml up -d
+#   make rabbitmq-local-up
 #   # wait ~30s for the backlog to grow, then exercise the tools:
 #   make test-rabbitmq-real
 #
 # Tear down:
-#   docker compose -f infra/docker-compose.rabbitmq.yml down -v
+#   make rabbitmq-local-down
 
 services:
   rabbitmq:
