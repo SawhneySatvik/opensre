@@ -51,9 +51,9 @@ class ProviderHooks:
         messages: Sequence[RuntimeMessage],
     ) -> list[ProviderMessage]:
         if self.convert_to_llm is None:
-            from core.messages import convert_to_llm_messages
+            from core.messages import MessageFormatter
 
-            return convert_to_llm_messages(llm, messages)
+            return MessageFormatter(llm).to_provider_messages(messages)
         return self.convert_to_llm(llm, messages)
 
     def apply_before_request(self, request: ProviderRequest) -> ProviderRequest:

@@ -40,13 +40,10 @@ from core.execution import (
 from core.llm import agent_llm_client
 from core.llm.types import ToolCall
 from core.messages import (
+    MessageFormatter,
     RuntimeMessage,
     RuntimeMessageLike,
-    convert_to_llm_messages,
-    ensure_runtime_messages,
-    runtime_assistant_message,
-    runtime_tool_result_message,
-    user_runtime_message,
+    UserRuntimeMessage,
 )
 from core.provider import ProviderHooks, ProviderRequest
 from core.types import RuntimeTool
@@ -197,7 +194,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
             tool_resources = dict(getattr(agent_context, "tool_resources", {}) or {})
             max_iterations = agent_context.max_iterations
         elif initial_messages is not None:
-            messages = ensure_runtime_messages(initial_messages)
+            messages = MessageFormatter.normalize(initial_messages)
             system = self._system
             tools = list(self._tools)
             resolved = self._resolved
@@ -207,6 +204,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
             raise ValueError("Agent.run requires initial_messages or agent_context.")
 
         llm = self._ensure_llm()
+        msg_formatter = MessageFormatter(llm)
         runtime_tools = list(self._filter_tools(tools))
         tool_schemas = llm.tool_schemas(runtime_tools)
         ceiling = context_budget_ceiling_for_model(getattr(llm, "_model", None))
@@ -261,7 +259,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                     has_tool_calls=response.has_tool_calls,
                 )
             )
-            assistant_message = runtime_assistant_message(llm, response)
+            assistant_message = msg_formatter.to_assistant_runtime_message(response)
             self._emit_runtime(MessageStartEvent(message=assistant_message, iteration=iteration))
             if response.content:
                 self._emit_runtime(
@@ -280,7 +278,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                 if accept:
                     follow_up = self._pop_follow_up_message()
                     if follow_up is not None:
-                        messages.append(user_runtime_message(follow_up, queued_kind="follow_up"))
+                        messages.append(UserRuntimeMessage(content=follow_up))
                         self._emit_runtime(
                             TurnEndEvent(
                                 iteration=iteration,
@@ -306,7 +304,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
                         "the conclusion, otherwise the LLM will loop on an unchanged "
                         "message history until max_iterations."
                     )
-                messages.append(user_runtime_message(nudge))
+                messages.append(UserRuntimeMessage(content=nudge))
                 self._emit_runtime(
                     TurnEndEvent(
                         iteration=iteration,
@@ -347,8 +345,8 @@ class Agent[RuntimeToolT: RuntimeTool]:
                 tool_resources=tool_resources,
             )
             provider_results = [result.provider_content() for result in results]
-            tool_result_message = runtime_tool_result_message(
-                llm, response.tool_calls, provider_results
+            tool_result_message = msg_formatter.to_tool_result_runtime_message(
+                response.tool_calls, provider_results
             )
             messages.append(tool_result_message)
 
@@ -421,9 +419,7 @@ class Agent[RuntimeToolT: RuntimeTool]:
 
     def _drain_steering_messages(self, messages: list[RuntimeMessage]) -> None:
         while self._steering_messages:
-            messages.append(
-                user_runtime_message(self._steering_messages.popleft(), queued_kind="steer")
-            )
+            messages.append(UserRuntimeMessage(content=self._steering_messages.popleft()))
 
     def _pop_follow_up_message(self) -> str | None:
         if not self._follow_up_messages:
@@ -518,4 +514,4 @@ class Agent[RuntimeToolT: RuntimeTool]:
             return self._provider_hooks.apply_convert_to_llm(llm, messages)
         except Exception:  # noqa: BLE001 - fall back to the standard provider conversion
             logger.debug("[runtime] convert_to_llm raised; using default conversion", exc_info=True)
-            return convert_to_llm_messages(llm, messages)
+            return MessageFormatter(llm).to_provider_messages(messages)
