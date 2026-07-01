@@ -204,9 +204,9 @@ class TurnContext:
 
     def runtime_messages(self) -> list[RuntimeMessage]:
         """Return the user message list expected by the runtime loop."""
-        from core.messages import user_runtime_message
+        from core.messages import UserRuntimeMessage
 
-        return [user_runtime_message(self.text)]
+        return [UserRuntimeMessage(content=self.text)]
 
     def validate_runtime_request(self) -> None:
         """Validate fields required once this object reaches ``Agent.run``."""

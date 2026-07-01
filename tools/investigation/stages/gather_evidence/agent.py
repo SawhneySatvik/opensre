@@ -9,9 +9,6 @@ from config.constants.investigation import MAX_INVESTIGATION_LOOPS
 from core import (
     LoopEventCallback,
     RuntimeEventCallback,
-    build_assistant_message,
-    build_synthetic_assistant_tool_call_message,
-    build_tool_result_messages,
     context_budget_ceiling_for_model,
     enforce_context_budget,
     estimate_message_tokens,
@@ -25,6 +22,7 @@ from core.context.state.evidence import EvidenceEntry
 from core.llm.agent_llm_client import get_agent_llm
 from core.llm.types import ToolCall
 from core.llm_invoke_errors import classify_llm_invoke_failure
+from core.messages import MessageFormatter
 from core.tool_framework.registered_tool import RegisteredTool
 from platform.observability import debug_print
 from platform.observability import get_progress_tracker as get_tracker
@@ -121,6 +119,7 @@ class ConnectedInvestigationAgent(Agent[RegisteredTool]):
             logger.warning("No tools available for investigation")
 
         llm = get_agent_llm()
+        msg_formatter = MessageFormatter(llm)
         tool_schemas = llm.tool_schemas(tools)
 
         # Merge tool_context into a local view so the system prompt and the alert
@@ -166,9 +165,9 @@ class ConnectedInvestigationAgent(Agent[RegisteredTool]):
                 }
             )
             seed_results = execute_tools(seed_calls, tools, resolved)
-            seed_msgs = build_tool_result_messages(llm, seed_calls, seed_results)
+            seed_msgs = msg_formatter.tool_results_from_execution(seed_calls, seed_results)
 
-            seed_assistant_msg = build_synthetic_assistant_tool_call_message(llm, seed_calls)
+            seed_assistant_msg = msg_formatter.synthetic_assistant_tool_call(seed_calls)
             _mark_messages([seed_assistant_msg, *seed_msgs], "_opensre_seed")
             messages.append(seed_assistant_msg)
             messages.extend(seed_msgs)
@@ -232,7 +231,7 @@ class ConnectedInvestigationAgent(Agent[RegisteredTool]):
                     tool_context=tool_context,
                 )
 
-            messages.append(build_assistant_message(llm, response))
+            messages.append(msg_formatter.assistant_from_response(response))
 
             if not response.has_tool_calls:
                 accept, nudge = self._should_accept_conclusion(
@@ -282,7 +281,9 @@ class ConnectedInvestigationAgent(Agent[RegisteredTool]):
                 tool_call_cache.store(tool_call_signature(tc), output, loop_iteration=iteration)
                 results.append(output)
 
-            tool_result_messages = build_tool_result_messages(llm, response.tool_calls, results)
+            tool_result_messages = msg_formatter.tool_results_from_execution(
+                response.tool_calls, results
+            )
             if duplicate_flags and all(duplicate_flags):
                 _mark_messages([messages[-1], *tool_result_messages], "_opensre_duplicate_result")
             messages.extend(tool_result_messages)
