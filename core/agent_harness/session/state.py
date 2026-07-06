@@ -515,7 +515,7 @@ class Session:
         or an investigation starts.
         """
         try:
-            from integrations.catalog import configured_integration_services
+            from platform.harness_ports import configured_integration_services
 
             self.configured_integrations = tuple(sorted(configured_integration_services()))
             self.configured_integrations_known = True
