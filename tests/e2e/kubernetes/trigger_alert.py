@@ -26,9 +26,14 @@ import urllib.request
 
 import boto3
 
-from tests.e2e.kubernetes.infrastructure_sdk.eks import cluster_exists, update_kubeconfig
-from tests.e2e.kubernetes.infrastructure_sdk.local import wait_for_job
+from tests.e2e.kubernetes.infrastructure_sdk.eks import (
+    cluster_exists,
+    ensure_nodegroup_capacity,
+    update_kubeconfig,
+)
+from tests.e2e.kubernetes.infrastructure_sdk.local import get_pod_logs, wait_for_job
 from tests.shared.infrastructure_sdk.trigger_config import (
+    discover_runtime_outputs,
     load_trigger_config,
     regenerate_trigger_config,
 )
@@ -41,9 +46,16 @@ POST_TRIGGER_WAIT_ON_504 = 90
 DD_LOG_QUERY = "kube_namespace:tracer-test PIPELINE_ERROR"
 DD_SINCE_EPOCH_BUFFER_SECONDS = 60
 K8S_NAMESPACE = "tracer-test"
+EXTRACT_JOB = "etl-extract"
 TRANSFORM_ERROR_JOB = "etl-transform-error"
-TRANSFORM_JOB_WAIT_TIMEOUT = 240
+EXTRACT_JOB_WAIT_TIMEOUT = 180
+TRANSFORM_JOB_WAIT_TIMEOUT = 180
 DD_AGENT_FLUSH_WAIT_SECONDS = 30
+
+_BASE_DIR = os.path.dirname(__file__)
+_JOB_TRANSFORM_ERROR_MANIFEST = os.path.join(
+    _BASE_DIR, "k8s_manifests", "job-transform-error.yaml"
+)
 
 
 def _trigger_via_api(trigger_api_url: str) -> dict:
@@ -229,26 +241,155 @@ def _poll_datadog_logs(
     return False
 
 
-def wait_for_transform_failure(timeout: int = TRANSFORM_JOB_WAIT_TIMEOUT) -> bool:
-    """Wait until the error-path transform job fails on EKS.
+def _job_exists(namespace: str, job_name: str) -> bool:
+    result = _run(
+        ["kubectl", "get", "job", job_name, "-n", namespace],
+        check=False,
+    )
+    return result.returncode == 0
 
-    Returns True when the job reaches ``failed`` (expected for inject_error runs).
-    Returns False on timeout or if the job completes successfully instead.
-    """
+
+def _kubectl_job_env(namespace: str, job_name: str) -> dict[str, str]:
+    result = _run(
+        [
+            "kubectl",
+            "get",
+            "job",
+            job_name,
+            "-n",
+            namespace,
+            "-o",
+            "json",
+        ],
+        check=False,
+    )
+    if result.returncode != 0:
+        return {}
+    payload = json.loads(result.stdout)
+    env_vars = payload.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
+    if not env_vars:
+        return {}
+    env: dict[str, str] = {}
+    for item in env_vars[0].get("env", []):
+        name = item.get("name")
+        value = item.get("value")
+        if name and value is not None:
+            env[name] = str(value)
+    return env
+
+
+def _diagnose_pipeline_jobs() -> None:
+    print("\n--- Pipeline job diagnostics ---")
+    for cmd in (
+        ["kubectl", "get", "jobs", "-n", K8S_NAMESPACE, "-o", "wide"],
+        ["kubectl", "get", "pods", "-n", K8S_NAMESPACE, "-o", "wide"],
+        ["kubectl", "describe", "job", EXTRACT_JOB, "-n", K8S_NAMESPACE],
+        ["kubectl", "describe", "job", TRANSFORM_ERROR_JOB, "-n", K8S_NAMESPACE],
+    ):
+        result = _run(cmd, check=False)
+        print(f"$ {' '.join(cmd)}")
+        output = (result.stdout + result.stderr).strip()
+        print(output or "(no output)")
+    for label in ("stage=extract", "stage=transform-error"):
+        logs = get_pod_logs(K8S_NAMESPACE, label)
+        if logs:
+            print(f"\nPod logs ({label}):\n{logs}")
+
+
+def _submit_transform_error_if_missing() -> None:
+    if _job_exists(K8S_NAMESPACE, TRANSFORM_ERROR_JOB):
+        return
+
+    runtime = discover_runtime_outputs()
+    if not runtime:
+        raise RuntimeError(
+            "Cannot submit transform job: missing EKS runtime outputs "
+            "(landing/processed buckets or ECR image URI)"
+        )
+
+    extract_env = _kubectl_job_env(K8S_NAMESPACE, EXTRACT_JOB)
+    pipeline_run_id = extract_env.get("PIPELINE_RUN_ID") or f"verify-{int(time.time())}"
+    s3_key = extract_env.get("S3_KEY", "")
+
     print(
-        f"Waiting for {K8S_NAMESPACE}/{TRANSFORM_ERROR_JOB} to fail "
+        f"Transform job missing after extract completed; submitting "
+        f"{TRANSFORM_ERROR_JOB!r} (run_id={pipeline_run_id!r})"
+    )
+    _delete_job(TRANSFORM_ERROR_JOB)
+    content = _render_eks_manifest(
+        _JOB_TRANSFORM_ERROR_MANIFEST,
+        landing_bucket=runtime["landing_bucket"],
+        processed_bucket=runtime["processed_bucket"],
+        s3_key=s3_key,
+        pipeline_run_id=pipeline_run_id,
+        image_uri=runtime["ecr_image_uri"],
+    )
+    _apply_manifest(content)
+
+
+def _wait_for_job_status(
+    job_name: str,
+    *,
+    expected: str,
+    timeout: int,
+) -> str | None:
+    print(
+        f"Waiting for {K8S_NAMESPACE}/{job_name} to reach {expected!r} "
         f"(timeout {timeout}s)..."
     )
     try:
-        status = wait_for_job(K8S_NAMESPACE, TRANSFORM_ERROR_JOB, timeout=timeout)
+        status = wait_for_job(K8S_NAMESPACE, job_name, timeout=timeout)
     except TimeoutError:
-        print(f"  Timed out waiting for job {TRANSFORM_ERROR_JOB!r}")
+        print(f"  Timed out waiting for job {job_name!r}")
+        return None
+    if status == expected:
+        print(f"  Job {job_name!r} reached {expected!r}")
+        return status
+    print(f"  Job {job_name!r} finished with unexpected status: {status}")
+    return status
+
+
+def wait_for_transform_failure(timeout: int = TRANSFORM_JOB_WAIT_TIMEOUT) -> bool:
+    """Wait until the error-path transform job fails on EKS."""
+    status = _wait_for_job_status(TRANSFORM_ERROR_JOB, expected="failed", timeout=timeout)
+    return status == "failed"
+
+
+def wait_for_pipeline_inject_error() -> bool:
+    """Wait for extract to complete, then for transform-error to fail on EKS.
+
+  After an API Gateway 504 the Lambda may time out before submitting transform.
+  If extract finishes on-cluster but transform is missing, submit transform-error
+  from the verify step (same flow as ``test_eks.py``).
+    """
+    print("Ensuring EKS node group is active before polling jobs...")
+    ensure_nodegroup_capacity()
+
+    extract_status = _wait_for_job_status(
+        EXTRACT_JOB,
+        expected="complete",
+        timeout=EXTRACT_JOB_WAIT_TIMEOUT,
+    )
+    if extract_status != "complete":
+        _diagnose_pipeline_jobs()
         return False
-    if status == "failed":
-        print(f"  Job {TRANSFORM_ERROR_JOB!r} failed as expected")
-        return True
-    print(f"  Job {TRANSFORM_ERROR_JOB!r} finished with unexpected status: {status}")
-    return False
+
+    try:
+        _submit_transform_error_if_missing()
+    except Exception as exc:
+        print(f"ERROR: could not ensure transform job exists: {exc}")
+        _diagnose_pipeline_jobs()
+        return False
+
+    transform_status = _wait_for_job_status(
+        TRANSFORM_ERROR_JOB,
+        expected="failed",
+        timeout=TRANSFORM_JOB_WAIT_TIMEOUT,
+    )
+    if transform_status != "failed":
+        _diagnose_pipeline_jobs()
+        return False
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -293,10 +434,11 @@ def verify(
 
     if wait_for_transform_job:
         update_kubeconfig()
-        if not wait_for_transform_failure():
+        if not wait_for_pipeline_inject_error():
             print(
-                f"\nFAIL: {TRANSFORM_ERROR_JOB} did not fail within "
-                f"{TRANSFORM_JOB_WAIT_TIMEOUT}s"
+                f"\nFAIL: pipeline inject-error path did not complete "
+                f"(extract {EXTRACT_JOB_WAIT_TIMEOUT}s + transform "
+                f"{TRANSFORM_JOB_WAIT_TIMEOUT}s)"
             )
             return 1
         if dd_flush_wait > 0:
@@ -412,6 +554,8 @@ def main() -> int:
         print("ERROR: EKS cluster 'tracer-eks-test' is not available.")
         print("Trigger API exists but cannot run pipeline jobs without the cluster.")
         return 1
+    print("Ensuring EKS node group is active before trigger...")
+    ensure_nodegroup_capacity()
     print(f"Triggering pipeline via API: {trigger_api_url}")
     try:
         response = _trigger_via_api(trigger_api_url)

@@ -6,10 +6,12 @@ from unittest.mock import patch
 
 from tests.e2e.kubernetes.trigger_alert import (
     DD_SINCE_EPOCH_BUFFER_SECONDS,
+    EXTRACT_JOB,
     TRANSFORM_ERROR_JOB,
     _build_datadog_search_payload,
     datadog_log_search_window,
     verify,
+    wait_for_pipeline_inject_error,
     wait_for_transform_failure,
 )
 
@@ -43,28 +45,69 @@ def test_build_datadog_search_payload_includes_pipeline_error_query() -> None:
 
 def test_wait_for_transform_failure_returns_true_on_failed_job() -> None:
     with patch(
-        "tests.e2e.kubernetes.trigger_alert.wait_for_job",
+        "tests.e2e.kubernetes.trigger_alert._wait_for_job_status",
         return_value="failed",
-    ) as wait_for_job:
+    ) as wait_for_status:
         assert wait_for_transform_failure(timeout=30) is True
-    wait_for_job.assert_called_once_with("tracer-test", TRANSFORM_ERROR_JOB, timeout=30)
+    wait_for_status.assert_called_once_with(
+        TRANSFORM_ERROR_JOB, expected="failed", timeout=30
+    )
 
 
 def test_wait_for_transform_failure_returns_false_on_timeout() -> None:
     with patch(
-        "tests.e2e.kubernetes.trigger_alert.wait_for_job",
-        side_effect=TimeoutError("timed out"),
+        "tests.e2e.kubernetes.trigger_alert._wait_for_job_status",
+        return_value=None,
     ):
         assert wait_for_transform_failure(timeout=30) is False
+
+
+def test_wait_for_pipeline_inject_error_submits_transform_when_missing() -> None:
+    with (
+        patch(
+            "tests.e2e.kubernetes.trigger_alert.ensure_nodegroup_capacity"
+        ) as ensure_nodes,
+        patch(
+            "tests.e2e.kubernetes.trigger_alert._wait_for_job_status",
+            side_effect=["complete", "failed"],
+        ) as wait_for_status,
+        patch(
+            "tests.e2e.kubernetes.trigger_alert._submit_transform_error_if_missing"
+        ) as submit_transform,
+        patch("tests.e2e.kubernetes.trigger_alert._diagnose_pipeline_jobs") as diagnose,
+    ):
+        assert wait_for_pipeline_inject_error() is True
+
+    ensure_nodes.assert_called_once()
+    assert wait_for_status.call_count == 2
+    wait_for_status.assert_any_call(
+        EXTRACT_JOB, expected="complete", timeout=180
+    )
+    submit_transform.assert_called_once()
+    diagnose.assert_not_called()
+
+
+def test_wait_for_pipeline_inject_error_diagnoses_on_extract_timeout() -> None:
+    with (
+        patch("tests.e2e.kubernetes.trigger_alert.ensure_nodegroup_capacity"),
+        patch(
+            "tests.e2e.kubernetes.trigger_alert._wait_for_job_status",
+            return_value=None,
+        ),
+        patch("tests.e2e.kubernetes.trigger_alert._diagnose_pipeline_jobs") as diagnose,
+    ):
+        assert wait_for_pipeline_inject_error() is False
+
+    diagnose.assert_called_once()
 
 
 def test_verify_waits_for_transform_job_before_datadog_poll() -> None:
     with (
         patch("tests.e2e.kubernetes.trigger_alert.update_kubeconfig") as update_kubeconfig,
         patch(
-            "tests.e2e.kubernetes.trigger_alert.wait_for_transform_failure",
+            "tests.e2e.kubernetes.trigger_alert.wait_for_pipeline_inject_error",
             return_value=True,
-        ) as wait_for_transform,
+        ) as wait_for_pipeline,
         patch("tests.e2e.kubernetes.trigger_alert._poll_datadog_logs", return_value=True) as poll_dd,
         patch("tests.e2e.kubernetes.trigger_alert.query_slack_alerts", return_value=True),
         patch("tests.e2e.kubernetes.trigger_alert.get_channel_id", return_value="C123"),
@@ -73,6 +116,6 @@ def test_verify_waits_for_transform_job_before_datadog_poll() -> None:
         assert verify(1_700_000_000.0, wait_for_transform_job=True, dd_flush_wait=30) == 0
 
     update_kubeconfig.assert_called_once()
-    wait_for_transform.assert_called_once()
+    wait_for_pipeline.assert_called_once()
     sleep.assert_called_once_with(30)
     poll_dd.assert_called_once()
