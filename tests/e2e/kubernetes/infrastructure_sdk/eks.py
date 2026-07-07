@@ -458,6 +458,17 @@ def _wait_for_auth_mode(expected: str, timeout: int = 180) -> bool:
     return False
 
 
+def ensure_ci_cluster_access() -> bool:
+    """Ensure the GitHub Actions CI principal can access the EKS Kubernetes API."""
+    try:
+        _enable_api_auth_mode()
+        _grant_ci_access()
+        return True
+    except Exception as exc:
+        print(f"WARN: could not ensure CI EKS cluster access: {exc}")
+        return False
+
+
 def _grant_ci_access() -> None:
     """Grant the CI IAM principal cluster admin access."""
     eks_client = get_boto3_client("eks", REGION)

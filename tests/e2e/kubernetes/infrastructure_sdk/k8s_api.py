@@ -23,6 +23,10 @@ from tests.shared.infrastructure_sdk.deployer import get_boto3_client
 SERVICE_ACCOUNT = "etl-pipeline-sa"
 
 
+class K8sApiAuthError(RuntimeError):
+    """Raised when the caller lacks permission to access the EKS Kubernetes API."""
+
+
 @lru_cache(maxsize=1)
 def _cluster_api_config() -> tuple[str, str]:
     eks = get_boto3_client("eks", REGION)
@@ -70,7 +74,10 @@ def k8s_request(method: str, path: str, body: dict | None = None) -> dict:
         with urllib.request.urlopen(req, context=ctx, timeout=15) as resp:
             return json.loads(resp.read())
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"K8s API error {exc.code}: {exc.read().decode()}") from exc
+        body = exc.read().decode()
+        if exc.code in {401, 403}:
+            raise K8sApiAuthError(f"K8s API error {exc.code}: {body}") from exc
+        raise RuntimeError(f"K8s API error {exc.code}: {body}") from exc
     finally:
         os.unlink(ca_file)
 

@@ -29,6 +29,7 @@ import boto3
 from tests.e2e.kubernetes.infrastructure_sdk import k8s_api
 from tests.e2e.kubernetes.infrastructure_sdk.eks import (
     cluster_exists,
+    ensure_ci_cluster_access,
     ensure_nodegroup_capacity,
 )
 from tests.shared.infrastructure_sdk.trigger_config import (
@@ -42,6 +43,7 @@ DEFAULT_DD_MAX_WAIT = 300
 DEFAULT_SLACK_MAX_WAIT = 300
 DEFAULT_POST_TRIGGER_WAIT = 0
 POST_TRIGGER_WAIT_ON_504 = 90
+PIPELINE_TIMED_FALLBACK_SECONDS = 180
 DD_LOG_QUERY = "kube_namespace:tracer-test PIPELINE_ERROR"
 DD_SINCE_EPOCH_BUFFER_SECONDS = 60
 K8S_NAMESPACE = "tracer-test"
@@ -281,10 +283,7 @@ def _wait_for_job_status(
     expected: str,
     timeout: int,
 ) -> str | None:
-    print(
-        f"Waiting for {K8S_NAMESPACE}/{job_name} to reach {expected!r} "
-        f"(timeout {timeout}s)..."
-    )
+    print(f"Waiting for {K8S_NAMESPACE}/{job_name} to reach {expected!r} (timeout {timeout}s)...")
     try:
         status = k8s_api.wait_for_job(K8S_NAMESPACE, job_name, timeout=timeout)
     except TimeoutError:
@@ -303,41 +302,49 @@ def wait_for_transform_failure(timeout: int = TRANSFORM_JOB_WAIT_TIMEOUT) -> boo
     return status == "failed"
 
 
-def wait_for_pipeline_inject_error() -> bool:
+def wait_for_pipeline_inject_error() -> bool | None:
     """Wait for extract to complete, then for transform-error to fail on EKS.
 
-  After an API Gateway 504 the Lambda may time out before submitting transform.
-  If extract finishes on-cluster but transform is missing, submit transform-error
-  from the verify step (same flow as ``test_eks.py``).
+    Returns:
+        True when the inject-error pipeline finished on-cluster.
+        False when jobs were polled but did not reach the expected states.
+        None when EKS job polling is unavailable and timed backoff should be used.
     """
+    if not ensure_ci_cluster_access():
+        print("WARN: CI principal lacks EKS Kubernetes API access; using timed backoff")
+        return None
+
     print("Ensuring EKS node group is active before polling jobs...")
     ensure_nodegroup_capacity()
 
-    extract_status = _wait_for_job_status(
-        EXTRACT_JOB,
-        expected="complete",
-        timeout=EXTRACT_JOB_WAIT_TIMEOUT,
-    )
-    if extract_status != "complete":
-        _diagnose_pipeline_jobs()
-        return False
-
     try:
+        extract_status = _wait_for_job_status(
+            EXTRACT_JOB,
+            expected="complete",
+            timeout=EXTRACT_JOB_WAIT_TIMEOUT,
+        )
+        if extract_status != "complete":
+            _diagnose_pipeline_jobs()
+            return False
+
         _submit_transform_error_if_missing()
+
+        transform_status = _wait_for_job_status(
+            TRANSFORM_ERROR_JOB,
+            expected="failed",
+            timeout=TRANSFORM_JOB_WAIT_TIMEOUT,
+        )
+        if transform_status != "failed":
+            _diagnose_pipeline_jobs()
+            return False
+        return True
+    except k8s_api.K8sApiAuthError as exc:
+        print(f"WARN: EKS Kubernetes API unauthorized ({exc}); using timed backoff")
+        return None
     except Exception as exc:
         print(f"ERROR: could not ensure transform job exists: {exc}")
         _diagnose_pipeline_jobs()
         return False
-
-    transform_status = _wait_for_job_status(
-        TRANSFORM_ERROR_JOB,
-        expected="failed",
-        timeout=TRANSFORM_JOB_WAIT_TIMEOUT,
-    )
-    if transform_status != "failed":
-        _diagnose_pipeline_jobs()
-        return False
-    return True
 
 
 # ---------------------------------------------------------------------------
@@ -381,14 +388,19 @@ def verify(
     start = time.monotonic()
 
     if wait_for_transform_job:
-        if not wait_for_pipeline_inject_error():
+        pipeline_outcome = wait_for_pipeline_inject_error()
+        if pipeline_outcome is None:
+            fallback_wait = max(post_trigger_wait, PIPELINE_TIMED_FALLBACK_SECONDS)
+            print(f"Using timed pipeline backoff ({fallback_wait}s) before Datadog polling...")
+            time.sleep(fallback_wait)
+        elif pipeline_outcome is False:
             print(
                 f"\nFAIL: pipeline inject-error path did not complete "
                 f"(extract {EXTRACT_JOB_WAIT_TIMEOUT}s + transform "
                 f"{TRANSFORM_JOB_WAIT_TIMEOUT}s)"
             )
             return 1
-        if dd_flush_wait > 0:
+        elif dd_flush_wait > 0:
             print(f"Waiting {dd_flush_wait}s for Datadog Agent to flush logs...")
             time.sleep(dd_flush_wait)
     elif post_trigger_wait > 0:
