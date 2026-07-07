@@ -71,15 +71,11 @@ jobs:
         run: |
           echo "Trigger command completed successfully"
 
-      - name: Verify Datadog + Slack (~5 min)
+      - name: Verify Datadog + Slack (~8 min)
         if: ${{ inputs.verify == true || github.event_name == 'schedule' }}
         run: |
-          POST_TRIGGER_WAIT=""
-          if [ "${{ steps.trigger.outputs.trigger_accepted_timeout }}" = "true" ]; then
-            POST_TRIGGER_WAIT="--post-trigger-wait 90"
-          fi
           uv run python -m tests.e2e.kubernetes.trigger_alert \
             --verify-only \
-            --since-epoch ${{ steps.trigger.outputs.trigger_completed_epoch }} \
+            --since-epoch ${{ steps.trigger.outputs.trigger_epoch }} \
             --dd-max-wait 300 \
-            $POST_TRIGGER_WAIT
+            --wait-for-transform-job

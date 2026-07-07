@@ -26,7 +26,8 @@ import urllib.request
 
 import boto3
 
-from tests.e2e.kubernetes.infrastructure_sdk.eks import cluster_exists
+from tests.e2e.kubernetes.infrastructure_sdk.eks import cluster_exists, update_kubeconfig
+from tests.e2e.kubernetes.infrastructure_sdk.local import wait_for_job
 from tests.shared.infrastructure_sdk.trigger_config import (
     load_trigger_config,
     regenerate_trigger_config,
@@ -39,6 +40,10 @@ DEFAULT_POST_TRIGGER_WAIT = 0
 POST_TRIGGER_WAIT_ON_504 = 90
 DD_LOG_QUERY = "kube_namespace:tracer-test PIPELINE_ERROR"
 DD_SINCE_EPOCH_BUFFER_SECONDS = 60
+K8S_NAMESPACE = "tracer-test"
+TRANSFORM_ERROR_JOB = "etl-transform-error"
+TRANSFORM_JOB_WAIT_TIMEOUT = 240
+DD_AGENT_FLUSH_WAIT_SECONDS = 30
 
 
 def _trigger_via_api(trigger_api_url: str) -> dict:
@@ -224,6 +229,28 @@ def _poll_datadog_logs(
     return False
 
 
+def wait_for_transform_failure(timeout: int = TRANSFORM_JOB_WAIT_TIMEOUT) -> bool:
+    """Wait until the error-path transform job fails on EKS.
+
+    Returns True when the job reaches ``failed`` (expected for inject_error runs).
+    Returns False on timeout or if the job completes successfully instead.
+    """
+    print(
+        f"Waiting for {K8S_NAMESPACE}/{TRANSFORM_ERROR_JOB} to fail "
+        f"(timeout {timeout}s)..."
+    )
+    try:
+        status = wait_for_job(K8S_NAMESPACE, TRANSFORM_ERROR_JOB, timeout=timeout)
+    except TimeoutError:
+        print(f"  Timed out waiting for job {TRANSFORM_ERROR_JOB!r}")
+        return False
+    if status == "failed":
+        print(f"  Job {TRANSFORM_ERROR_JOB!r} failed as expected")
+        return True
+    print(f"  Job {TRANSFORM_ERROR_JOB!r} finished with unexpected status: {status}")
+    return False
+
+
 # ---------------------------------------------------------------------------
 # Slack
 # ---------------------------------------------------------------------------
@@ -255,6 +282,8 @@ def verify(
     dd_max_wait: int = DEFAULT_DD_MAX_WAIT,
     slack_max_wait: int = DEFAULT_SLACK_MAX_WAIT,
     post_trigger_wait: int = DEFAULT_POST_TRIGGER_WAIT,
+    wait_for_transform_job: bool = False,
+    dd_flush_wait: int = DD_AGENT_FLUSH_WAIT_SECONDS,
 ) -> int:
     """Poll Datadog and Slack to confirm the pipeline failure was observed.
 
@@ -262,7 +291,18 @@ def verify(
     """
     start = time.monotonic()
 
-    if post_trigger_wait > 0:
+    if wait_for_transform_job:
+        update_kubeconfig()
+        if not wait_for_transform_failure():
+            print(
+                f"\nFAIL: {TRANSFORM_ERROR_JOB} did not fail within "
+                f"{TRANSFORM_JOB_WAIT_TIMEOUT}s"
+            )
+            return 1
+        if dd_flush_wait > 0:
+            print(f"Waiting {dd_flush_wait}s for Datadog Agent to flush logs...")
+            time.sleep(dd_flush_wait)
+    elif post_trigger_wait > 0:
         print(
             f"Waiting {post_trigger_wait}s for pipeline + Datadog indexing "
             "(post-trigger backoff)..."
@@ -279,6 +319,7 @@ def verify(
         print(f"  datadog_query={DD_LOG_QUERY!r}")
         print(f"  datadog_from={from_value!r} datadog_to={to_value!r}")
         print(f"  post_trigger_wait={post_trigger_wait}s dd_max_wait={dd_max_wait}s")
+        print(f"  wait_for_transform_job={wait_for_transform_job}")
         return 1
 
     print(f"\nLog confirmed in Datadog ({dd_elapsed:.1f}s)")
@@ -329,6 +370,14 @@ def main() -> int:
         default=DEFAULT_POST_TRIGGER_WAIT,
         help="Seconds to wait before Datadog polling (for async Lambda after API 504)",
     )
+    parser.add_argument(
+        "--wait-for-transform-job",
+        action="store_true",
+        help=(
+            "Wait for etl-transform-error to fail on EKS before polling Datadog "
+            "(requires kubectl access to tracer-eks-test)"
+        ),
+    )
     args = parser.parse_args()
 
     if args.regen_config:
@@ -347,6 +396,7 @@ def main() -> int:
             since_epoch,
             dd_max_wait=args.dd_max_wait,
             post_trigger_wait=args.post_trigger_wait,
+            wait_for_transform_job=args.wait_for_transform_job,
         )
 
     start_epoch = time.time()
@@ -384,6 +434,7 @@ def main() -> int:
         start_epoch,
         dd_max_wait=args.dd_max_wait,
         post_trigger_wait=post_trigger_wait,
+        wait_for_transform_job=args.wait_for_transform_job,
     )
 
 
