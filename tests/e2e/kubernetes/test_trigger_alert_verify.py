@@ -103,7 +103,6 @@ def test_wait_for_pipeline_inject_error_diagnoses_on_extract_timeout() -> None:
 
 def test_verify_waits_for_transform_job_before_datadog_poll() -> None:
     with (
-        patch("tests.e2e.kubernetes.trigger_alert.update_kubeconfig") as update_kubeconfig,
         patch(
             "tests.e2e.kubernetes.trigger_alert.wait_for_pipeline_inject_error",
             return_value=True,
@@ -115,7 +114,6 @@ def test_verify_waits_for_transform_job_before_datadog_poll() -> None:
     ):
         assert verify(1_700_000_000.0, wait_for_transform_job=True, dd_flush_wait=30) == 0
 
-    update_kubeconfig.assert_called_once()
     wait_for_pipeline.assert_called_once()
     sleep.assert_called_once_with(30)
     poll_dd.assert_called_once()

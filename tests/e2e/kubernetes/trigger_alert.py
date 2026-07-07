@@ -26,12 +26,11 @@ import urllib.request
 
 import boto3
 
+from tests.e2e.kubernetes.infrastructure_sdk import k8s_api
 from tests.e2e.kubernetes.infrastructure_sdk.eks import (
     cluster_exists,
     ensure_nodegroup_capacity,
-    update_kubeconfig,
 )
-from tests.e2e.kubernetes.infrastructure_sdk.local import get_pod_logs, wait_for_job
 from tests.shared.infrastructure_sdk.trigger_config import (
     discover_runtime_outputs,
     load_trigger_config,
@@ -51,11 +50,6 @@ TRANSFORM_ERROR_JOB = "etl-transform-error"
 EXTRACT_JOB_WAIT_TIMEOUT = 180
 TRANSFORM_JOB_WAIT_TIMEOUT = 180
 DD_AGENT_FLUSH_WAIT_SECONDS = 30
-
-_BASE_DIR = os.path.dirname(__file__)
-_JOB_TRANSFORM_ERROR_MANIFEST = os.path.join(
-    _BASE_DIR, "k8s_manifests", "job-transform-error.yaml"
-)
 
 
 def _trigger_via_api(trigger_api_url: str) -> dict:
@@ -241,63 +235,16 @@ def _poll_datadog_logs(
     return False
 
 
-def _job_exists(namespace: str, job_name: str) -> bool:
-    result = _run(
-        ["kubectl", "get", "job", job_name, "-n", namespace],
-        check=False,
-    )
-    return result.returncode == 0
-
-
-def _kubectl_job_env(namespace: str, job_name: str) -> dict[str, str]:
-    result = _run(
-        [
-            "kubectl",
-            "get",
-            "job",
-            job_name,
-            "-n",
-            namespace,
-            "-o",
-            "json",
-        ],
-        check=False,
-    )
-    if result.returncode != 0:
-        return {}
-    payload = json.loads(result.stdout)
-    env_vars = payload.get("spec", {}).get("template", {}).get("spec", {}).get("containers", [])
-    if not env_vars:
-        return {}
-    env: dict[str, str] = {}
-    for item in env_vars[0].get("env", []):
-        name = item.get("name")
-        value = item.get("value")
-        if name and value is not None:
-            env[name] = str(value)
-    return env
-
-
 def _diagnose_pipeline_jobs() -> None:
-    print("\n--- Pipeline job diagnostics ---")
-    for cmd in (
-        ["kubectl", "get", "jobs", "-n", K8S_NAMESPACE, "-o", "wide"],
-        ["kubectl", "get", "pods", "-n", K8S_NAMESPACE, "-o", "wide"],
-        ["kubectl", "describe", "job", EXTRACT_JOB, "-n", K8S_NAMESPACE],
-        ["kubectl", "describe", "job", TRANSFORM_ERROR_JOB, "-n", K8S_NAMESPACE],
-    ):
-        result = _run(cmd, check=False)
-        print(f"$ {' '.join(cmd)}")
-        output = (result.stdout + result.stderr).strip()
-        print(output or "(no output)")
-    for label in ("stage=extract", "stage=transform-error"):
-        logs = get_pod_logs(K8S_NAMESPACE, label)
-        if logs:
-            print(f"\nPod logs ({label}):\n{logs}")
+    k8s_api.diagnose_pipeline_jobs(
+        K8S_NAMESPACE,
+        extract_job=EXTRACT_JOB,
+        transform_job=TRANSFORM_ERROR_JOB,
+    )
 
 
 def _submit_transform_error_if_missing() -> None:
-    if _job_exists(K8S_NAMESPACE, TRANSFORM_ERROR_JOB):
+    if k8s_api.job_exists(K8S_NAMESPACE, TRANSFORM_ERROR_JOB):
         return
 
     runtime = discover_runtime_outputs()
@@ -307,24 +254,25 @@ def _submit_transform_error_if_missing() -> None:
             "(landing/processed buckets or ECR image URI)"
         )
 
-    extract_env = _kubectl_job_env(K8S_NAMESPACE, EXTRACT_JOB)
+    extract_env = k8s_api.job_env_map(K8S_NAMESPACE, EXTRACT_JOB)
     pipeline_run_id = extract_env.get("PIPELINE_RUN_ID") or f"verify-{int(time.time())}"
-    s3_key = extract_env.get("S3_KEY", "")
 
     print(
         f"Transform job missing after extract completed; submitting "
         f"{TRANSFORM_ERROR_JOB!r} (run_id={pipeline_run_id!r})"
     )
-    _delete_job(TRANSFORM_ERROR_JOB)
-    content = _render_eks_manifest(
-        _JOB_TRANSFORM_ERROR_MANIFEST,
-        landing_bucket=runtime["landing_bucket"],
-        processed_bucket=runtime["processed_bucket"],
-        s3_key=s3_key,
-        pipeline_run_id=pipeline_run_id,
+    k8s_api.delete_job(K8S_NAMESPACE, TRANSFORM_ERROR_JOB)
+    k8s_api.create_pipeline_job(
+        K8S_NAMESPACE,
+        job_name=TRANSFORM_ERROR_JOB,
+        stage="transform",
         image_uri=runtime["ecr_image_uri"],
+        env_vars={
+            "LANDING_BUCKET": runtime["landing_bucket"],
+            "PROCESSED_BUCKET": runtime["processed_bucket"],
+            "PIPELINE_RUN_ID": pipeline_run_id,
+        },
     )
-    _apply_manifest(content)
 
 
 def _wait_for_job_status(
@@ -338,7 +286,7 @@ def _wait_for_job_status(
         f"(timeout {timeout}s)..."
     )
     try:
-        status = wait_for_job(K8S_NAMESPACE, job_name, timeout=timeout)
+        status = k8s_api.wait_for_job(K8S_NAMESPACE, job_name, timeout=timeout)
     except TimeoutError:
         print(f"  Timed out waiting for job {job_name!r}")
         return None
@@ -433,7 +381,6 @@ def verify(
     start = time.monotonic()
 
     if wait_for_transform_job:
-        update_kubeconfig()
         if not wait_for_pipeline_inject_error():
             print(
                 f"\nFAIL: pipeline inject-error path did not complete "
@@ -516,8 +463,8 @@ def main() -> int:
         "--wait-for-transform-job",
         action="store_true",
         help=(
-            "Wait for etl-transform-error to fail on EKS before polling Datadog "
-            "(requires kubectl access to tracer-eks-test)"
+            "Wait for extract + etl-transform-error on EKS before polling Datadog "
+            "(uses EKS Kubernetes API via IAM)"
         ),
     )
     args = parser.parse_args()
@@ -531,7 +478,7 @@ def main() -> int:
             print(f"ERROR: {exc}")
             return 1
 
-    since_epoch = args.since_epoch or time.time()
+    since_epoch = args.since_epoch if args.since_epoch is not None else time.time()
 
     if args.verify_only:
         return verify(
@@ -541,7 +488,7 @@ def main() -> int:
             wait_for_transform_job=args.wait_for_transform_job,
         )
 
-    start_epoch = time.time()
+    anchor_epoch = since_epoch
     try:
         cfg = _load_or_regen_trigger_config()
     except Exception as exc:
@@ -575,7 +522,7 @@ def main() -> int:
         print(f"Trigger returned 504; waiting {post_trigger_wait}s before verify")
 
     return verify(
-        start_epoch,
+        anchor_epoch,
         dd_max_wait=args.dd_max_wait,
         post_trigger_wait=post_trigger_wait,
         wait_for_transform_job=args.wait_for_transform_job,
