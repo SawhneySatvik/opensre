@@ -460,6 +460,19 @@ def _wait_for_auth_mode(expected: str, timeout: int = 180) -> bool:
 
 def ensure_ci_cluster_access() -> bool:
     """Ensure the GitHub Actions CI principal can access the EKS Kubernetes API."""
+    eks_client = get_boto3_client("eks", REGION)
+    try:
+        eks_client.describe_access_entry(
+            clusterName=CLUSTER_NAME,
+            principalArn=CI_IAM_PRINCIPAL,
+        )
+        print(f"CI access entry already exists for {CI_IAM_PRINCIPAL}")
+        return True
+    except ClientError as exc:
+        if exc.response["Error"]["Code"] != "ResourceNotFoundException":
+            print(f"WARN: could not describe CI EKS access entry: {exc}")
+            return False
+
     try:
         _enable_api_auth_mode()
         _grant_ci_access()

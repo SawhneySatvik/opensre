@@ -143,6 +143,7 @@ def test_verify_uses_timed_fallback_when_job_polling_unavailable() -> None:
         patch("tests.e2e.kubernetes.trigger_alert.get_channel_id", return_value="C123"),
         patch("tests.e2e.kubernetes.trigger_alert.time.sleep") as sleep,
     ):
-        assert verify(1_700_000_000.0, wait_for_transform_job=True) == 0
+        assert verify(1_700_000_000.0, wait_for_transform_job=True, dd_flush_wait=30) == 0
 
-    sleep.assert_called_once_with(PIPELINE_TIMED_FALLBACK_SECONDS)
+    sleep.assert_any_call(PIPELINE_TIMED_FALLBACK_SECONDS)
+    sleep.assert_any_call(30)

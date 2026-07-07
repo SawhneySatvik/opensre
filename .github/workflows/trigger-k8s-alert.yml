@@ -17,6 +17,7 @@ jobs:
   trigger-alert:
     if: github.repository == 'Tracer-Cloud/opensre'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     env:
       AWS_REGION: us-east-1
       DD_API_KEY: ${{ secrets.DD_API_KEY }}
@@ -51,7 +52,7 @@ jobs:
       - name: Install project
         run: uv sync --frozen
 
-      - name: Trigger pipeline and verify Datadog + Slack (~12 min)
+      - name: Trigger pipeline and verify Datadog + Slack (~15 min)
         if: ${{ inputs.verify == true || github.event_name == 'schedule' }}
         id: trigger
         run: |

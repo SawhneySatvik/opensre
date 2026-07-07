@@ -43,7 +43,7 @@ DEFAULT_DD_MAX_WAIT = 300
 DEFAULT_SLACK_MAX_WAIT = 300
 DEFAULT_POST_TRIGGER_WAIT = 0
 POST_TRIGGER_WAIT_ON_504 = 90
-PIPELINE_TIMED_FALLBACK_SECONDS = 180
+PIPELINE_TIMED_FALLBACK_SECONDS = 300
 DD_LOG_QUERY = "kube_namespace:tracer-test PIPELINE_ERROR"
 DD_SINCE_EPOCH_BUFFER_SECONDS = 60
 K8S_NAMESPACE = "tracer-test"
@@ -393,6 +393,9 @@ def verify(
             fallback_wait = max(post_trigger_wait, PIPELINE_TIMED_FALLBACK_SECONDS)
             print(f"Using timed pipeline backoff ({fallback_wait}s) before Datadog polling...")
             time.sleep(fallback_wait)
+            if dd_flush_wait > 0:
+                print(f"Waiting {dd_flush_wait}s for Datadog Agent to flush logs...")
+                time.sleep(dd_flush_wait)
         elif pipeline_outcome is False:
             print(
                 f"\nFAIL: pipeline inject-error path did not complete "
@@ -531,7 +534,6 @@ def main() -> int:
     post_trigger_wait = args.post_trigger_wait
     if response.get("status") == "accepted_timeout" and post_trigger_wait <= 0:
         post_trigger_wait = POST_TRIGGER_WAIT_ON_504
-        print(f"Trigger returned 504; waiting {post_trigger_wait}s before verify")
 
     return verify(
         anchor_epoch,
