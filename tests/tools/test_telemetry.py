@@ -1082,6 +1082,9 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         # fix_sentry_issue catches only its own FixIssueError for known states;
         # unexpected errors escape to the global #1476 wrapper.
         "fix_sentry_issue",
+        # fix_sentry_issue_start is the interactive-shell action wrapper; it
+        # dispatches to fix_sentry_issue and lets unexpected errors escape.
+        "fix_sentry_issue_start",
         "generate_work_status_report",
         "get_airflow_dag_runs",
         "get_airflow_metrics",
