@@ -248,7 +248,7 @@ class ConnectedInvestigationAgent(EventEmitterMixin, ToolFilterMixin):
                     messages=messages,
                     executed_hypotheses=executed_hypotheses,
                     tool_context=tool_context,
-                    investigation_loop_count=iteration + 1,
+                    investigation_loop_count=loops_completed,
                 )
 
             loops_completed = iteration + 1

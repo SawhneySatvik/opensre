@@ -60,8 +60,8 @@ def run_connected_investigation(
         _run_stage("diagnose", diagnose, state)
         _run_stage("deliver", deliver, state)
     except Exception as exc:
+        bind_investigation_loop_metrics_from_state(state)
         capture_exception(exc)
         raise
 
-    bind_investigation_loop_metrics_from_state(state)
     return state

@@ -328,6 +328,48 @@ def test_track_investigation_emits_failed_on_exception(
     assert failed_props["failure_message"] == "boom"
 
 
+def test_capture_investigation_failed_includes_state_loop_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub = _StubAnalytics()
+    monkeypatch.setattr(cli, "get_analytics", lambda: stub)
+
+    cli.capture_investigation_failed(
+        failure_type="RuntimeError",
+        failure_message="boom",
+        shared_properties={"investigation_id": "inv-fail"},
+        state={"investigation_loop_count": 4, "investigation_iteration_cap": 20},
+    )
+
+    failed_props = stub.events[0][1] or {}
+    assert failed_props["investigation_loop_count"] == 4
+    assert failed_props["investigation_iteration_cap"] == 20
+
+
+def test_track_investigation_failed_uses_tracker_loop_metrics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    stub = _StubAnalytics()
+    monkeypatch.setattr(cli, "get_analytics", lambda: stub)
+
+    def _trigger() -> None:
+        with cli.track_investigation(
+            entrypoint=EntrypointSource.CLI_COMMAND,
+            trigger_mode=TriggerMode.FILE,
+        ) as tracker:
+            tracker.record_loop_metrics_from_state(
+                {"investigation_loop_count": 6, "investigation_iteration_cap": 20}
+            )
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError, match="boom"):
+        _trigger()
+
+    failed_props = stub.events[1][1] or {}
+    assert failed_props["investigation_loop_count"] == 6
+    assert failed_props["investigation_iteration_cap"] == 20
+
+
 def test_capture_investigation_outcome_and_cancelled(monkeypatch: pytest.MonkeyPatch) -> None:
     stub = _StubAnalytics()
     monkeypatch.setattr(cli, "get_analytics", lambda: stub)

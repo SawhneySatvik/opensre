@@ -107,7 +107,11 @@ def run_investigation(
         message="run_investigation failed",
         tags={"surface": "pipeline", "component": "tools.investigation.capability"},
     ):
-        return _run(initial, agent_class=agent_class)
+        from platform.analytics.investigation_loop import bind_investigation_loop_metrics_from_state
+
+        state = _run(initial, agent_class=agent_class)
+        bind_investigation_loop_metrics_from_state(state)
+        return state
 
 
 def resolve_investigation_context(
@@ -460,6 +464,7 @@ async def astream_investigation(
             bind_investigation_loop_metrics_from_state(state)
 
         except Exception as exc:
+            bind_investigation_loop_metrics_from_state(state)
             _capture_exception_once(exc, context="pipeline.astream_investigation")
             with contextlib.suppress(RuntimeError):
                 loop.call_soon_threadsafe(event_queue.put_nowait, exc)
