@@ -13,6 +13,7 @@ from __future__ import annotations
 
 TOOL_MODULES = (
     "fleet_monitoring",
+    "model_spend_tool",
     "python_execution_tool",
     "sre_guidance_tool",
     "watch_dog",

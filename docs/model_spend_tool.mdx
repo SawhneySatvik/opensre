@@ -1,0 +1,76 @@
+---
+title: Model Spend Tool
+description: Estimate AI spend and projected burn rate from token usage.
+---
+
+The model spend tool turns per-model token usage into a USD cost estimate and a projected
+hourly burn rate. It is a pure calculator: estimates come only from token counts and OpenSRE's
+local price table — it never calls a provider billing API and never claims your live credit balance.
+
+Unknown models are reported as **unpriced** (never silently costed at `$0`), so a missing rate is
+obvious rather than hidden.
+
+## Tools
+
+| Tool | What it does |
+|------|--------------|
+| `estimate_model_spend` | Estimate total USD from per-model token usage, broken down by model, token bucket, and cost per investigation lap. |
+| `summarize_model_burn_rate` | Project hourly burn (`$/hr`) from a per-minute token sample, or from run totals plus elapsed seconds. |
+
+Both are available in investigation and chat surfaces.
+
+## `estimate_model_spend`
+
+Inputs:
+
+- `token_usage_by_model` (required) — map of model name → token buckets (`input_tokens`,
+  `output_tokens`, and optional `cached_input_tokens`, `cache_read_input_tokens`,
+  `cache_creation_input_tokens`).
+- `laps` (optional) — investigation loop iterations, used to derive cost per lap.
+- `run_label` (optional) — a label echoed back in the result.
+- `price_overrides` (optional) — per-model `input_usd_per_million` / `output_usd_per_million`
+  overrides for custom or unlisted models.
+
+Example:
+
+```json
+{
+  "token_usage_by_model": {
+    "claude-sonnet-4-6": { "input_tokens": 120000, "output_tokens": 18000 }
+  },
+  "laps": 12
+}
+```
+
+Returns the total USD, a `by_model` breakdown (with `cost_by_bucket`), aggregate `cost_by_bucket`,
+`usd_per_lap`, and any `unpriced_models`.
+
+## `summarize_model_burn_rate`
+
+Inputs:
+
+- `token_usage_by_model` (required) — same shape as above.
+- `elapsed_seconds` (optional) — when set, the usage is treated as **totals** observed over that
+  window and normalized to per-minute before projecting to an hour. When omitted, the usage is
+  treated as a **per-minute** sample.
+- `run_label`, `price_overrides` — as above.
+
+Example (project burn from a 2-minute run's totals):
+
+```json
+{
+  "token_usage_by_model": {
+    "claude-sonnet-4-6": { "input_tokens": 40000, "output_tokens": 6000 }
+  },
+  "elapsed_seconds": 120
+}
+```
+
+Returns `total_usd_per_hour` and a per-model breakdown.
+
+## Notes
+
+- Estimates use OpenSRE's local price table; rates are periodically re-verified and the result
+  includes a `rates_verified_at` date.
+- Cache-bucket rates are cheaper than fresh input. If your token source only reports input/output,
+  estimates that omit cache buckets will run slightly high.

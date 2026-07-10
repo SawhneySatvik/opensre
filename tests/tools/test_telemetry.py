@@ -1005,6 +1005,9 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         "describe_rds_events",
         "describe_rds_instance",
         "ec2_instances_by_tag",
+        # model_spend_tool calculators are pure (tokens x local price table); they
+        # let unexpected errors escape to the global #1476 wrapper.
+        "estimate_model_spend",
         "execute_aws_operation",
         "execute_github_issue_mutation",
         "execute_python_code",
@@ -1191,6 +1194,7 @@ _TOOLS_WITHOUT_DELIBERATE_CATCH: frozenset[str] = frozenset(
         "slash_invoke",
         "summarize_community_followups",
         "summarize_github_pr_status",
+        "summarize_model_burn_rate",
         "synthetic_run",
         "task_cancel",
         # Temporal tools use try/finally only (to close the client); the client
