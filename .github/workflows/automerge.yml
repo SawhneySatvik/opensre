@@ -20,7 +20,9 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: automerge-${{ github.event.pull_request.head.ref || github.event.workflow_run.head_branch || github.run_id }}
+  # PR number / commit SHA, not branch name: fork branches can share a name,
+  # and a branch-name group would let one fork's run cancel another's.
+  group: automerge-${{ github.event.pull_request.number || github.event.workflow_run.head_sha || github.run_id }}
   cancel-in-progress: true
 
 jobs:
