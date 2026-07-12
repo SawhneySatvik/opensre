@@ -21,7 +21,7 @@ from functools import lru_cache
 from tools.system.fleet_monitoring.meters import TokenUsage
 
 #: ``models.dev`` pricing snapshot last refreshed for this vendored table.
-RATES_VERIFIED_AT = "2026-05-17"
+RATES_VERIFIED_AT = "2026-07-13"
 
 _USD_PER_M = 1_000_000
 
@@ -137,6 +137,12 @@ MODEL_PRICES: dict[str, ModelPrice] = {
     "claude-sonnet-4-6": _price(
         3.00, 15.00, cache_read_usd_per_million=0.30, cache_write_usd_per_million=3.75
     ),
+    # Sonnet 5 (GA 2026-06-30). Standard list price $3/$15; an introductory
+    # $2/$10 promo runs through 2026-08-31. We track the standard rate to avoid
+    # a promo time-bomb, matching how the rest of this table lists list prices.
+    "claude-sonnet-5": _price(
+        3.00, 15.00, cache_read_usd_per_million=0.30, cache_write_usd_per_million=3.75
+    ),
     "claude-opus-4": _price(
         15.00, 75.00, cache_read_usd_per_million=1.50, cache_write_usd_per_million=18.75
     ),
@@ -162,6 +168,12 @@ MODEL_PRICES: dict[str, ModelPrice] = {
         5.00, 25.00, cache_read_usd_per_million=0.50, cache_write_usd_per_million=6.25
     ),
     "claude-opus-4-7": _price(
+        5.00, 25.00, cache_read_usd_per_million=0.50, cache_write_usd_per_million=6.25
+    ),
+    # Opus 4.8 (GA 2026-05-28), $5/$25. Without this row `claude-opus-4-8`
+    # prefix-falls-back to the `claude-opus-4` family ($15/$75) — a 3x
+    # over-report of real spend.
+    "claude-opus-4-8": _price(
         5.00, 25.00, cache_read_usd_per_million=0.50, cache_write_usd_per_million=6.25
     ),
     "claude-fable-5": _price(
@@ -211,9 +223,11 @@ _UNSORTED_FAMILY_FALLBACKS: tuple[tuple[str, str], ...] = (
     ("claude-3-5-haiku", "claude-3-5-haiku-20241022"),
     ("claude-haiku-4-5", "claude-haiku-4-5"),
     ("claude-fable-5", "claude-fable-5"),
+    ("claude-sonnet-5", "claude-sonnet-5"),
     ("claude-sonnet-4-6", "claude-sonnet-4-6"),
     ("claude-sonnet-4-5", "claude-sonnet-4-5"),
     ("claude-sonnet-4", "claude-sonnet-4"),
+    ("claude-opus-4-8", "claude-opus-4-8"),
     ("claude-opus-4-7", "claude-opus-4-7"),
     ("claude-opus-4-6", "claude-opus-4-6"),
     ("claude-opus-4-5", "claude-opus-4-5"),

@@ -125,6 +125,59 @@ class TestGpt56Family:
         assert usd_per_token_blended("openai/gpt-5.6-sol") == usd_per_token_blended("gpt-5.6-sol")
 
 
+class TestClaude2026FlagshipModels:
+    """Claude Opus 4.8 and Sonnet 5 pricing.
+
+    Rates per https://platform.claude.com/docs/en/about-claude/pricing
+    (verified 2026-07-13), USD per 1M tokens:
+      - Opus 4.8 (GA 2026-05-28): $5 / $25, cache read $0.50, cache write $6.25.
+      - Sonnet 5 (GA 2026-06-30): standard $3 / $15, cache read $0.30, cache
+        write $3.75 (an intro $2/$10 promo runs to 2026-08-31; we track the
+        standard list price to avoid a promo time-bomb).
+    """
+
+    def test_opus_4_8_published_rates(self) -> None:
+        price = MODEL_PRICES["claude-opus-4-8"]
+        assert price.usd_per_input_token == pytest.approx(5.00 / 1e6)
+        assert price.usd_per_output_token == pytest.approx(25.00 / 1e6)
+        assert price.usd_per_cache_read_input_token == pytest.approx(0.50 / 1e6)
+        assert price.usd_per_cache_creation_input_token == pytest.approx(6.25 / 1e6)
+
+    def test_opus_4_8_is_not_priced_as_opus_4(self) -> None:
+        # The regression this row prevents: before it, ``claude-opus-4-8``
+        # prefix-matched the ``claude-opus-4`` family ($15/$75) and was billed
+        # at 3x the real $5/$25 rate — a silent over-report with no ``-`` cell.
+        assert usd_per_token_blended("claude-opus-4-8") != usd_per_token_blended("claude-opus-4")
+        assert usd_per_token_blended("claude-opus-4-8") == usd_per_token_blended("claude-opus-4-5")
+
+    def test_opus_4_8_dated_suffix_falls_back_to_family(self) -> None:
+        rate = usd_per_token_blended("claude-opus-4-8-20260528")
+        assert rate is not None
+        assert rate == usd_per_token_blended("claude-opus-4-8")
+
+    def test_sonnet_5_published_rates(self) -> None:
+        price = MODEL_PRICES["claude-sonnet-5"]
+        assert price.usd_per_input_token == pytest.approx(3.00 / 1e6)
+        assert price.usd_per_output_token == pytest.approx(15.00 / 1e6)
+        assert price.usd_per_cache_read_input_token == pytest.approx(0.30 / 1e6)
+        assert price.usd_per_cache_creation_input_token == pytest.approx(3.75 / 1e6)
+
+    def test_sonnet_5_is_priced_not_dash(self) -> None:
+        # Before this row ``claude-sonnet-5`` matched no family and rendered
+        # ``-``; it must now resolve to a real rate.
+        assert usd_per_token_blended("claude-sonnet-5") is not None
+
+    def test_sonnet_5_does_not_collide_with_sonnet_4_family(self) -> None:
+        # ``claude-sonnet-5`` must resolve to itself, not to a ``claude-sonnet-4``
+        # prefix rule.
+        assert normalize_model_name("claude-sonnet-5") == "claude-sonnet-5"
+
+    def test_sonnet_5_dated_suffix_falls_back_to_family(self) -> None:
+        rate = usd_per_token_blended("claude-sonnet-5-20260630")
+        assert rate is not None
+        assert rate == usd_per_token_blended("claude-sonnet-5")
+
+
 class TestUsdPerHour:
     def test_zero_tokens_per_min_is_zero_cost(self) -> None:
         # An idle agent costs $0/hr — the cell shows ``$0.00``, not
