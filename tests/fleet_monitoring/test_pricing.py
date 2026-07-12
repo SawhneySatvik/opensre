@@ -178,6 +178,47 @@ class TestClaude2026FlagshipModels:
         assert rate == usd_per_token_blended("claude-sonnet-5")
 
 
+class TestGemini25Models:
+    """Gemini 2.5 Pro / Flash pricing (Gemini CLI + Antigravity CLI).
+
+    Rates per https://ai.google.dev/gemini-api/docs/pricing (verified
+    2026-07-13), USD per 1M tokens:
+      - 2.5 Pro: $1.25 / $10 at <=200k prompt tokens (the flat table tracks
+        this tier; it rises to $2.50 / $15 above 200k).
+      - 2.5 Flash: $0.30 / $2.50.
+    """
+
+    def test_pro_published_rates(self) -> None:
+        price = MODEL_PRICES["gemini-2.5-pro"]
+        assert price.usd_per_input_token == pytest.approx(1.25 / 1e6)
+        assert price.usd_per_output_token == pytest.approx(10.00 / 1e6)
+
+    def test_flash_published_rates(self) -> None:
+        price = MODEL_PRICES["gemini-2.5-flash"]
+        assert price.usd_per_input_token == pytest.approx(0.30 / 1e6)
+        assert price.usd_per_output_token == pytest.approx(2.50 / 1e6)
+
+    def test_pro_and_flash_are_distinctly_priced(self) -> None:
+        pro = usd_per_token_blended("gemini-2.5-pro")
+        flash = usd_per_token_blended("gemini-2.5-flash")
+        assert pro is not None and flash is not None
+        assert pro > flash
+
+    def test_google_provider_prefix_resolves(self) -> None:
+        # OpenRouter/LiteLLM-style ids (``google/…``, ``gemini/…``) are stripped
+        # to the bare model before lookup.
+        assert usd_per_token_blended("google/gemini-2.5-pro") == usd_per_token_blended(
+            "gemini-2.5-pro"
+        )
+        assert normalize_model_name("gemini/gemini-2.5-flash") == "gemini-2.5-flash"
+
+    def test_version_suffix_falls_back_to_family(self) -> None:
+        # A dated/preview id resolves via the family prefix.
+        rate = usd_per_token_blended("gemini-2.5-flash-preview-05-20")
+        assert rate is not None
+        assert rate == usd_per_token_blended("gemini-2.5-flash")
+
+
 class TestUsdPerHour:
     def test_zero_tokens_per_min_is_zero_cost(self) -> None:
         # An idle agent costs $0/hr — the cell shows ``$0.00``, not

@@ -6,7 +6,9 @@ sampler now keeps input/output/cache buckets, so pricing applies the
 right rate to each bucket instead of using the legacy 70/30 blend.
 
 The local price table is a vendored snapshot of the ``models.dev``
-catalog for the Claude Code / Codex models this dashboard supports,
+catalog for the models this dashboard supports — the Claude Code / Codex
+models plus the Gemini CLI / Antigravity models (see
+``integrations/llm_cli/gemini_cli.py`` / ``antigravity_cli.py``) —
 following CodexBar's offline-first approach. Unknown models return
 ``None`` so the dashboard renders ``-`` rather than inventing a rate.
 """
@@ -216,6 +218,12 @@ MODEL_PRICES: dict[str, ModelPrice] = {
     "o3-deep-research": _price(10.00, 40.00, cache_read_usd_per_million=2.50),
     "o3-mini": _price(1.10, 4.40, cache_read_usd_per_million=0.55),
     "o3-pro": _price(20.00, 80.00),
+    # Google / Gemini CLI + Antigravity CLI. Gemini 2.5 Pro is context-tiered
+    # ($1.25/$10 at <=200k prompt tokens, $2.50/$15 above); the flat table
+    # tracks the <=200k tier, as it does not model context/batch surcharges for
+    # any provider.
+    "gemini-2.5-pro": _price(1.25, 10.00),
+    "gemini-2.5-flash": _price(0.30, 2.50),
 }
 
 _UNSORTED_FAMILY_FALLBACKS: tuple[tuple[str, str], ...] = (
@@ -265,6 +273,8 @@ _UNSORTED_FAMILY_FALLBACKS: tuple[tuple[str, str], ...] = (
     ("o3-mini", "o3-mini"),
     ("o3-pro", "o3-pro"),
     ("o3", "o3"),
+    ("gemini-2.5-pro", "gemini-2.5-pro"),
+    ("gemini-2.5-flash", "gemini-2.5-flash"),
 )
 
 # Longest-prefix-first so more specific families win. Build it
@@ -434,7 +444,7 @@ def _model_candidates(raw: str) -> tuple[str, ...]:
     trimmed = raw.strip()
     append(trimmed)
     lower = trimmed.lower()
-    for prefix in ("openai/", "anthropic/", "anthropic."):
+    for prefix in ("openai/", "anthropic/", "anthropic.", "google/", "gemini/"):
         if lower.startswith(prefix):
             append(trimmed[len(prefix) :])
 
