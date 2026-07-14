@@ -106,6 +106,7 @@
               "interactive-shell-privacy",
               "sessions",
               "fleet",
+              "model_spend_tool",
               "cron",
               "closed-loop-learning",
               "multi-instance-integrations"
