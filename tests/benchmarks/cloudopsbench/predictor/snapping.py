@@ -52,6 +52,35 @@ _ROOT_CAUSE_SNAP_CUTOFF = 0.8
 # concept pairs surface from future runs.
 _BLOCKED_CONCEPT_PAIRS: tuple[tuple[str, str], ...] = (("readiness", "liveness"),)
 
+# Generic Kubernetes/SRE phrasings mapped to the canonical token, consulted before
+# difflib (which only recovers lexical near-misses). Grounded in official K8s docs,
+# not the corpus labels, and forward-only: ambiguous shared symptoms (a bare
+# "restart", "no endpoints") are omitted so they fall through unchanged.
+_ROOT_CAUSE_ALIASES: dict[str, str] = {
+    "out_of_memory": "oom_killed",
+    "memory_limit_exceeded": "oom_killed",
+    "exceeded_memory_limit": "oom_killed",
+    "container_out_of_memory": "oom_killed",
+    "wrong_image_tag": "incorrect_image_reference",
+    "invalid_image_name": "incorrect_image_reference",
+    "image_not_found": "incorrect_image_reference",
+    "nonexistent_image": "incorrect_image_reference",
+    "image_tag_mismatch": "incorrect_image_reference",
+    "image_pull_secret_missing": "missing_image_pull_secret",
+    "missing_pull_secret": "missing_image_pull_secret",
+    "registry_authentication_failure": "missing_image_pull_secret",
+    "registry_auth_missing": "missing_image_pull_secret",
+    "cannot_resolve_service": "service_dns_resolution_failure",
+    "service_name_resolution_failure": "service_dns_resolution_failure",
+    "service_dns_failure": "service_dns_resolution_failure",
+    "selector_label_mismatch": "service_selector_mismatch",
+    "label_selector_mismatch": "service_selector_mismatch",
+    "service_selector_does_not_match_labels": "service_selector_mismatch",
+    "targetport_mismatch": "service_port_mapping_mismatch",
+    "target_port_mismatch": "service_port_mapping_mismatch",
+    "port_mapping_mismatch": "service_port_mapping_mismatch",
+}
+
 
 def _crosses_blocked_concept_boundary(predicted_norm: str, snapped: str) -> bool:
     """Refuse a snap that crosses a known concept boundary (readiness↔liveness)."""
@@ -87,6 +116,12 @@ def _snap_root_cause(raw: str) -> str:
     # scorer maps to Admission_Fault; keep the normalized form verbatim.
     if norm.startswith("namespace_"):
         return norm
+    # Documented-synonym snap (exact map lookup) before the fuzzy difflib step.
+    alias = _ROOT_CAUSE_ALIASES.get(norm)
+    if alias is not None:
+        if alias.lower() != norm:
+            logger.info("[predictor] aliased root_cause %r -> %r", cleaned, alias)
+        return alias
     match = difflib.get_close_matches(
         norm, list(_ROOT_CAUSE_BY_NORM), n=1, cutoff=_ROOT_CAUSE_SNAP_CUTOFF
     )

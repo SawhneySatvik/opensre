@@ -22,8 +22,11 @@ truth. Read it as "≥X% of cases opensre's text named the GT triple."
 
 from __future__ import annotations
 
+import pytest
+
 from tests.benchmarks.cloudopsbench.scoring import (
     _infer_fault_object,
+    _infer_root_cause,
     _score_investigation_native,
     infer_final_answer_from_opensre_text,
 )
@@ -178,3 +181,40 @@ def test_investigation_a1_zero_when_root_cause_phrasing_does_not_match() -> None
     scores = _score_investigation_native(case_data, _GT)
     assert scores["a1"] == 0.0
     assert scores["object_a1"] == 0.0
+
+
+# --- Broadened investigation-native coverage (#3109): more tokens parseable ---
+
+
+@pytest.mark.parametrize(
+    ("prose", "expected"),
+    [
+        ("the liveness probe is pointed at the wrong port", "liveness_probe_incorrect_port"),
+        ("liveness probe uses the wrong protocol handler", "liveness_probe_incorrect_protocol"),
+        ("the readiness probe checks the wrong port", "readiness_probe_incorrect_port"),
+        (
+            "readiness probe configured with the wrong protocol",
+            "readiness_probe_incorrect_protocol",
+        ),
+        ("the image registry dns lookup failed", "image_registry_dns_failure"),
+        ("the referenced secret binding is missing", "missing_secret_binding"),
+        ("pod network delay was observed between replicas", "pod_network_delay"),
+        ("the namespace cpu quota was exceeded", "namespace_cpu_quota_exceeded"),
+        ("namespace memory quota exceeded", "namespace_memory_quota_exceeded"),
+        ("a taint toleration mismatch kept the pod unscheduled", "taint_toleration_mismatch"),
+    ],
+)
+def test_infer_root_cause_covers_additional_tokens(prose: str, expected: str) -> None:
+    """Realistic, generic RCA prose for previously-uncovered tokens now resolves."""
+    assert _infer_root_cause(prose.lower()) == expected
+
+
+def test_infer_root_cause_unrelated_prose_returns_empty() -> None:
+    """No matching keyword set → "" (the parser never invents a token)."""
+    assert _infer_root_cause("the system looks healthy and nothing seems wrong") == ""
+
+
+def test_infer_root_cause_pod_network_delay_not_node_network_delay() -> None:
+    """Regression: pod-scoped network delay (Performance_Fault) must not be
+    reported as node_network_delay (Infrastructure_Fault)."""
+    assert _infer_root_cause("pod network delay between two replicas") == "pod_network_delay"
