@@ -25,6 +25,7 @@ from tools.system.fleet_monitoring.pricing import (
     PriceOverride,
     normalize_model_name,
     usd_per_hour_for_usage,
+    warm_cost_map,
 )
 from tools.system.fleet_monitoring.probe import ProcessSnapshot, env_value_for_pid, probe
 from tools.system.fleet_monitoring.providers import provider_for
@@ -73,6 +74,13 @@ def get_usd_per_hour(pid: int) -> float | None:
 
 
 async def _sampler_loop(interval: float) -> None:
+    # Pay the one-time ``import litellm`` for the price map here, off the
+    # interactive-shell render thread, so the first ``/fleet`` $/hr lookup is
+    # a warm dict read rather than a ~1s synchronous import.
+    try:
+        await asyncio.get_running_loop().run_in_executor(None, warm_cost_map)
+    except Exception:
+        logger.debug("pricing cost-map warm-up failed", exc_info=True)
     while True:
         registry = AgentRegistry()
         agents = _records_for_tick(registry)

@@ -1,11 +1,14 @@
 """Regression tests for LiteLLM package data in frozen release binaries.
 
-Azure OpenAI and ``OPENSRE_LLM_TRANSPORT=litellm`` import ``litellm`` at runtime.
-LiteLLM reads JSON price/context files from its package directory on import; the
-release PyInstaller build must bundle them under ``_internal/litellm/`` or the
-binary crashes with ``FileNotFoundError`` (see issue #3631).
-
-Workflow contract assertions live in ``tests/github_ci/test_release_workflow.py``.
+``litellm`` is imported unconditionally now that
+``tools/system/fleet_monitoring/pricing.py`` sources model rates from
+``litellm.model_cost`` (#4035) — the always-on dashboard sampler imports it, on
+top of the Azure OpenAI / ``OPENSRE_LLM_TRANSPORT=litellm`` transport paths.
+LiteLLM reads JSON price/context files from its package directory on import, and
+``pricing.py`` reads its ``model_prices_and_context_window_backup.json`` for the
+offline cost map; the release PyInstaller build must bundle them under
+``_internal/litellm/`` (via ``--collect-data litellm``) or the binary crashes
+with ``FileNotFoundError`` (see issue #3631).
 """
 
 from __future__ import annotations

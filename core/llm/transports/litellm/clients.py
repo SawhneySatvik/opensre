@@ -9,8 +9,12 @@ from typing import Any
 from core.llm.transports.litellm.frozen_tiktoken_bootstrap import (
     ensure_tiktoken_encodings_discoverable,
 )
+from core.llm.transports.litellm.local_cost_map_bootstrap import (
+    ensure_local_model_cost_map,
+)
 
 ensure_tiktoken_encodings_discoverable()
+ensure_local_model_cost_map()
 
 from litellm import completion  # noqa: E402
 from pydantic import BaseModel  # noqa: E402

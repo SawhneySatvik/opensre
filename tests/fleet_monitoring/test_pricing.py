@@ -273,3 +273,134 @@ class TestModelPricesTable:
         # default model the Codex CLI configures for paid accounts.
         for model in ("gpt-5", "gpt-5-codex", "gpt-4o"):
             assert model in MODEL_PRICES or usd_per_token_blended(model) is not None
+
+
+class TestLiteLLMPricingSource:
+    """Migration to LiteLLM's cost table (#4035)."""
+
+    def test_cost_map_is_pinned_offline(self) -> None:
+        # The always-on sampler imports this module, so LiteLLM's map must be
+        # pinned to its bundled snapshot — no HTTP fetch at import.
+        import os
+
+        assert os.environ.get("LITELLM_LOCAL_MODEL_COST_MAP") == "True"
+
+    def test_local_table_holds_only_ids_litellm_lacks(self) -> None:
+        # Reconciliation guard: nothing in the local fallback may also be
+        # priced by LiteLLM, or we'd be hand-maintaining a duplicate. If this
+        # fails after a ``litellm`` bump, delete the now-covered id(s).
+        from tools.system.fleet_monitoring.pricing import _litellm_price
+
+        dupes = [model for model in MODEL_PRICES if _litellm_price(model) is not None]
+        assert dupes == [], f"remove ids now covered by LiteLLM: {dupes}"
+
+    @pytest.mark.parametrize(
+        ("model", "input_per_m", "output_per_m"),
+        [
+            ("claude-sonnet-4-5", 3.0, 15.0),
+            ("claude-haiku-4-5", 1.0, 5.0),
+            ("claude-opus-4-5", 5.0, 25.0),
+            ("gpt-4o", 2.5, 10.0),
+        ],
+    )
+    def test_real_models_priced_from_litellm_at_expected_rates(
+        self, model: str, input_per_m: float, output_per_m: float
+    ) -> None:
+        # These ids are NOT in the local table — they must resolve via LiteLLM,
+        # at the rates the hand-vendored table used to carry (behavior-preserving).
+        from tools.system.fleet_monitoring.pricing import _litellm_price
+
+        assert model not in MODEL_PRICES
+        price = _litellm_price(model)
+        assert price is not None
+        assert price.usd_per_input_token == pytest.approx(input_per_m / 1e6)
+        assert price.usd_per_output_token == pytest.approx(output_per_m / 1e6)
+
+    def test_sonnet_45_cost_is_behavior_preserving(self) -> None:
+        # 1000 in / 500 out on sonnet-4.5 was $0.0105 before the migration.
+        usage = TokenUsage(input_tokens=1000, output_tokens=500)
+        assert usd_for_usage(usage, "claude-sonnet-4-5") == pytest.approx(0.0105)
+
+    def test_bedrock_prefixed_id_is_priced(self) -> None:
+        # Bedrock reports ``us.anthropic.…-v1:0`` ids; they must resolve, not ``-``.
+        usage = TokenUsage(input_tokens=1000, output_tokens=500)
+        cost = usd_for_usage(usage, "us.anthropic.claude-sonnet-4-5-20250929-v1:0")
+        assert cost is not None and cost > 0
+
+    def test_snapshot_read_failure_is_cached_and_falls_back_never_zero(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # A missing/unreadable bundled snapshot (e.g. absent from a frozen
+        # build) must degrade to the local table (and unpriced for snapshot-only
+        # ids) — never a crash, never a fake $0 — and be cached so the always-on
+        # sampler does not re-attempt the read on every tick.
+        from tools.system.fleet_monitoring import pricing
+
+        attempts = {"read": 0}
+
+        def _boom(*_args: object, **_kwargs: object) -> object:
+            attempts["read"] += 1
+            raise FileNotFoundError("snapshot missing")
+
+        monkeypatch.setattr(pricing, "_litellm_cost_map", None)
+        monkeypatch.setattr(pricing, "files", _boom)
+
+        usage = TokenUsage(input_tokens=1000, output_tokens=500)
+        assert usd_for_usage(usage, "gpt-5.6-sol") == pytest.approx(0.02)  # local fallback
+        assert usd_for_usage(usage, "gpt-4o") is None  # snapshot-only → unpriced
+        # Failure cached to {}, so the read was attempted at most once.
+        assert pricing._litellm_cost_map == {}
+        assert attempts["read"] == 1
+
+    def test_priced_from_local_snapshot_not_the_global(self) -> None:
+        # Guard that pricing reads litellm's *local* snapshot directly rather
+        # than the process-wide litellm.model_cost global (which a live fetch
+        # elsewhere can diverge). The blended rate must match the local file.
+        from tools.system.fleet_monitoring.pricing import _litellm_local_cost_map
+
+        entry = _litellm_local_cost_map()["claude-sonnet-4-5"]
+        expected = 0.7 * entry["input_cost_per_token"] + 0.3 * entry["output_cost_per_token"]
+        assert usd_per_token_blended("claude-sonnet-4-5") == pytest.approx(expected)
+
+    def test_local_snapshot_loads_a_substantial_table(self) -> None:
+        # Smoke guard: if litellm's packaged JSON is missing, the read degrades
+        # to {} rather than crashing — but that must be loud in CI, not silent.
+        from tools.system.fleet_monitoring.pricing import _litellm_local_cost_map
+
+        assert len(_litellm_local_cost_map()) > 1000
+
+
+class TestConfiguredProviderCompatibility:
+    """Coverage across providers wired in config, using real wire-format ids.
+
+    Providers routed through ``core/llm/providers/openai_compat_providers.py``
+    (deepseek, gemini, minimax, groq, …) report a *bare* model id, never
+    litellm's ``<provider>/<model>`` convention. These use that real wire
+    format, not a guessed one.
+    """
+
+    def test_deepseek_bare_model_has_a_price(self) -> None:
+        assert usd_per_token_blended("deepseek-chat") is not None
+
+    def test_gemini_bare_model_has_a_price(self) -> None:
+        assert usd_per_token_blended("gemini-2.5-pro") is not None
+
+    def test_groq_bare_model_resolves_via_compat_prefix(self) -> None:
+        # litellm only keys this under "groq/llama-3.3-70b-versatile"; the bare
+        # id Groq's API (and OpenSRE's wire format) uses must still resolve.
+        assert usd_per_token_blended("llama-3.3-70b-versatile") is not None
+
+    def test_minimax_mixed_case_bare_model_resolves(self) -> None:
+        # litellm keys MiniMax under "minimax/MiniMax-M2.1" (mixed case);
+        # OpenSRE sends the bare, differently-cased id.
+        assert usd_per_token_blended("MiniMax-M2.1") is not None
+
+    def test_nvidia_nim_is_unpriced_not_invented(self) -> None:
+        # litellm's snapshot has no NVIDIA NIM coverage today; it must render
+        # "-" (via PriceOverride/agents.yaml), never a guessed rate. If litellm
+        # adds coverage, update this test — don't just delete it.
+        assert usd_per_token_blended("meta/llama-3.1-70b-instruct") is None
+
+    def test_ollama_self_hosted_is_unpriced(self) -> None:
+        # Self-hosted models have no per-token API price to look up.
+        assert usd_per_token_blended("llama3") is None
