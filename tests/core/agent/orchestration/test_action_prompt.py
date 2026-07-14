@@ -86,6 +86,8 @@ def test_system_prompt_documents_followup_resolution() -> None:
     assert "do both" in prompt
     assert "recent conversation" in prompt
     assert "assistant_handoff" in prompt
+    assert "want me to: offering more slack roster" in prompt
+    assert "yes — please" in prompt
 
 
 def test_system_prompt_requires_same_response_for_slash_then_investigation() -> None:
@@ -122,6 +124,19 @@ def test_system_prompt_hands_off_natural_language_slash_status_questions() -> No
     assert "for model/provider shell-state questions specifically" in compact_prompt
     assert "unless the user explicitly typed a slash command" in compact_prompt
     assert "current llm settings in its environment context" in compact_prompt
+
+
+def test_system_prompt_routes_slack_teammate_reads_to_action_tools() -> None:
+    prompt = _SYSTEM_PROMPT_BASE.lower()
+    compact = prompt.replace(" ", "")
+    assert "slack teammate requests are action tools" in prompt
+    assert "not handoffs" in prompt
+    assert 'slack_read_messages(channel="#opensre-slack-testing"' in compact
+    assert "are not covered by the data-retrieval handoff rule" in prompt
+    assert "do not emit assistant_handoff for these" in prompt
+    assert "roster / people questions ignore channel_id" in prompt
+    assert "slack_list_team_members only" in prompt
+    assert "never slack_read_messages" in prompt
 
 
 def test_system_prompt_keeps_bare_alert_blob_as_handoff() -> None:
