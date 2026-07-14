@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import re
+import threading
 from collections.abc import Iterator
 from dataclasses import dataclass
 from functools import lru_cache
@@ -374,7 +375,10 @@ _COMPAT_PROVIDER_PREFIXES: tuple[str, ...] = ("groq/", "minimax/")
 
 #: Case-folded snapshot (``lower(key) -> entry``). ``None`` until first read;
 #: ``{}`` if the snapshot is unavailable, so lookups stop retrying the read.
+#: Guarded by ``_litellm_cost_map_lock`` because the sampler warms it on a
+#: background thread while the render thread may read it concurrently.
 _litellm_cost_map: dict[str, dict] | None = None
+_litellm_cost_map_lock = threading.Lock()
 
 
 def _is_number(value: object) -> TypeGuard[float]:
@@ -405,24 +409,30 @@ def _litellm_local_cost_map() -> dict[str, dict]:
 
     Never raises: a missing/unreadable file or non-dict payload is cached as
     ``{}`` so the always-on sampler stops re-attempting the read on every tick.
+    Thread-safe (double-checked lock) so concurrent warm/render callers load the
+    ~800 KB snapshot at most once, incl. under free-threaded CPython (PEP 703).
     """
     global _litellm_cost_map
-    if _litellm_cost_map is None:
-        try:
-            ensure_tiktoken_encodings_discoverable()
-            raw = json.loads(
-                files("litellm")
-                .joinpath(_LITELLM_PRICE_SNAPSHOT_FILENAME)
-                .read_text(encoding="utf-8")
-            )
-            _litellm_cost_map = (
-                {k.lower(): v for k, v in raw.items() if isinstance(v, dict)}
-                if isinstance(raw, dict)
-                else {}
-            )
-        except Exception:  # noqa: BLE001 - defensive: missing/renamed snapshot
-            logger.debug("litellm price snapshot unavailable; disabling it", exc_info=True)
-            _litellm_cost_map = {}
+    cached = _litellm_cost_map
+    if cached is not None:
+        return cached
+    with _litellm_cost_map_lock:
+        if _litellm_cost_map is None:
+            try:
+                ensure_tiktoken_encodings_discoverable()
+                raw = json.loads(
+                    files("litellm")
+                    .joinpath(_LITELLM_PRICE_SNAPSHOT_FILENAME)
+                    .read_text(encoding="utf-8")
+                )
+                _litellm_cost_map = (
+                    {k.lower(): v for k, v in raw.items() if isinstance(v, dict)}
+                    if isinstance(raw, dict)
+                    else {}
+                )
+            except Exception:  # noqa: BLE001 - defensive: missing/renamed snapshot
+                logger.debug("litellm price snapshot unavailable; disabling it", exc_info=True)
+                _litellm_cost_map = {}
     return _litellm_cost_map
 
 

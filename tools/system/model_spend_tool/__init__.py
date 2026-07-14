@@ -1,8 +1,9 @@
 """Model spend + burn-rate estimation tools (issue #3231).
 
 Pure calculators over token/model/lap metadata that reuse the fleet-monitoring
-price table. They never call a provider billing API — estimates come only from
-tokens x the local price table, and unknown models are surfaced as unpriced.
+pricer (LiteLLM's cost table, with a small local fallback). They never call a
+provider billing API — estimates come only from tokens x that rate table, and
+unknown models are surfaced as unpriced.
 """
 
 from __future__ import annotations
@@ -32,7 +33,13 @@ _TOKEN_USAGE_SCHEMA: dict[str, Any] = {
 
 _PRICE_OVERRIDES_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "description": "Optional per-model rate overrides, in USD per 1M tokens.",
+    "description": (
+        "Optional per-model rate overrides, in USD per 1M tokens. For a model "
+        "that is NOT in the price table, provide BOTH input_usd_per_million and "
+        "output_usd_per_million: a partial override cannot price an otherwise "
+        "unknown model, so it stays unpriced (listed in unpriced_models). For a "
+        "known model, either rate may be given on its own."
+    ),
     "additionalProperties": {
         "type": "object",
         "properties": {

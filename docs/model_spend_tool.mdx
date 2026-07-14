@@ -76,3 +76,7 @@ Returns `total_usd_per_hour` and a per-model breakdown.
   date, which reflects that local fallback table.
 - Cache-bucket rates are cheaper than fresh input. If your token source only reports input/output,
   estimates that omit cache buckets will run slightly high.
+- `price_overrides` for a model **not** in the price table must include **both** `input_usd_per_million`
+  and `output_usd_per_million`. A single rate cannot price an otherwise-unknown model, so it stays
+  unpriced (surfaced in `unpriced_models`) rather than guessed. A known model can be overridden on
+  one side only.

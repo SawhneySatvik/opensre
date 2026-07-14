@@ -51,6 +51,23 @@ def test_bucket_costs_sum_to_model_total() -> None:
     assert round(sum(entry["cost_by_bucket"].values()), 6) == entry["usd"]
 
 
+def test_cached_input_bucket_charges_only_cache_rate_and_sums() -> None:
+    # cached_input_tokens is a discounted SUBSET of input_tokens (Codex-style):
+    # the cached slice must be charged at the cache rate only (not the full input
+    # rate on top), and per-bucket costs must still sum to the model total.
+    usage = {"input_tokens": 2000, "output_tokens": 800, "cached_input_tokens": 500}
+    entry = estimate_model_spend({_KNOWN: usage})["by_model"][0]
+    buckets = entry["cost_by_bucket"]
+    assert buckets["cached_input"] > 0.0  # the cached branch is exercised
+    assert round(sum(buckets.values()), 6) == entry["usd"]
+    # The whole-usage total must match usd_for_usage directly (cached charged once).
+    expected = usd_for_usage(
+        TokenUsage(input_tokens=2000, output_tokens=800, cached_input_tokens=500), _KNOWN
+    )
+    assert expected is not None
+    assert entry["usd"] == round(float(expected), 6)
+
+
 def test_usd_per_lap_divides_total_by_laps() -> None:
     result = estimate_model_spend({_KNOWN: {"input_tokens": 1000, "output_tokens": 500}}, laps=5)
     assert result["laps"] == 5
@@ -89,6 +106,26 @@ def test_malformed_price_override_does_not_crash() -> None:
     # Override discarded → unknown model stays unpriced (never a crash, never $0).
     assert result["priced"] is False
     assert "custom-model" in result["unpriced_models"]
+
+
+def test_partial_override_on_unknown_model_stays_unpriced() -> None:
+    # A single rate cannot price an otherwise-unknown model (there is no base
+    # rate to fill the other side), so it stays unpriced and is surfaced in
+    # unpriced_models rather than guessed. The schema documents this contract.
+    result = estimate_model_spend(
+        {"custom-model": {"input_tokens": 1_000_000, "output_tokens": 1_000_000}},
+        price_overrides={"custom-model": {"input_usd_per_million": 2.0}},
+    )
+    assert result["priced"] is False
+    assert "custom-model" in result["unpriced_models"]
+    # Both rates for the same unknown model DO price it.
+    both = estimate_model_spend(
+        {"custom-model": {"input_tokens": 1_000_000, "output_tokens": 0}},
+        price_overrides={
+            "custom-model": {"input_usd_per_million": 2.0, "output_usd_per_million": 8.0}
+        },
+    )
+    assert both["priced"] is True and both["total_usd"] == 2.0
 
 
 def test_multiple_models_aggregate_only_priced() -> None:
