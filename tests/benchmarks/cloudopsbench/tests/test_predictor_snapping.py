@@ -327,3 +327,61 @@ def test_system_prompt_keeps_single_service_carveout() -> None:
         "Scope-rule carve-out must name at least 2 of the canonical "
         "single-service failure modes so the rule doesn't over-fire."
     )
+
+
+# --- Semantic-alias layer (#3109): generic phrasings snap before difflib ---
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("out of memory", "oom_killed"),
+        ("out-of-memory", "oom_killed"),
+        ("OOM killed", "oom_killed"),
+        ("memory limit exceeded", "oom_killed"),
+        ("wrong image tag", "incorrect_image_reference"),
+        ("image not found", "incorrect_image_reference"),
+        ("nonexistent image", "incorrect_image_reference"),
+        ("image pull secret missing", "missing_image_pull_secret"),
+        ("registry authentication failure", "missing_image_pull_secret"),
+        ("cannot resolve service", "service_dns_resolution_failure"),
+        ("service name resolution failure", "service_dns_resolution_failure"),
+        ("selector label mismatch", "service_selector_mismatch"),
+        ("service selector does not match labels", "service_selector_mismatch"),
+        ("targetPort mismatch", "service_port_mapping_mismatch"),
+        ("target port mismatch", "service_port_mapping_mismatch"),
+    ],
+)
+def test_snap_root_cause_maps_generic_synonyms_to_canonical(raw: str, expected: str) -> None:
+    """Documented generic phrasings snap to the canonical token via the alias map."""
+    assert _snap_root_cause(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("raw", "must_not_contain"),
+    [
+        # Shared symptoms (restart: OOM/crash/bad-image; no endpoints: readiness/
+        # NetworkPolicy) must fall through, not snap onto one plausible token.
+        ("container was restarted", "probe"),
+        ("pod keeps restarting", "probe"),
+        ("no endpoints", "selector"),
+        ("no traffic reaching pods", "selector"),
+    ],
+)
+def test_snap_root_cause_does_not_overreach_on_shared_symptoms(
+    raw: str, must_not_contain: str
+) -> None:
+    """Forward-only: an ambiguous shared symptom must not snap onto a token."""
+    snapped = _snap_root_cause(raw)
+    assert must_not_contain not in snapped.lower()
+
+
+def test_alias_targets_are_all_canonical_vocabulary() -> None:
+    """Every alias must point at a real vocabulary token (else it auto-fails scoring)."""
+    from tests.benchmarks.cloudopsbench.predictor import _ROOT_CAUSE_ALIASES
+    from tests.benchmarks.cloudopsbench.predictor.vocabulary import _ROOT_CAUSES
+
+    canonical = set(_ROOT_CAUSES)
+    assert canonical, "vocabulary must be non-empty"
+    for phrase, target in _ROOT_CAUSE_ALIASES.items():
+        assert target in canonical, f"alias {phrase!r} -> {target!r} is not a canonical token"

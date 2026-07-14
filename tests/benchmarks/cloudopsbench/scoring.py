@@ -258,6 +258,18 @@ def _infer_root_cause(text: str) -> str:
         ("containerd_unavailable", ("containerd", "unavailable")),
         ("kube_proxy_unavailable", ("kube-proxy", "unavailable")),
         ("kube_scheduler_unavailable", ("kube-scheduler", "unavailable")),
+        # Broadened coverage (#3109): generic keyword sets for previously-missed
+        # tokens, appended (not reordered) so existing matches are unchanged.
+        ("liveness_probe_incorrect_protocol", ("liveness", "protocol")),
+        ("liveness_probe_incorrect_port", ("liveness", "port")),
+        ("readiness_probe_incorrect_protocol", ("readiness", "protocol")),
+        ("readiness_probe_incorrect_port", ("readiness", "port")),
+        ("image_registry_dns_failure", ("registry", "dns")),
+        ("missing_secret_binding", ("secret", "binding")),
+        ("pod_network_delay", ("pod", "network", "delay")),
+        ("namespace_cpu_quota_exceeded", ("namespace", "cpu", "quota")),
+        ("namespace_memory_quota_exceeded", ("namespace", "memory", "quota")),
+        ("taint_toleration_mismatch", ("taint", "toleration")),
     ]
     for root_cause, tokens in checks:
         if all(token in text for token in tokens):
