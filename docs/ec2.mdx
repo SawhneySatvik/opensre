@@ -1,0 +1,122 @@
+---
+title: "AWS EC2"
+description: "Discover EC2 application tiers and map them to instance IDs during incidents"
+---
+
+OpenSRE uses AWS EC2 to answer a topology question that comes up early in any non-Kubernetes AWS incident: **which application tier is behind this load balancer, or plausibly driving load on this database?** The planner enumerates instances grouped by their `tier` tag, so a CloudWatch CPU spike on `web` can be compared against `worker` without you supplying instance IDs by hand.
+
+EC2 calls are read-only and routed through the shared `aws_sdk_client` allowlist, so the integration cannot mutate your instances.
+
+## Prerequisites
+
+- AWS credentials configured per the [AWS integration](/aws) (role ARN recommended)
+- IAM permission for the single read-only EC2 action listed below
+- Instances tagged with `tier` — see [Tagging](#tagging) below
+
+## Setup
+
+### Environment variables
+
+```bash
+AWS_REGION=us-east-1
+```
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `AWS_REGION` | `us-east-1` | Region the instances live in. |
+
+There is no EC2-specific credential to configure — the tool reuses the account credentials from the [AWS integration](/aws).
+
+### Scope
+
+The tool needs **at least one** of `tier`, `instance_ids`, or `vpc_id` before it will run. With none of them set it reports itself unavailable rather than enumerating every instance in the account. Set the scope on the `ec2` source through the integrations store, or let the planner supply it per call.
+
+<Note>
+When your topology has **more than one tier**, leave `tier` unset and scope by `vpc_id` (or an explicit `instance_ids` list) instead. The tool then returns every instance grouped under `by_tier`, which is what lets the planner compare tiers side by side. Pinning a single `tier` filters the others out of the answer.
+</Note>
+
+## Tagging
+
+Instances are grouped by the value of their `tier` tag — either `tier` or `Tier` is read:
+
+```bash
+aws ec2 create-tags --resources i-0abc123 --tags Key=tier,Value=web
+```
+
+Instances with no `tier` tag are still returned, grouped under `untagged`. Auto Scaling group membership is picked up automatically from the `aws:autoscaling:groupName` tag.
+
+## Tools
+
+| Tool | AWS API call | What it returns |
+| --- | --- | --- |
+| `ec2_instances_by_tag` | `ec2:DescribeInstances` | Active instances with ID, tier, ASG, private IP, VPC, subnet, availability zone, state, instance type, and security groups — plus a per-tier grouping and precomputed counts. |
+
+### Parameters
+
+| Parameter | Default | Description |
+| --- | --- | --- |
+| `tier` | — | Filter to one `tier` tag value. Leave unset for multi-tier topologies. |
+| `instance_ids` | `[]` | Explicit instance IDs. When supplied, the page-size cap is dropped — the result is already bounded by the list. |
+| `vpc_id` | — | Filter to one VPC. |
+| `region` | `us-east-1` | AWS region to query. |
+
+### Response
+
+| Field | What it carries |
+| --- | --- |
+| `instances` | Per-instance detail (id, tier, asg, vpc, az, state, …). |
+| `by_tier` | Mapping of tier name to instance IDs — the load-attribution view. |
+| `tiers_detected` | Sorted list of every tier value seen. |
+| `summary` | Precomputed `by_tier_counts`, `total_active`, `primary_tier`, `vpcs_in_scope`, `azs_in_scope`. |
+| `truncated` | `true` when the safety cap stopped pagination early. |
+
+<Note>
+**Only active instances are counted.** Instances in `terminated`, `stopped`, `stopping`, or `shutting-down` state are dropped, because they cannot be driving load during the incident. `total_active` and every `by_tier` count reflect that — expect them to be lower than the instance count shown in the AWS console.
+</Note>
+
+<Note>
+Pagination stops at **5000 instances** and sets **`truncated: true`**. If you see it, the filter is broader than intended — narrow by `vpc_id` or `tier` rather than trusting the tier counts, which will understate the real fleet.
+</Note>
+
+### Use cases
+
+- Discovering EC2 application tiers when investigating a non-Kubernetes alert
+- Mapping a tier name (`web`, `worker`, …) to its instance IDs
+- Bridging EC2 to RDS when answering "which tier drives this database's load"
+- Enumerating the instances behind a load balancer before checking target health
+
+## IAM permissions
+
+The tool only needs one read-only EC2 action:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeInstances"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+Attach this policy to the same IAM role or user already configured for the [AWS integration](/aws). If you are already using the AWS managed `ReadOnlyAccess` policy, this action is already covered.
+
+<Note>
+**Execution identity:** the AWS integration's `role_arn` / credentials gate *availability* and supply the region, but the call itself runs through boto3's standard credential chain (environment variables, shared config, or the host's instance role) — the configured role is **not** assumed for the call. Ensure the identity the OpenSRE process runs as can perform `ec2:DescribeInstances`. This matches the other AWS tools (RDS/CloudTrail).
+</Note>
+
+## Troubleshooting
+
+| Symptom | Fix |
+| --- | --- |
+| **Tool reports itself unavailable** | Supply at least one of `tier`, `instance_ids`, or `vpc_id`. With no scope the tool will not enumerate the whole account. |
+| **AccessDenied on `ec2:DescribeInstances`** | Add the IAM policy above to the role or user used by the AWS integration. |
+| **Every instance lands under `untagged`** | The `tier` tag is missing or spelled differently. Only `tier` and `Tier` are read — see [Tagging](#tagging). |
+| **Fewer instances than the AWS console shows** | Stopped and terminated instances are excluded by design. |
+| **`truncated: true` in the response** | The filter matched more than 5000 instances. Narrow by `vpc_id` or `tier`. |
+| **Empty result in the right account** | Check `AWS_REGION` — instances outside the queried region are not returned. |
