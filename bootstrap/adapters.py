@@ -50,6 +50,26 @@ def install_harness_adapters() -> None:
     install_investigation_api()
 
 
+def install_notification_adapters() -> tuple[str, ...]:
+    """Register the outbound channels background-RCA notices dispatch through.
+
+    Without this the registry is empty and every configured channel reports
+    ``"unsupported"``, so the returned names are the diagnostic that tells an
+    empty registry apart from a genuinely unknown channel.
+
+    Importing an adapter module does not pull its vendor transport: each keeps
+    its client import inside the delivery function, so registering all four
+    costs nothing on the REPL boot path.
+    """
+    import integrations.buzz.background_adapter  # noqa: F401
+    import integrations.rocketchat.background_adapter  # noqa: F401
+    import integrations.smtp.background_adapter  # noqa: F401
+    import integrations.telegram.background_adapter  # noqa: F401
+    from platform.notifications.outbound_registry import registered_outbound_adapter_names
+
+    return registered_outbound_adapter_names()
+
+
 def install_scheduler_runners() -> None:
     """Register the runners scheduled tasks dispatch through.
 
@@ -67,5 +87,6 @@ def install_scheduler_runners() -> None:
 __all__ = [
     "install_harness_adapters",
     "install_investigation_api",
+    "install_notification_adapters",
     "install_scheduler_runners",
 ]
