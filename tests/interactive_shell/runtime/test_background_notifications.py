@@ -696,54 +696,75 @@ def test_deliver_background_notifications_rocketchat_body_keeps_actionable_tail(
     assert "NEXTSTEPSENTINEL0" in body
 
 
-def test_notifications_module_does_not_eagerly_import_rocketchat() -> None:
-    """Rocket.Chat loads only when its channel is processed (same rule as telegram)."""
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import surfaces.interactive_shell.runtime.background.notifications as n; "
-                + "import sys; "
-                + "assert 'integrations.rocketchat.delivery' not in sys.modules; "
-                + "print('OK: rocketchat not eagerly imported')"
-            ),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=30,
-    )
-    assert completed.returncode == 0, completed.stderr
-    assert "OK: rocketchat not eagerly imported" in completed.stdout
+# Vendor transports that must never load just because the notification path was
+# imported or its adapters were registered. Dotted names, because a bare
+# "telegram.delivery" is never a real sys.modules key and would pass vacuously.
+_VENDOR_TRANSPORTS = (
+    "integrations.telegram.delivery",
+    "integrations.telegram.credentials",
+    "integrations.rocketchat.delivery",
+    "integrations.buzz.delivery",
+)
+
+_ASSERT_NO_TRANSPORTS = "".join(
+    f"assert {module!r} not in sys.modules, {module!r}; " for module in _VENDOR_TRANSPORTS
+)
+
+# Importing the REPL entry point must not pull any vendor client onto the boot path.
+_SHIM_IMPORT_PROBE = (
+    "import sys; "
+    "import surfaces.interactive_shell.runtime.background.notifications; "
+    f"{_ASSERT_NO_TRANSPORTS}"
+    "print('OK: shim clean')"
+)
+
+# Stronger than the above: registering every adapter must also cost no transport.
+# This is what fails if someone hoists a vendor import to an adapter's module level.
+_BOOTSTRAP_PROBE = (
+    "import sys; "
+    "from bootstrap.adapters import install_notification_adapters; "
+    "names = install_notification_adapters(); "
+    "assert sorted(names) == ['buzz', 'email', 'rocketchat', 'telegram'], names; "
+    f"{_ASSERT_NO_TRANSPORTS}"
+    "print('OK: registration clean')"
+)
 
 
-def test_notifications_module_does_not_eagerly_import_telegram() -> None:
-    """AC-11 (corrected, dotted-module sys.modules check): telegram loads only when processed.
+def _run_probe(script: str) -> subprocess.CompletedProcess[str]:
+    """Run ``script`` in a fresh interpreter.
 
-    Run in a fresh subprocess: sys.modules is process-global, so checking it in
-    the current test process would be contaminated by whatever earlier tests in
-    this session already imported. The banned/vacuous draft check used the
-    non-dotted string 'telegram.delivery', which is never a real sys.modules
-    key and so prints True unconditionally, regardless of implementation.
+    sys.modules is process-global, so checking it inside the test process would
+    be contaminated by whatever earlier tests in the session already imported.
     """
-    completed = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import surfaces.interactive_shell.runtime.background.notifications as n; "
-                + "import sys; "
-                + "assert 'integrations.telegram.delivery' not in sys.modules; "
-                + "assert 'integrations.telegram.credentials' not in sys.modules; "
-                + "print('OK: telegram not eagerly imported')"
-            ),
-        ],
+    return subprocess.run(
+        [sys.executable, "-c", script],
         capture_output=True,
         text=True,
         timeout=30,
     )
+
+
+def test_notification_entry_point_does_not_eagerly_import_vendor_transports() -> None:
+    """The REPL imports this module at boot; no vendor client may come with it."""
+    completed = _run_probe(_SHIM_IMPORT_PROBE)
+
     assert completed.returncode == 0, completed.stderr
-    assert "OK: telegram not eagerly imported" in completed.stdout
+    assert "OK: shim clean" in completed.stdout
+
+
+def test_registering_every_adapter_pulls_no_vendor_transport() -> None:
+    """Registration is now all-or-nothing, so it must stay free.
+
+    The old chain imported one channel module per requested channel, so an
+    unused channel cost nothing by construction. The registry imports all four
+    up front, which is only acceptable because each adapter keeps its vendor
+    client inside the delivery function. Assert that rather than trust it: this
+    is the test that fails if a future edit hoists an import to module level.
+    """
+    completed = _run_probe(_BOOTSTRAP_PROBE)
+
+    assert completed.returncode == 0, completed.stderr
+    assert "OK: registration clean" in completed.stdout
 
 
 def test_deliver_background_notifications_email_only_never_touches_telegram_creds(
