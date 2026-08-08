@@ -906,3 +906,203 @@ def test_deliver_background_notifications_telegram_body_keeps_actionable_tail(
     assert "validity score" in body
     # Email keeps the full report; only the Telegram copy is budgeted.
     assert "r" * 1_000 not in body or len(body) <= 4096
+
+
+_BUZZ_ENTRY = {
+    "buzz": {
+        "source": "local env",
+        "config": {
+            "relay_url": "http://relay.example.com:3000",
+            "private_key": "bz-priv-key",
+            "auth_tag": "tag-1",
+            "buzz_path": "buzz",
+            "default_channel": "#incidents",
+        },
+    }
+}
+
+
+def test_deliver_background_notifications_sends_buzz(monkeypatch) -> None:
+    """Buzz shipped in #4756 with no coverage; this pins the success path."""
+    monkeypatch.setattr(
+        "integrations.catalog.resolve_effective_integrations",
+        lambda: dict(_BUZZ_ENTRY),
+    )
+
+    captured: dict[str, object] = {}
+
+    def _fake_post(
+        relay_url: str,
+        channel: str,
+        text: str,
+        private_key: str,
+        *,
+        auth_tag: str = "",
+        buzz_path: str = "buzz",
+        reply_to: str = "",
+    ) -> tuple[bool, str, str]:
+        captured.update(
+            relay_url=relay_url,
+            channel=channel,
+            text=text,
+            private_key=private_key,
+            auth_tag=auth_tag,
+            buzz_path=buzz_path,
+        )
+        return True, "", "evt-1"
+
+    monkeypatch.setattr("integrations.buzz.delivery.post_buzz_message", _fake_post)
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123",
+        status="completed",
+        command="/investigate checkout-latency",
+        root_cause="ROOTSENTINEL postgres connection pool saturation",
+        top_analysis=("TOPANALYSISSENTINEL rds cpu spike",),
+        next_steps=("NEXTSTEPSENTINEL raise pool size",),
+        stats={"tool_call_count": 4, "investigation_loop_count": 2, "validity_score": 0.8},
+    )
+
+    results = deliver_background_notifications(record=record, channels=("buzz",))
+
+    assert results == {"buzz": "sent"}
+    assert captured["relay_url"] == "http://relay.example.com:3000"
+    assert captured["channel"] == "#incidents"
+    assert captured["auth_tag"] == "tag-1"
+    body = str(captured["text"])
+    assert "ROOTSENTINEL" in body
+    assert "NEXTSTEPSENTINEL" in body
+
+
+def test_deliver_background_notifications_buzz_missing_integration(monkeypatch) -> None:
+    """No buzz entry at all."""
+    monkeypatch.setattr("integrations.catalog.resolve_effective_integrations", dict)
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+    results = deliver_background_notifications(record=record, channels=("buzz",))
+
+    assert results == {"buzz": "missing buzz integration: Buzz is not configured."}
+
+
+def test_deliver_background_notifications_buzz_missing_private_key(monkeypatch) -> None:
+    """A configured buzz entry with no private_key reports the same gap as no entry."""
+    monkeypatch.setattr(
+        "integrations.catalog.resolve_effective_integrations",
+        lambda: {
+            "buzz": {
+                "source": "local env",
+                "config": {"relay_url": "http://relay.example.com:3000", "private_key": ""},
+            }
+        },
+    )
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+    results = deliver_background_notifications(record=record, channels=("buzz",))
+
+    assert results == {"buzz": "missing buzz integration: Buzz is not configured."}
+
+
+def test_deliver_background_notifications_buzz_missing_default_channel(monkeypatch) -> None:
+    """A key without a destination is a configuration gap, named as such."""
+    monkeypatch.setattr(
+        "integrations.catalog.resolve_effective_integrations",
+        lambda: {
+            "buzz": {
+                "source": "local env",
+                "config": {"private_key": "bz-priv-key", "default_channel": ""},
+            }
+        },
+    )
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+    results = deliver_background_notifications(record=record, channels=("buzz",))
+
+    assert results == {
+        "buzz": (
+            "missing buzz integration: no default_channel configured "
+            "(set BUZZ_DEFAULT_CHANNEL or re-run setup)."
+        )
+    }
+
+
+def test_deliver_background_notifications_buzz_redacts_private_key_on_failure(
+    monkeypatch,
+) -> None:
+    """The failure string lands in the record and `/background show`, so the key
+    must not survive into it even when the transport echoes it back."""
+    monkeypatch.setattr(
+        "integrations.catalog.resolve_effective_integrations",
+        lambda: dict(_BUZZ_ENTRY),
+    )
+
+    def _fake_post(
+        relay_url: str,
+        channel: str,
+        text: str,
+        private_key: str,
+        *,
+        auth_tag: str = "",
+        buzz_path: str = "buzz",
+        reply_to: str = "",
+    ) -> tuple[bool, str, str]:
+        return False, f"relay rejected key {private_key}", ""
+
+    monkeypatch.setattr("integrations.buzz.delivery.post_buzz_message", _fake_post)
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+    results = deliver_background_notifications(record=record, channels=("buzz",))
+
+    outcome = results["buzz"]
+    assert outcome.startswith("failed: ")
+    assert "bz-priv-key" not in outcome
+
+
+def test_deliver_background_notifications_unknown_channel_is_unsupported(monkeypatch) -> None:
+    """An unrecognised channel name reports 'unsupported' rather than raising."""
+    monkeypatch.setattr("integrations.catalog.resolve_effective_integrations", dict)
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+    results = deliver_background_notifications(record=record, channels=("nope",))
+
+    assert results == {"nope": "unsupported"}
+
+
+def test_deliver_background_notifications_preserves_caller_channel_order(monkeypatch) -> None:
+    """`/background show` renders `results` in insertion order, so the dispatcher
+    must follow the caller's channel tuple. Dict equality cannot catch a reorder,
+    so assert the key sequence explicitly."""
+    monkeypatch.setattr("integrations.catalog.resolve_effective_integrations", dict)
+
+    def _raise_missing(**_: object) -> None:
+        raise OpenSREError("TELEGRAM_BOT_TOKEN is not set.")
+
+    monkeypatch.setattr(
+        "integrations.telegram.credentials.load_credentials_from_env",
+        _raise_missing,
+    )
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text", root_cause="boom"
+    )
+
+    forward = deliver_background_notifications(
+        record=record, channels=("email", "telegram", "rocketchat", "buzz")
+    )
+    reverse = deliver_background_notifications(
+        record=record, channels=("buzz", "rocketchat", "telegram", "email")
+    )
+
+    assert list(forward) == ["email", "telegram", "rocketchat", "buzz"]
+    assert list(reverse) == ["buzz", "rocketchat", "telegram", "email"]
+    # Same outcomes either way; only the ordering differs.
+    assert forward == reverse
