@@ -57,9 +57,9 @@ def install_notification_adapters() -> tuple[str, ...]:
     ``"unsupported"``, so the returned names are the diagnostic that tells an
     empty registry apart from a genuinely unknown channel.
 
-    Importing an adapter module does not pull its vendor transport: each keeps
-    its client import inside the delivery function, so registering all four
-    costs nothing on the REPL boot path.
+    Called per background-RCA completion, not at boot. Importing an adapter
+    module does not pull its vendor transport, because each keeps its client
+    import inside the delivery function.
     """
     import integrations.buzz.background_adapter  # noqa: F401
     import integrations.rocketchat.background_adapter  # noqa: F401

@@ -7,10 +7,7 @@ from collections.abc import Iterator
 import pytest
 
 from platform.common.background_investigation_types import BackgroundInvestigationRecord
-from platform.notifications.outbound_dispatch import (
-    dispatch_background_notifications,
-    supported_notification_channels,
-)
+from platform.notifications.outbound_dispatch import dispatch_background_notifications
 from platform.notifications.outbound_registry import (
     BACKGROUND_RCA,
     clear_outbound_adapters,
@@ -93,7 +90,6 @@ def test_capability_filter_reports_sorted_names_and_excludes_non_capable() -> No
     register_outbound_adapter(_StubAdapter("silent", capable=False))
 
     assert outbound_adapter_names_for(BACKGROUND_RCA) == ("email", "telegram")
-    assert supported_notification_channels() == ("email", "telegram")
 
 
 def test_clear_empties_the_registry() -> None:

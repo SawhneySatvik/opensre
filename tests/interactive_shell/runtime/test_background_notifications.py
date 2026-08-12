@@ -704,6 +704,8 @@ _VENDOR_TRANSPORTS = (
     "integrations.telegram.credentials",
     "integrations.rocketchat.delivery",
     "integrations.buzz.delivery",
+    "integrations.smtp.delivery",
+    "integrations.catalog",
 )
 
 _ASSERT_NO_TRANSPORTS = "".join(

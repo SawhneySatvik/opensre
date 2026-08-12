@@ -1,11 +1,8 @@
-"""Background RCA notification helpers.
+"""Background RCA notification entry point for the REPL runtime.
 
-Channel selection moved to the outbound adapter registry in
-``platform.notifications``. This stays as the REPL runtime's entry point:
-it runs the registration bootstrap, which ``platform`` cannot do itself
-because ``bootstrap`` sits above it in the layering contract.
-
-Imports stay inside the function so the REPL boot path pays for none of it.
+Channel selection lives in ``platform.notifications``. This runs the registration
+bootstrap first, which ``platform`` cannot do itself because ``bootstrap`` sits
+above it. Imports stay function-local so the REPL boot path pays for none of it.
 """
 
 from __future__ import annotations
