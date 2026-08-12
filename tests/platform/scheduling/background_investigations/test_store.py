@@ -412,3 +412,48 @@ def test_list_recent_is_newest_first_when_the_document_is_not_ascending(tmp_path
     store.save(_record(task_id="stepped-back"))
 
     assert [r.task_id for r in store.list_recent()] == ["newer", "older", "stepped-back"]
+
+
+def test_the_shell_and_a_chat_turn_share_one_document(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AC2's mechanism. The shell binds no storage scope and a chat transport binds
+    the deployment's organization, so before this the two wrote and read different
+    files and a chat lookup found nothing. Both must land on the org root."""
+    from config.constants import paths
+    from config.constants.billing import ORGANIZATION_ID_ENV
+    from config.principal import Actor, Principal, StorageScope
+    from config.scope_context import bound_storage_scope
+
+    monkeypatch.setattr(paths, "OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.delenv(paths.CONTEXT_ROOT_ENV, raising=False)
+    monkeypatch.setenv(ORGANIZATION_ID_ENV, "org_acme")
+
+    # The shell writes with nothing bound.
+    BackgroundInvestigationStore().save(_record(task_id="bg-shell"))
+
+    # A Telegram turn reads with the organization bound.
+    scope = StorageScope(principal=Principal.org("org_acme"), actor=Actor(id="U_ALICE"))
+    with bound_storage_scope(scope):
+        found = BackgroundInvestigationStore().get("bg-shell")
+
+    assert found is not None
+    assert found.root_cause == "pool saturation"
+    assert (tmp_path / "orgs" / "org_acme" / "background" / "investigations.json").is_file()
+
+
+def test_a_machine_with_no_organization_keeps_the_plain_layout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A laptop names no organization and has no second surface to share with."""
+    from config.constants import paths
+    from config.constants.billing import ORGANIZATION_ID_ENV
+
+    monkeypatch.setattr(paths, "OPENSRE_HOME_DIR", tmp_path)
+    monkeypatch.delenv(paths.CONTEXT_ROOT_ENV, raising=False)
+    monkeypatch.delenv(ORGANIZATION_ID_ENV, raising=False)
+
+    BackgroundInvestigationStore().save(_record(task_id="bg-laptop"))
+
+    assert (tmp_path / "background" / "investigations.json").is_file()
+    assert not (tmp_path / "orgs").exists()

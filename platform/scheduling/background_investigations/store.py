@@ -1,4 +1,9 @@
-"""Durable background-investigation records shared across processes."""
+"""Durable background-investigation records shared across processes.
+
+Resolved against ``deployment_home()``, so the shell (which binds no scope) and a
+chat transport (which binds the organization) read one document. Records are owned
+by the organization, not the member who ran the investigation.
+"""
 
 from __future__ import annotations
 
@@ -42,10 +47,10 @@ class UnreadableBackgroundInvestigationsError(RuntimeError):
 
 
 def _default_path() -> Path:
-    """Resolve the store path for the currently bound organization scope."""
-    from config.constants.paths import opensre_home
+    """Resolve the store path for the organization this deployment serves."""
+    from config.constants.paths import deployment_home
 
-    return opensre_home() / _STORE_DIRNAME / _STORE_FILENAME
+    return deployment_home() / _STORE_DIRNAME / _STORE_FILENAME
 
 
 class BackgroundInvestigationStore:
