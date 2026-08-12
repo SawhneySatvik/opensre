@@ -68,6 +68,10 @@ class AssistantPromptContextProvider(Protocol):
         """Emit grounding-cache diagnostics for ``reason``."""
 
 
+def _handoff_has_session_goal(handoff_contents: tuple[str, ...]) -> bool:
+    return any(tag.startswith("session_goal:") for tag in handoff_contents)
+
+
 def _assistant_context_blocks(
     *,
     turn_snapshot: TurnSnapshot,
@@ -76,20 +80,39 @@ def _assistant_context_blocks(
     tool_observation_on_screen: bool,
     suggested_prompt: str = SUGGESTED_PROMPT_AFTER_FAILED_SYNTHETIC_TEST,
 ) -> str:
+    omit_want_me_to = _handoff_has_session_goal(handoff_contents)
     return "".join(
         (
             _build_integration_guard(turn_snapshot),
             build_handoff_guidance_block(handoff_contents),
-            build_observation_block(tool_observation, on_screen=tool_observation_on_screen),
+            build_observation_block(
+                tool_observation,
+                on_screen=tool_observation_on_screen,
+                omit_want_me_to=omit_want_me_to,
+            ),
             synthetic_failure.build_block(turn_snapshot, suggested_prompt=suggested_prompt),
         )
     )
 
 
 def _build_integration_guard(ctx: TurnSnapshot) -> str:
-    """Render the no-integrations guidance block from the turn snapshot."""
-    if not (ctx.configured_integrations_known and not ctx.configured_integrations):
+    """Render what is connected, and the no-integrations guidance when empty.
+
+    Naming the connected set lets "X is not connected" be answered with what
+    *is* — the difference between an assertion and a checked result. The data
+    already reaches the gather prompt; the answer path was told only when the
+    set was empty, so a reply could not say what it had looked at.
+    """
+    if not ctx.configured_integrations_known:
         return ""
+
+    if ctx.configured_integrations:
+        connected = ", ".join(ctx.configured_integrations)
+        return (
+            f"Integrations connected in this session: {connected}. When the user "
+            "asks about a data source that is not in that list, say which ones "
+            "are connected rather than only that theirs is missing.\n\n"
+        )
 
     return (
         "No integrations are configured in this session. You may still help the user "

@@ -58,6 +58,8 @@ _EXCLUSIVE_STDIN_MENU_COMMANDS: frozenset[str] = frozenset(
         "/resume",
         "/new",
         "/rca",
+        "/background",
+        "/health",
     }
 )
 _EXCLUSIVE_STDIN_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
@@ -74,6 +76,9 @@ _EXCLUSIVE_STDIN_SUBCOMMANDS: frozenset[tuple[str, str]] = frozenset(
         ("/loops", "inbox"),
         ("/loops", "list"),
         ("/loops", "messages"),
+        ("/background", "status"),
+        ("/background", "list"),
+        ("/background", "show"),
         ("/rca", "history"),
         ("/rca", "list"),
         ("/rca", "ls"),

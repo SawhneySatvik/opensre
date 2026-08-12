@@ -107,9 +107,6 @@ If integration config, integration wiring, or related tools changed, also run th
 make verify-integrations
 ```
 
-If Fargate CDK code, its deployment commands, or infrastructure tests changed,
-also run:
-
 ## 5) Optional extra confidence
 
 You may run `make check` as a final pass, but it is heavier (`test-full`) than the required harness.

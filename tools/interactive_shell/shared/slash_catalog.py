@@ -173,6 +173,12 @@ MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
         "User asks to start, stop, check, or read logs of the gateway daemon",
         anti_examples=("User asks to send a single Telegram message (use messaging tools)",),
     ),
+    "/goal": _mcp(
+        "Show, set, or clear the session goal that keeps a multi-step ask "
+        "running across turns. Subcommands: show, set, clear.",
+        "User asks to set, inspect, or clear an ongoing goal for the session",
+        anti_examples=("User wants a durable todo list item (use /work)",),
+    ),
     "/guardrails": _mcp(
         "Manage sensitive-information guardrail rules. Subcommands: audit, init, rules, test.",
         "User asks about guardrails, PII rules, or sensitive-data masking configuration",
@@ -354,7 +360,8 @@ MCP_BY_COMMAND: dict[str, _SlashMcpFields] = {
     ),
     "/remote-sync": _mcp(
         "Mirror this machine's sessions and memory to an object store the user "
-        "owns (built-in: aws/S3, vercel Blob). Subcommands: status, sync, setup. "
+        "owns (built-in: aws/S3, gcs, vercel Blob, azure Blob). Subcommands: "
+        "status, sync, setup. "
         "Off until setup or env enable; integration credentials and model keys "
         "are never uploaded.",
         "User asks to sync, back up, set up remote sync, or restore conversations",

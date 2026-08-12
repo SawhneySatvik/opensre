@@ -15,8 +15,8 @@ def _now() -> str:
     return datetime.now(UTC).isoformat()
 
 
-class InMemorySessionStorage:
-    """SessionStorage backend that stores v2 records in process memory."""
+class InMemorySessionStore:
+    """SessionStore backend that stores v2 records in process memory."""
 
     def __init__(self) -> None:
         self._files: dict[str, list[dict[str, Any]]] = {}
@@ -219,12 +219,15 @@ class InMemorySessionStorage:
         records = self._files.get(session.session_id)
         if not records:
             return
-        if records[-1].get("type") == "leaf":
-            return
-        if not any(rec.get("type") != "session" for rec in records):
+        trailing_leaf = records[-1].get("type") == "leaf"
+        if not trailing_leaf and not any(rec.get("type") != "session" for rec in records):
             del self._files[session.session_id]
             return
-        if session.accumulated_context:
+        # A trailing ``leaf`` means a prior flush already closed the tip. Still
+        # allow live state (session goals) to append past that marker so
+        # mid-session ``/goal pause`` survives the next gateway ``resolve``;
+        # never write a second leaf (flush stays idempotent for end-of-session).
+        if session.accumulated_context and not trailing_leaf:
             self._append(
                 session.session_id,
                 "custom_message",
@@ -235,6 +238,27 @@ class InMemorySessionStorage:
                 },
             )
             records = self._files.get(session.session_id, records)
+        if hasattr(session, "session_goal"):
+            from core.agent_harness.session_goal.persist import (
+                SESSION_GOAL_STATE_CUSTOM_TYPE,
+                session_goal_state_snapshot,
+                should_persist_session_goal_state,
+            )
+
+            goal_state = session_goal_state_snapshot(session)
+            if should_persist_session_goal_state(goal_state, prior_records=records):
+                self._append(
+                    session.session_id,
+                    "custom_message",
+                    {
+                        "custom_type": SESSION_GOAL_STATE_CUSTOM_TYPE,
+                        "content": goal_state,
+                        "display": False,
+                    },
+                )
+                records = self._files.get(session.session_id, records)
+        if trailing_leaf:
+            return
         if session.agent.messages and not any(rec.get("type") == "message" for rec in records):
             for role, content in session.agent.messages:
                 self._append(

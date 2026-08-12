@@ -512,6 +512,25 @@ def test_local_llama_handoff_guidance_block() -> None:
     assert build_handoff_guidance_block(("docs:datadog_setup",)) == ""
 
 
+def test_l0_degraded_guidance_structures_a_useful_local_close() -> None:
+    """Missing analytics source: structured close (sentence → how → draft query)."""
+    block = build_handoff_guidance_block(("evidence_tier:L0_degraded:posthog_mcp",))
+    assert "draft query" in block.lower() or "draft" in block.lower()
+    assert "Want me to" in block
+    assert "fenced code block" in block.lower() or "draft" in block.lower()
+    assert "invent metric numbers" in block.lower()
+
+
+def test_l0_degraded_config_guidance_is_distinct_from_missing_source() -> None:
+    """Connected-but-auth-failed uses the config: suffix guidance block."""
+    config = build_handoff_guidance_block(("evidence_tier:L0_degraded:config:posthog_mcp",))
+    missing = build_handoff_guidance_block(("evidence_tier:L0_degraded:posthog_mcp",))
+    assert "credentials or configuration" in config.lower() or "auth/config" in config.lower()
+    assert "NOT connected" not in config
+    assert config != missing
+    assert "Want me to" in config
+
+
 def test_database_query_handoff_guidance_block_matches_prefix() -> None:
     """Oracle 332/331: ``database_query:*`` tags inject connect/query guidance."""
     block = build_handoff_guidance_block(("database_query:mysql_active_connections",))
@@ -519,6 +538,17 @@ def test_database_query_handoff_guidance_block_matches_prefix() -> None:
     assert "/mcp connect" in block
     assert "investigation" in block.lower()
     assert build_handoff_guidance_block(("database_query:mariadb_dashboard",)) == block
+
+
+def test_action_prompt_routes_mysql_query_to_database_query_handoff_not_setup() -> None:
+    """Oracle 332: query/read MySQL must not become /integrations setup|verify."""
+    prompt = build_action_system_prompt(_ctx())
+    assert "database_query:<topic>" in prompt
+    assert "database_query:mysql_active_connections" in prompt
+    assert "Do NOT set session_goal=true on database_query handoffs" in prompt
+    assert "Do NOT treat a request to *query/read*" in prompt
+    # Setup still documented for explicit configure requests.
+    assert 'args=["setup", "<service>"]' in prompt
 
 
 def test_incident_description_handoff_guidance_keeps_user_symptoms() -> None:

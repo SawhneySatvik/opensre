@@ -35,7 +35,11 @@ async def run_repl_async(
 ) -> int:
     """Run the shell on an existing event loop and return its exit code."""
     from platform.analytics.cli import identify_saved_github_username
+    from platform.logging import quiet_noisy_third_party_loggers
 
+    # Keep MCP schema-cache warnings / httpx chatter off the transcript —
+    # progress is soft status lines, not library WARNINGs.
+    quiet_noisy_third_party_loggers()
     identify_saved_github_username()
 
     cfg = config or ReplConfig.load()
@@ -49,7 +53,7 @@ async def run_repl_async(
         return run_initial_input(initial_input, session, out)
 
     # Open the session file now that we know this is an interactive REPL run.
-    SessionManager.for_session(session).open_storage(session)
+    SessionManager.for_session(session).open_store(session)
 
     try:
         if resume_session_id:

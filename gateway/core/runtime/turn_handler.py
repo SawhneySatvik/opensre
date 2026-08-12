@@ -22,7 +22,13 @@ from rich.console import Console
 
 from core.agent_harness.accounting.turn_accounting import DefaultTurnAccounting
 from core.agent_harness.harness import AgentSession, SessionConfig
-from core.agent_harness.session import SessionCore
+from core.agent_harness.session import SessionCore, SessionManager
+from core.agent_harness.session_goal.goal import SessionGoal
+from core.agent_harness.session_goal.progress import (
+    format_session_goal_progress,
+    format_session_goal_status_line,
+)
+from core.agent_harness.session_goal.run_until import run_until_session_goal
 from gateway.core.runtime.cancel_console import CancelConsole, ensure_turn_cancel
 from gateway.core.runtime.capability_policy import ensure_gateway_capability_policy
 from gateway.core.runtime.concurrency import TurnConcurrencyGate
@@ -52,7 +58,10 @@ class GatewayTurnHandler:
     One :class:`HeadlessAgent` is kept per logical session and reused across
     turns; per-turn sinks, accounting, and tool hooks are rebound via
     :meth:`HeadlessAgent.bind_turn`. Concurrent turns for different sessions
-    stay isolated. Chat goes through :meth:`AgentSession.chat`.
+    stay isolated. Chat goes through :func:`run_until_session_goal` (one action
+    turn; session-goal continuation only when a ``SessionGoal`` is attached via
+    structured handoff or an explicit host attach — same policy as the
+    interactive shell).
 
     When ``gate`` is set, capacity is checked here before the turn runs — the
     manager must not wrap this class in a second "turn handler".
@@ -129,7 +138,33 @@ class GatewayTurnHandler:
                     tool_hooks=getattr(sink, "tool_hooks", None),
                     console=turn_console,
                 )
-                turn_result = self._session_api.chat(text, agent=agent)
+
+                def _chat(message: str) -> Any:
+                    return self._session_api.chat(message, agent=agent)
+
+                def _cancel_requested() -> bool:
+                    return isinstance(cancel, threading.Event) and cancel.is_set()
+
+                def _on_progress(goal: SessionGoal) -> None:
+                    # Same progress contract as the interactive shell: paint mid-loop
+                    # and scrub happens inside run_until_session_goal. Gateway sinks
+                    # get a compact status line; full text goes to debug logs.
+                    full = format_session_goal_progress(goal, session=session)
+                    compact = format_session_goal_status_line(goal, session=session)
+                    if full:
+                        logger.debug("gateway_session_goal_progress\n%s", full)
+                    if compact:
+                        set_status = getattr(sink, "set_tool_status", None)
+                        if callable(set_status):
+                            set_status(compact)
+
+                turn_result = run_until_session_goal(
+                    _chat,
+                    session,
+                    text,
+                    cancel_requested=_cancel_requested,
+                    on_progress=_on_progress,
+                ).last_result
                 outbound_text = turn_result.primary_response_text
                 logger.debug(
                     "gateway_turn done intent=%s answered=%s outbound_chars=%s",
@@ -145,6 +180,9 @@ class GatewayTurnHandler:
                 # even when the turn produced no text.
                 if not turn_result.answered and not cancelled:
                     sink.finalize(outbound_text or EMPTY_RESPONSE_MESSAGE)
+                # Resolve rebuilds SessionCore from disk next inbound message —
+                # persist session_goal (attach / progress / /goal pause) now.
+                SessionManager.for_session(session).flush(session)
                 if surface:
                     capture_gateway_turn_completed(
                         surface=surface,

@@ -2,6 +2,11 @@
 
 from __future__ import annotations
 
+from core.agent_harness.prompts.action.multi_step_policy import (
+    ACTION_CONVERSATIONAL_SESSION_GOAL_RULE,
+    ACTION_LOCAL_SHELL_MULTI_STEP_RULE,
+)
+
 # Biases when the planner offers scheduling, from the CONTEXT setup_state
 # facts. Procedural steps live in skills (morning_report), not here.
 ACTION_SETUP_CAPACITY_SCHEDULE_RULE = (
@@ -14,7 +19,12 @@ ACTION_SETUP_CAPACITY_SCHEDULE_RULE = (
     "/integrations setup.\n"
 )
 
-__all__ = ("ACTION_SETUP_CAPACITY_SCHEDULE_RULE", "_SYSTEM_PROMPT_BASE")
+__all__ = (
+    "ACTION_CONVERSATIONAL_SESSION_GOAL_RULE",
+    "ACTION_LOCAL_SHELL_MULTI_STEP_RULE",
+    "ACTION_SETUP_CAPACITY_SCHEDULE_RULE",
+    "_SYSTEM_PROMPT_BASE",
+)
 
 _SYSTEM_PROMPT_BASE = (
     """You plan actions for the OpenSRE interactive shell.
@@ -232,7 +242,11 @@ connected right now (or "none" / "unknown"). Apply these rules in order:
   has elevated 500s and latency after deploy" — states a fact but does not ask
   you to find a cause. Emit assistant_handoff, even when integrations are
   connected and even when it reads urgent or "critical". Do NOT start an
-  investigation for it.
+  investigation for it. A multi-line dashboard paste with Service / Region /
+  Recent deploy / Logs lines and no investigate/analyze/diagnose/RCA verb is
+  still a bare incident → assistant_handoff (set evidence_kind=incident), never
+  investigation_start. Rich context does not upgrade a symptom paste into an
+  explicit investigate instruction.
 - A diagnostic question that is a FOLLOW-UP about a result you already produced
   (see RECENT CONVERSATION) — e.g. "why did it fail?" / "what caused the spike?"
   / "what happened?" after a completed investigation — is answered from that
@@ -324,6 +338,10 @@ slash_invoke:
 This should run the wizard for them; do not hand off just to tell the user to
 type the command. If no service/server is named, use assistant_handoff to ask
 which one.
+Do NOT treat a request to *query/read* a named database tool (active
+connections, status, dashboard) as setup/enable — that is assistant_handoff
+with ``database_query:<topic>``, even when a first-party MySQL/MariaDB
+integration exists.
 Other tools:
 - llm_set_provider — switch provider ONLY when the user names an EXACT provider
   target (e.g. "switch to anthropic", "use openai", "set provider to ollama").
@@ -340,7 +358,8 @@ Other tools:
   the assistant's previous reply — synthesize alert_text from that prior
   conversation (the original question plus the key evidence it reported). An
   implicit diagnostic cause question and a bare pasted alert blob remain
-  assistant_handoff.
+  assistant_handoff — including multi-line Service/Region/deploy/logs pastes
+  with no investigate verb.
 - synthetic_run — run synthetic benchmark scenario by id. Use the exact scenario
   number the user supplied. If the user gives only a three-digit prefix, choose
   the enum value beginning with that prefix.
@@ -467,47 +486,11 @@ invocation with no surrounding natural language — such as
 `curl wttr.in/Amsterdam`, `ls -la /tmp`, or `ping google.com` — is an explicit
 shell request; use shell_run directly.
 
-Local multi-step workflows: an IMPERATIVE request to create, generate, write,
-build, or run something locally — a script, a file, or a sequence of steps —
-is shell_run work, NOT a handoff, even when the message contains no literal
-command text. Do NOT hand off just to describe commands the user could run
-themselves. HOW you execute depends on what the user asked for:
-* User asked for a SCRIPT ("create/write a script ... and run it") → one
-  shell_run to write the script, one to run it. The script owns the loop.
-* User asked for SEQUENTIAL STEPS ("run N steps", "step by step", "each step
-  depends on / uses the previous one") → you MUST keep control of the loop:
-  emit exactly ONE shell_run per step via the DATA-DEPENDENT chain rule —
-  run step 1, observe its result, then emit step 2 populated from that
-  result, and continue until every requested step has run. Do NOT collapse
-  the steps into a single script, one-liner, or program, even though that
-  would produce the same final output — stepwise execution with observation
-  between steps IS the requested behavior, not an implementation detail.
-  Persist state across steps in a file (read the running state, update it,
-  write it back) so each step provably consumes the previous step's output.
-  Make each state-file write two-phase so a crash is recoverable from the
-  file alone: before doing a step's work, record `step N: started` with its
-  input; after the work, rewrite that entry as `step N: committed` with the
-  result. On recovery, the last committed entry is where to resume from — a
-  started-but-uncommitted step is re-run, committed steps are never redone.
-  After the final step completes, end the turn with a short completion
-  summary grounded in the executed tool results (final totals, produced file
-  paths, and any step that failed) — never invented values. For sequential
-  multi-step shell workflows this closing IS shown to the user, so do not
-  end the turn silently after the last step.
-Examples (all shell_run, executed in THIS turn):
-* "create a script that generates 5 random numbers and run it" → write
-  script, run script (the loop lives inside the script)
-* "run 5 sequential steps: each generates a random number, adds it to a
-  running total, and writes the result to a file" → FIVE chained shell_run
-  calls, one per step, each reading the total the previous step wrote;
-  never one combined script
-* "make demo_numbers.txt with a running total and show me the final result"
-Still assistant_handoff (no execution requested):
-* capability questions — "do you support consecutive steps?", "can you loop?"
-* explicit plan-only requests — "do not write any code yet; first create a
-  step-by-step plan"
-* how-to questions — "how would I script 5 sequential steps?"
-
+"""
+    + ACTION_LOCAL_SHELL_MULTI_STEP_RULE
+    + "\n"
+    + ACTION_CONVERSATIONAL_SESSION_GOAL_RULE
+    + """
 Compound requests with a non-executable clause: emit a tool call for each
 clause you CAN map (slash/cli/sample-alert/investigation/etc.) and simply omit
 any clause that is chatty filler ("sing a song", "tell me a joke"), off-topic,
@@ -553,6 +536,13 @@ service. Requests to list/query Datadog monitors, Grafana logs, Sentry issues,
 PostHog events, traces, sessions, or similar integration data are data lookups:
 emit assistant_handoff so the conversational gather loop can use the integration
 tools. Do not substitute `/integrations show <service>` for those records.
+It also does NOT apply to querying or reading data from a named database tool
+(MySQL, MariaDB, Postgres, etc.) — including prompts that cite a tool id such as
+``mysql-…`` and ask for active connections, status, or a dashboard read. Those
+are ``database_query:<topic>`` handoffs (see below). Do NOT emit
+slash_invoke ``/integrations verify|setup <service>`` or ``/mcp connect`` as a
+stand-in for answering the query; the assistant explains connect/setup after
+the handoff. Do NOT set session_goal=true on those handoffs.
 A vendor's own teammate-messaging actions (channel history, thread reads,
 workspace search, roster, join, reply, task capture, etc.) are NOT this
 category — use that vendor's action tools instead (see its action-prompt
@@ -597,7 +587,49 @@ call rather than relying on plain-text output. Use concise structured content ta
 when the topic is known — for example docs:datadog_setup, chat:greeting,
 provider:local_llama_connect for vague local-model connection requests, or
 database_query:<topic> when the user asks to query/read a named database tool
-(MySQL, MariaDB, etc.) that is not a first-party setup-wizard target.
+(MySQL, MariaDB, Postgres, etc.) — including first-party integrations and MCP
+tool ids. Emit ONLY that assistant_handoff (no slash_invoke setup/verify
+alongside it). Example: "Use the MySQL tool (ID: mysql-…) to query active
+connections" → assistant_handoff(content="database_query:mysql_active_connections").
+Also set these structured assistant_handoff fields when they apply (the harness
+keys policy off them; it does not scan user prose for intent). Prefer the
+schema fields over burying tags in content prose:
+- evidence_kind=metric_read — REQUIRED on every handoff that asks for a
+  product-analytics metric or count over a time window (unique users, OS
+  breakdown, retention, events, pageviews, “how many … in the last N days”).
+  Emit this even when an analytics integration appears connected — the harness
+  decides L0 vs L1 from that field plus live connectivity. Omit only for pure
+  explain/docs chat about analytics with no number request. Also set
+  session_goal=true on these handoffs so the host continues until the number
+  is delivered (the host derives attach from metric_read when the flag is
+  omitted; prefer setting the boolean explicitly).
+- evidence_kind=incident — bare incident / symptom handoffs.
+- session_goal=true — REQUIRED on every handoff for multi-step or
+  "keep going until done" chat checklists / walkthroughs (no local shell
+  work), and for metric_read count questions. The host session-goal loop keys
+  off this boolean; omitting it drops continuation (except metric_read, which
+  the host treats as attach). Prefer session_goal_items=["…", …] for checklist
+  criteria. Do NOT set session_goal=true on database_query handoffs — missing
+  DB connectivity is explained in one reply, not a multi-turn goal loop.
+- session_goal_max_turns=<n> — optional session-goal turn cap for that goal.
+- session_goal_items=["…", …] — checklist success criteria (one string per
+  item, in order). The host tracks completion via session_goal:done=<index>
+  in later replies; do not invent checklist items from synonyms.
+When a host session goal is active (or you just emitted session_goal:achieved
+for one), finish the reply without a Want me to: closer — the session-goal loop owns
+continuation; do not ask the user whether to continue or clear the goal.
+Never emit session_goal:achieved in the same turn as investigation_start —
+starting RCA is not finishing the goal. After investigation results (or other
+real tool answers) are in the reply and the condition's deliverables are met
+(issue id, count, next action, …), then emit session_goal:achieved.
+For metric_read / short checklists: when this turn's tools already produced
+the number and your reply reports it, finish the checklist in THAT reply —
+emit session_goal:done=0,1 (every completed index) and session_goal:achieved.
+Do not leave the host to run another outer turn that repeats the same answer.
+Legacy content-string tags still work if you must put them in content
+(``evidence_kind:metric_read`` or ``evidence_kind=metric_read``, same for
+``session_goal`` / ``session_goal_item``). Prefer the schema fields above so the
+kind is never mixed with prose.
 
 assistant_handoff has two modes, chosen with requires_gather:
 - requires_gather=true (the default) — the assistant runs a live evidence-gather

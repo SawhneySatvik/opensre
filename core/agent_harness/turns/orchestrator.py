@@ -19,7 +19,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, replace
-from typing import Any, Literal
+from typing import Any
 
 from config.llm_reasoning_effort import apply_reasoning_effort
 from core.agent_harness.ports import (
@@ -32,7 +32,7 @@ from core.agent_harness.ports import (
     PromptContextProvider,
     ReasoningClientProvider,
     RunRecordFactory,
-    SessionStore,
+    SessionState,
     StreamAnswerFn,
     TurnAccounting,
 )
@@ -41,16 +41,31 @@ from core.agent_harness.prompts.assistant import (
     build_cli_agent_turn_prompt,
 )
 from core.agent_harness.prompts.memory.conversation import expand_affirmative_follow_up
-from core.agent_harness.prompts.memory.prior_investigation import is_prior_investigation_follow_up
 from core.agent_harness.session.pending_offer import (
-    arm_pending_investigation_offer,
+    clear_unconfirmed_pending_offers,
     consume_confirmed_pending_offer,
-    finalize_gather_investigation_offer,
     first_pending_offer,
     is_pending_offer_confirmation,
 )
-from core.agent_harness.tools.tool_context import capability_not_explicitly_disabled
+from core.agent_harness.session_goal.goal import (
+    attach_session_goal_from_handoffs,
+    session_goal_is_active,
+)
+from core.agent_harness.turns.answer_finalize import (
+    finalize_routed_answer,
+    finish_streamed_response,
+)
 from core.agent_harness.turns.conversation_recording import record_conversation_turn
+from core.agent_harness.turns.evidence_need import (
+    EvidenceNeed,
+    classify_evidence_need,
+    handoff_tag_for,
+    reclassify_evidence_need_after_gather,
+    should_skip_gather,
+)
+from core.agent_harness.turns.gather_observation import coerce_gathered_evidence
+from core.agent_harness.turns.handoff_keys import HandoffTag
+from core.agent_harness.turns.handoff_policy import is_prior_investigation_follow_up_handoff
 from core.agent_harness.turns.host_cancel import host_cancel_requested
 from core.agent_harness.turns.transcript_compaction import auto_compact_if_needed
 from core.agent_harness.turns.turn_plan import TurnPlan, build_turn_plan
@@ -59,8 +74,15 @@ from core.agent_harness.turns.turn_results import (
     ToolCallingTurnResult,
     TurnResult,
 )
+from core.agent_harness.turns.turn_route import (
+    TurnRoute,
+    TurnRoutingInput,
+    route_turn,
+    routing_input_from_result,
+)
 from core.agent_harness.turns.turn_snapshot import TurnSnapshot
 from core.llm_invoke_errors import is_cli_timeout_error
+from platform.harness_ports import preferred_evidence_sources_for
 from platform.observability.trace.spans import component_span, emit_route
 
 log = logging.getLogger(__name__)
@@ -148,11 +170,11 @@ def _stream_response(
     )
 
 
-def _record_answer_turn(session: SessionStore, message: str, assistant_text: str) -> None:
+def _record_answer_turn(session: SessionState, message: str, assistant_text: str) -> None:
     record_conversation_turn(session, message, assistant_text)
 
 
-def _record_action_only_turn(session: SessionStore, message: str, assistant_text: str) -> None:
+def _record_action_only_turn(session: SessionState, message: str, assistant_text: str) -> None:
     text = assistant_text.strip()
     if not text:
         return
@@ -165,7 +187,7 @@ def _record_action_only_turn(session: SessionStore, message: str, assistant_text
 def stream_answer(
     # Direct answer (no tools) shared by the interactive shell and headless surfaces.
     message: str,
-    session: SessionStore,
+    session: SessionState,
     output: OutputSink,
     *,
     prompts: PromptContextProvider,
@@ -233,83 +255,9 @@ def _response_text(run: Any | None) -> str:
     return text or ""
 
 
-@dataclass(frozen=True)
-class TurnRoutingInput:
-    """Minimal facts the turn router decides on, snapshotted from the world."""
-
-    action_handled: bool
-    executed_success_count: int
-    has_observation: bool
-    investigation_dispatched: bool = False
-
-
-@dataclass(frozen=True)
-class TurnRoute:
-    """The chosen turn path."""
-
-    intent: Literal["summarize_observation", "handled_without_llm", "gather_and_answer"]
-
-
-def _is_literal_slash_command(text: str) -> bool:
-    """True when the user submitted an explicit ``/slash`` command line."""
-    return text.strip().startswith("/")
-
-
-def _route_turn(
-    routing: TurnRoutingInput,
-    *,
-    user_text: str = "",
-    handoff_contents: tuple[str, ...] = (),
-) -> TurnRoute:
-    """Decide the turn path from routing facts (pure)."""
-    if (
-        routing.investigation_dispatched
-        and routing.action_handled
-        and not _is_literal_slash_command(user_text)
-    ):
-        if routing.has_observation and routing.executed_success_count > 0:
-            return TurnRoute(intent="summarize_observation")
-        return TurnRoute(intent="handled_without_llm")
-    if (
-        routing.action_handled
-        and routing.has_observation
-        and routing.executed_success_count > 0
-        and not _is_literal_slash_command(user_text)
-    ):
-        return TurnRoute(intent="summarize_observation")
-    if routing.action_handled and not handoff_contents:
-        return TurnRoute(intent="handled_without_llm")
-    return TurnRoute(intent="gather_and_answer")
-
-
-def _routing_input_from_result(
-    action_result: ToolCallingTurnResult, observation: str | None
-) -> TurnRoutingInput:
-    return TurnRoutingInput(
-        action_handled=action_result.handled,
-        executed_success_count=action_result.executed_success_count,
-        has_observation=observation is not None,
-        investigation_dispatched=action_result.investigation_dispatched,
-    )
-
-
-def _is_prior_investigation_follow_up_handoff(handoff_contents: tuple[str, ...]) -> bool:
-    """True when the action planner handed off a session-prior-investigation follow-up."""
-    return is_prior_investigation_follow_up(handoff_contents)
-
-
-def _is_non_investigation_handoff(handoff_contents: tuple[str, ...]) -> bool:
-    """True for setup/query handoffs that must not force an investigate Want-me-to.
-
-    ``finalize_gather_investigation_offer`` rewrites any existing Want-me-to
-    closer to "run a full investigation". That is correct for diagnostic gather
-    turns, but wrong for ``database_query:*`` / ``provider:*`` handoffs where the
-    next step is connect/setup guidance.
-    """
-    return any(
-        content.startswith("database_query:") or content.startswith("provider:")
-        for content in handoff_contents
-    )
+# Back-compat aliases for tests/importers that still use private names.
+_route_turn = route_turn
+_routing_input_from_result = routing_input_from_result
 
 
 @dataclass(frozen=True)
@@ -363,9 +311,14 @@ def _gather_and_answer(
     turn_plan: TurnPlan,
     handoff_requires_gather: bool = True,
     output: OutputSink | None = None,
-) -> tuple[Any | None, str | None] | None:
-    """Run gather+answer, or ``None`` when the host cancelled mid-path."""
-    # Two cases skip the live gather loop:
+    evidence_need: EvidenceNeed | None = None,
+) -> tuple[Any | None, str | None, EvidenceNeed | None] | None:
+    """Run gather+answer, or ``None`` when the host cancelled mid-path.
+
+    Returns ``(run, observation, evidence_need)``. ``evidence_need`` may flip
+    from L1 to L0_degraded after gather when preferred-source auth/config fails.
+    """
+    # Three cases skip the live gather loop:
     # 1. Answer-only handoffs (``requires_gather=false``): the action turn's
     #    own tool work already produced what the reply needs, and a fresh sweep
     #    would answer a different question (observed live: a completed CI
@@ -378,61 +331,78 @@ def _gather_and_answer(
     #    emitting the tag *is* the judgement that the user means that incident,
     #    so a clock must not override it and answer with current conditions
     #    instead of what happened.
+    # 3. Metric/read asks whose authoritative source is missing
+    #    (``L0_degraded`` missing_source): gather would only thrash empty MCP
+    #    discovery. Config-failure L0 is decided *after* gather.
     if host_cancel_requested(output):
         return None
-    skip_gather = not handoff_requires_gather or (
-        _is_prior_investigation_follow_up_handoff(handoff_contents)
-        and turn_plan.snapshot.last_state is not None
+    skip_for_evidence = evidence_need is not None and should_skip_gather(evidence_need)
+    skip_gather = (
+        not handoff_requires_gather
+        or (
+            is_prior_investigation_follow_up_handoff(handoff_contents)
+            and turn_plan.snapshot.last_state is not None
+        )
+        or skip_for_evidence
     )
-    gathered = None if skip_gather else gather(text, turn_plan=turn_plan)
+    gathered_raw = None if skip_gather else gather(text, turn_plan=turn_plan)
     if host_cancel_requested(output):
         return None
     if skip_gather:
-        log.debug(
-            "gather skipped: %s",
-            "answer-only handoff (requires_gather=false)"
-            if not handoff_requires_gather
-            else "follow_up handoff with prior investigation state",
-        )
+        if skip_for_evidence:
+            reason = "L0_degraded — authoritative integration missing"
+        elif not handoff_requires_gather:
+            reason = "answer-only handoff (requires_gather=false)"
+        else:
+            reason = "follow_up handoff with prior investigation state"
+        log.debug("gather skipped: %s", reason)
+
+    gathered = coerce_gathered_evidence(gathered_raw)
+
+    # L1 → L0_degraded when gather shows preferred-source config/auth failure
+    # (typed tool_unavailable envelopes; not HogQL / empty-result noise).
+    # Refresh the handoff tag so the answer path gets reconnect guidance.
+    answer_handoffs = handoff_contents
+    if evidence_need is not None and not skip_gather:
+        prior = evidence_need
+        evidence_need = reclassify_evidence_need_after_gather(evidence_need, gathered)
+        if evidence_need is not prior:
+            tier_tag = handoff_tag_for(evidence_need)
+            if tier_tag is not None and tier_tag not in answer_handoffs:
+                # Drop a stale L1-era absence of L0 tag; replace any prior
+                # evidence_tier:L0_degraded:* with the config-failure tag.
+                answer_handoffs = tuple(
+                    tag
+                    for tag in answer_handoffs
+                    if not str(tag).startswith(f"{HandoffTag.EVIDENCE_TIER}:")
+                )
+                answer_handoffs = (*answer_handoffs, tier_tag)
+                log.debug("evidence reclassified after gather: %s", tier_tag)
 
     # Off-screen when we have evidence text so the prompt builder injects it;
     # on-screen (plain path) when there is nothing to inject.
     # Defer Want-me-to paint only when the gather closer rewrite will flush it.
     # Follow-ups skip that rewrite; deferring on non-TTY would hold the whole
     # answer forever (oracle / CI consoles use force_terminal=False).
-    observation = gathered if gathered else None
+    observation = gathered.observation if gathered is not None else None
     run = answer(
         text,
         AnswerRequest(
             tool_observation=observation,
             tool_observation_on_screen=observation is None,
-            handoff_contents=handoff_contents,
+            handoff_contents=answer_handoffs,
             turn_plan=turn_plan,
             defer_want_me_to_closer=not skip_gather,
         ),
     )
     if host_cancel_requested(output):
         return None
-    return run, observation
-
-
-def _finish_streamed_response(output: OutputSink | None, text: str) -> None:
-    """Flush deferred/rewritten gather paint on surfaces that support it."""
-    if output is None:
-        return
-    finish = getattr(output, "finish_streamed_response", None)
-    if callable(finish):
-        finish(text)
-        return
-    # Gateway sinks expose ``finalize`` for an in-place edit of the answer.
-    finalize = getattr(output, "finalize", None)
-    if callable(finalize):
-        finalize(text)
+    return run, observation, evidence_need
 
 
 def run_turn(
     text: str,
-    session: SessionStore,
+    session: SessionState,
     *,
     execute_actions: ExecuteActions,
     answer: StreamAnswerFn,
@@ -478,6 +448,10 @@ def run_turn(
     # Offer is consumed only once the command lands — clearing here would burn
     # it on a rejected ``cron add``, leaving a second "yes" with nothing to expand.
     confirms_pending = is_pending_offer_confirmation(session, expanded)
+    if not confirms_pending:
+        # User moved on: drop stale bare-yes offers so a later "yes" cannot
+        # connect the wrong integration or start an old investigation.
+        clear_unconfirmed_pending_offers(session)
     text = expanded
 
     # Snapshot session state before any turn mutations. Both the action agent
@@ -511,7 +485,31 @@ def run_turn(
         log.debug("turn cancelled after action; skipping gather/answer")
         return aborted
 
+    # Policy from typed AssistantHandoff fields (schema decode); tag strings
+    # are legacy fallback only — never user-text keywords.
+    attach_session_goal_from_handoffs(
+        session,
+        action_result.handoff_contents,
+        condition=text,
+        handoffs=action_result.assistant_handoffs,
+    )
+    evidence_need = classify_evidence_need(
+        handoff_contents=action_result.handoff_contents,
+        handoffs=action_result.assistant_handoffs,
+        resolved_integrations=turn_plan.resolved_integrations,
+        preferred_sources_for=preferred_evidence_sources_for,
+    )
+
     handoff_contents = action_result.handoff_contents
+    tier_tag = handoff_tag_for(evidence_need)
+    if tier_tag is not None and tier_tag not in handoff_contents:
+        handoff_contents = (*handoff_contents, tier_tag)
+    # Host ``/goal set`` goals never appear in action handoff tags — inject a
+    # guidance tag so the assistant omits Want-me-to (observation + HANDOFF).
+    if session_goal_is_active(session) and not any(
+        tag.startswith("session_goal:") for tag in handoff_contents
+    ):
+        handoff_contents = (*handoff_contents, "session_goal:continue")
     observation = session.last_command_observation
     route = _route_turn(
         _routing_input_from_result(action_result, observation),
@@ -582,10 +580,13 @@ def run_turn(
                     turn_plan=turn_plan,
                     handoff_requires_gather=action_result.handoff_requires_gather,
                     output=output,
+                    evidence_need=evidence_need,
                 )
             if gathered_outcome is None:
                 return _cancelled_turn_result(accounting, action_result)
-            run, gathered = gathered_outcome
+            run, gathered, updated_need = gathered_outcome
+            if updated_need is not None:
+                evidence_need = updated_need
             outcome = _RouteOutcome(
                 final_intent="cli_agent_fallback",
                 response_text=_response_text(run),
@@ -595,39 +596,21 @@ def run_turn(
         else:
             raise AssertionError(f"Unknown route intent: {route.intent!r}")
 
-        # Arm structured investigate-accept. Gather answers force the canonical
-        # Want-me-to closer (dogfood: dual paste/integrations menus broke yes).
-        # Skip when this turn already confirmed a pending offer, when the
-        # surface disabled the investigation capability (gateway), or when the
-        # handoff is setup/query guidance — otherwise yes expands to
-        # /investigate alert:… with no investigation capability (or the wrong
-        # next step for a MySQL/MCP connect request).
-        if not confirms_pending and capability_not_explicitly_disabled(session, "investigation"):
-            if (
-                route.intent == "gather_and_answer"
-                and not _is_prior_investigation_follow_up_handoff(handoff_contents)
-                and not _is_non_investigation_handoff(handoff_contents)
-            ):
-                response_text, _offer = finalize_gather_investigation_offer(
-                    session,
-                    user_text=original_user_text,
-                    assistant_text=outcome.response_text,
-                    observation=outcome.evidence_for_offer,
-                )
-                outcome = replace(outcome, response_text=response_text)
-                _finish_streamed_response(output, response_text)
-            else:
-                arm_pending_investigation_offer(
-                    session,
-                    user_text=original_user_text,
-                    assistant_text=outcome.response_text,
-                    observation=outcome.evidence_for_offer,
-                )
-                # Follow-up / setup-query gather answers may still have deferred
-                # paint if a prior path set defer=True; flush so non-TTY hosts
-                # see text.
-                if route.intent == "gather_and_answer":
-                    _finish_streamed_response(output, outcome.response_text)
+        # Post-route seam only: CTA / Want-me-to / stream flush. Never gate
+        # route selection on locals from finalize (see answer_finalize).
+        finalized = finalize_routed_answer(
+            session=session,
+            route_intent=route.intent,
+            response_text=outcome.response_text,
+            evidence_for_offer=outcome.evidence_for_offer,
+            evidence_need=evidence_need,
+            handoff_contents=handoff_contents,
+            original_user_text=original_user_text,
+            confirms_pending=confirms_pending,
+        )
+        outcome = replace(outcome, response_text=finalized.response_text)
+        if finalized.finish_stream:
+            finish_streamed_response(output, finalized.response_text)
 
         return accounting.finalize(
             TurnResult(
@@ -640,6 +623,8 @@ def run_turn(
 
 
 __all__ = [
+    "TurnRoute",
+    "TurnRoutingInput",
     "run_turn",
     "stream_answer",
 ]

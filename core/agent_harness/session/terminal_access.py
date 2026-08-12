@@ -89,10 +89,27 @@ def set_auto_command(session: Any, command: str) -> None:
     )
 
 
+def clear_pending_autosubmit(session: Any) -> None:
+    """Drop queued REPL autosubmit when present (no-op on SessionCore).
+
+    Shell ``/goal pause`` and the outer session-goal loop must clear a queued
+    next turn without assuming ``session.terminal`` exists — gateway sessions
+    are bare :class:`~core.agent_harness.session.SessionCore`.
+    """
+    terminal = session_terminal(session)
+    if terminal is None:
+        return
+    if hasattr(terminal, "pending_prompt_default"):
+        terminal.pending_prompt_default = None
+    if hasattr(terminal, "pending_prompt_autosubmit"):
+        terminal.pending_prompt_autosubmit = False
+
+
 __all__ = [
     "background_investigations",
     "background_mode_enabled",
     "background_notification_channels",
+    "clear_pending_autosubmit",
     "exclusive_stdin_active",
     "pop_turn_outcome_hint",
     "session_terminal",

@@ -14,6 +14,7 @@ from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Any, Protocol, runtime_checkable
 
+from core.agent_harness.turns.gather_observation import GatheredEvidence
 from core.agent_harness.turns.turn_results import ToolCallingTurnResult, TurnResult
 
 # A tool-loop event callback: ``(kind, data)`` where kind is e.g. "tool_start".
@@ -53,7 +54,7 @@ class OutputSink(Protocol):
 
 
 @runtime_checkable
-class SessionStore(Protocol):
+class SessionState(Protocol):
     """Mutable per-session state the engine reads and writes.
 
     ``Session`` satisfies this structurally. The fields mirror what the
@@ -97,7 +98,7 @@ class SessionBindable(Protocol):
     only invokes it when the port structurally matches.
     """
 
-    def bind_session(self, session: SessionStore) -> None:
+    def bind_session(self, session: SessionState) -> None:
         """Point this port at ``session`` (same logical session, new object)."""
 
 
@@ -247,7 +248,7 @@ class AnswerRequest:
     tool_observation: str | None = None
     tool_observation_on_screen: bool = True
     handoff_contents: tuple[str, ...] = ()
-    # ``Any`` rather than ``TurnPlan``: that type imports ``SessionStore`` from
+    # ``Any`` rather than ``TurnPlan``: that type imports ``SessionState`` from
     # here, so naming it — even under ``TYPE_CHECKING`` — closes an import cycle
     # this repo's check rejects.
     turn_plan: Any = None
@@ -266,8 +267,13 @@ class StreamAnswerFn(Protocol):
 class EvidenceGatherer(Protocol):
     """Bound evidence-gather callable handed to ``run_turn``."""
 
-    def __call__(self, text: str, *, turn_plan: Any = None) -> str | None:
-        """Gather read-only evidence for ``text``, or return None."""
+    def __call__(self, text: str, *, turn_plan: Any = None) -> str | GatheredEvidence | None:
+        """Gather read-only evidence for ``text``, or return None.
+
+        Prefer :class:`~core.agent_harness.turns.gather_observation.GatheredEvidence`
+        (observation text + structured tool payloads). Legacy ``str`` return
+        values are still accepted by the orchestrator.
+        """
 
 
 class ExecuteActions(Protocol):
@@ -303,14 +309,25 @@ __all__ = [
     "ErrorReporter",
     "EvidenceGatherer",
     "ExecuteActions",
+    "GatheredEvidence",
     "OutputSink",
     "PromptContextProvider",
     "ReasoningClientProvider",
     "RunRecordFactory",
     "SessionBindable",
-    "SessionStore",
+    "SessionState",
+    "SubprocessPresenterFactory",
     "ToolEventObserver",
     "ToolProvider",
     "ToolRegistry",
     "TurnAccounting",
+]
+
+
+# Builds the presenter that streams a subprocess tool's output. The concrete
+# presenter lives in ``tools`` (process helpers), so this seam is how a host
+# hands one to the agent without ``core`` importing ``tools``.
+SubprocessPresenterFactory = Callable[
+    [Any, Any, "ConfirmFn | None", bool | None, bool],
+    Any,
 ]

@@ -22,13 +22,17 @@ from typing import Any, Protocol
 
 from core.agent import Agent
 from core.agent_harness.agent_builder import AgentConfig, build_agent
-from core.agent_harness.ports import ErrorReporter, SessionStore, ToolEventObserver
+from core.agent_harness.ports import ErrorReporter, SessionState, ToolEventObserver
 from core.agent_harness.prompts.gather import build_gather_system_prompt
 from core.agent_harness.prompts.memory.conversation import (
     NO_HISTORY_PLACEHOLDER,
     format_recent_conversation,
 )
 from core.agent_harness.session.integration_resolution import resolve_and_cache_integrations
+from core.agent_harness.turns.gather_observation import (
+    GatheredEvidence,
+    tool_results_from_executed,
+)
 from core.agent_harness.turns.goal_review import build_gather_goal_reviewer
 from core.agent_harness.turns.source_circuit_breaker import SourceCircuitBreaker
 from core.domain.alerts.alert_source import secondary_tool_sources
@@ -68,7 +72,7 @@ class GatherAgentFactory(Protocol):
         self,
         *,
         llm: Any,
-        session: SessionStore,
+        session: SessionState,
         gather_tools: list[Any],
         resolved: dict[str, Any],
         on_progress: ToolEventObserver | None,
@@ -120,9 +124,15 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _format_observation(executed: list[tuple[Any, Any]]) -> str:
-    """Render executed (tool_call, output) pairs into a compact prompt block."""
+    """Render executed (tool_call, output) pairs into a compact prompt block.
+
+    Newest tools first so head truncation at ``_MAX_OBSERVATION_CHARS`` keeps
+    late results (e.g. ``execute-sql`` after bulky schema discovery).
+    """
     blocks: list[str] = []
-    for tc, output in executed:
+    # Chronological ``executed`` → reverse so the answer prompt sees the last
+    # tool first; ``text[:limit]`` then drops the oldest discovery noise.
+    for tc, output in reversed(executed):
         args = json.dumps(tc.input, default=str, sort_keys=True)
         body = output if isinstance(output, str) else json.dumps(output, default=str)
         blocks.append(
@@ -132,7 +142,7 @@ def _format_observation(executed: list[tuple[Any, Any]]) -> str:
 
 
 def _resolve_gather_integrations(
-    session: SessionStore,
+    session: SessionState,
     message: str,
     resolved_integrations: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -168,7 +178,7 @@ def _resolve_gather_integrations(
     )
 
 
-def _build_gather_user_message(session: SessionStore, message: str) -> str:
+def _build_gather_user_message(session: SessionState, message: str) -> str:
     messages = session.cli_agent_messages[-MAX_CONVERSATION_MESSAGES:]
     history = format_recent_conversation(messages, max_turns=3)
     if history == NO_HISTORY_PLACEHOLDER:
@@ -212,7 +222,7 @@ def _load_gather_llm_or_none(error_reporter: ErrorReporter | None) -> Any | None
 def _build_evidence_agent(
     *,
     llm: Any,
-    session: SessionStore,
+    session: SessionState,
     gather_tools: list[Any],
     resolved: dict[str, Any],
     on_progress: ToolEventObserver | None,
@@ -246,7 +256,7 @@ def _build_evidence_agent(
 
 def gather_tool_evidence(
     message: str,
-    session: SessionStore,
+    session: SessionState,
     *,
     on_progress: ToolEventObserver | None = None,
     persist: PersistToolCalls | None = None,
@@ -255,13 +265,14 @@ def gather_tool_evidence(
     resolved_integrations: dict[str, Any] | None = None,
     max_iterations: int | None = None,
     is_cancelled: Callable[[], bool] | None = None,
-) -> str | None:
+) -> GatheredEvidence | None:
     """Run a bounded tool-calling loop and return collected evidence, or None.
 
-    Returns a formatted observation block when at least one tool was executed;
-    otherwise ``None`` so the caller falls back to the normal text-only answer.
-    Any failure is reported and swallowed (returns ``None``) — gathering must
-    never break the conversational turn.
+    Returns :class:`GatheredEvidence` (prompt text + structured tool payloads)
+    when at least one tool was executed; otherwise ``None`` so the caller
+    falls back to the normal text-only answer. Any failure is reported and
+    swallowed (returns ``None``) — gathering must never break the
+    conversational turn.
     """
 
     def _run_gather_turn() -> Any | None:
@@ -357,11 +368,16 @@ def gather_tool_evidence(
         if persist is not None:
             persist(result.executed)
         log.debug("gather_evidence done tools_executed=%s", len(result.executed))
-        return _format_observation(result.executed)
+        return GatheredEvidence(
+            observation=_format_observation(result.executed),
+            tool_results=tool_results_from_executed(result.executed),
+            truncated=bool(result.hit_iteration_cap),
+        )
 
 
 __all__ = [
     "GatherAgentFactory",
+    "GatheredEvidence",
     "MAX_REPORT_GATHER_ITERATIONS",
     "PersistToolCalls",
     "gather_tool_evidence",
