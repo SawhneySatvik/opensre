@@ -194,7 +194,7 @@ def test_a_failing_store_tells_the_user_the_record_was_not_saved(
     terminal, and the debug log the CLI never configures reaches nobody. Asserting
     a second notice, because the completion notice alone already makes the queue
     truthy."""
-    monkeypatch.setattr(_STORE_FACTORY, lambda: _RaisingStore())
+    monkeypatch.setattr(_STORE_FACTORY, _RaisingStore)
     session = Session()
 
     task_id = _run_to_completion(session, monkeypatch)
