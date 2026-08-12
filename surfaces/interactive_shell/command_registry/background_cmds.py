@@ -1,6 +1,12 @@
-"""Slash commands for session-local background investigation mode."""
+"""Slash commands for background investigation mode.
+
+Read forms answer from the durable store as well as the session, so a completed
+RCA can be looked up from a chat transport. Write forms stay shell-only.
+"""
 
 from __future__ import annotations
+
+from typing import Any
 
 from rich.console import Console
 from rich.markup import escape
@@ -18,9 +24,14 @@ from surfaces.interactive_shell.ui import (
     DIM,
     ERROR,
     HIGHLIGHT,
+    WARNING,
     print_repl_table,
     repl_table,
 )
+from surfaces.interactive_shell.utils.error_handling.exception_reporting import report_exception
+
+# The store keeps 100 rows; a lookup surface wants the recent ones, not the archive.
+_STORE_READ_LIMIT = 50
 
 
 def _allowed_notify_channels() -> tuple[str, ...]:
@@ -53,12 +64,44 @@ _BACKGROUND_FIRST_ARGS: tuple[tuple[str, str], ...] = (
 )
 
 
+def _tracked_records(session: Session, console: Console) -> dict[str, Any]:
+    """Records this session is holding, with the durable ones behind them.
+
+    Session-live first: the runner persists only on the way out, so an in-flight
+    record is fresher in memory, and only the live copy carries ``final_state``,
+    which ``/background use`` needs.
+
+    Never raises. ``dispatch_slash`` puts no ``try`` around the handler, so an
+    escaping error would reach the transport's generic path and log a traceback
+    for what is a readable condition. The reported message stays generic because a
+    chat transport is an external sink and the store's own error text carries the
+    absolute document path.
+    """
+    records: dict[str, Any] = dict(background_investigations(session))
+    try:
+        from platform.background_investigations.store import (
+            background_investigation_store,
+        )
+
+        stored = background_investigation_store().list_recent(limit=_STORE_READ_LIMIT)
+    except Exception as exc:  # noqa: BLE001
+        report_exception(exc, context="surfaces.interactive_shell.background_read")
+        console.print(
+            f"[{WARNING}]stored background records are unavailable[/] "
+            f"[{DIM}]({escape(type(exc).__name__)}); showing this session only.[/]"
+        )
+        return records
+    for record in stored:
+        records.setdefault(record.task_id, record)
+    return records
+
+
 def _render_background_status(session: Session, console: Console) -> None:
     table = repl_table(title="Background mode\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
     table.add_row("enabled", "yes" if background_mode_enabled(session) else "no")
-    table.add_row("tracked jobs", str(len(background_investigations(session))))
+    table.add_row("tracked jobs", str(len(_tracked_records(session, console))))
     table.add_row(
         "notify channels",
         ", ".join(background_notification_channels(session)) or "none",
@@ -94,9 +137,9 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
         _render_background_status(session, console)
         return True
     if sub == "list":
-        tracked = background_investigations(session)
+        tracked = _tracked_records(session, console)
         if not tracked:
-            console.print(f"[{DIM}]no background investigations tracked in this session.[/]")
+            console.print(f"[{DIM}]no background investigations tracked.[/]")
             return True
         table = repl_table(title="Background investigations\n", title_style=BOLD_BRAND)
         table.add_column("id", style="bold")
@@ -118,7 +161,7 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
             session.mark_latest(ok=False, kind="slash")
             return True
         task_id = args[1]
-        selected_record = background_investigations(session).get(task_id)
+        selected_record = _tracked_records(session, console).get(task_id)
         if selected_record is None:
             console.print(f"[{ERROR}]unknown background task:[/] {escape(task_id)}")
             session.mark_latest(ok=False, kind="slash")
@@ -158,7 +201,7 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
             session.mark_latest(ok=False, kind="slash")
             return True
         task_id = args[1]
-        selected_record = background_investigations(session).get(task_id)
+        selected_record = _tracked_records(session, console).get(task_id)
         if selected_record is None:
             console.print(f"[{ERROR}]unknown background task:[/] {escape(task_id)}")
             session.mark_latest(ok=False, kind="slash")

@@ -427,6 +427,29 @@ class TestDispatchSlash:
         assert session.terminal.background_notification_preferences.channels == ("telegram",)
         assert "invalid channel" not in buf.getvalue().lower()
 
+    def test_background_list_reports_an_unreadable_store_without_leaking_the_path(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """dispatch_slash puts no try around the handler, so an escaping store error
+        reaches the transport's generic error path and logs a traceback. The message
+        also carries the absolute document path, and unlike the REPL terminal a chat
+        transport is an external sink, so the path must not reach the reply."""
+        document = tmp_path / "background" / "investigations.json"
+        document.parent.mkdir(parents=True)
+        document.write_text("{not json", encoding="utf-8")
+        monkeypatch.setattr(
+            "config.constants.paths.deployment_home", lambda: tmp_path, raising=False
+        )
+        session = SessionCore(store=InMemorySessionStore())
+        console, buf = _capture()
+
+        assert dispatch_slash("/background list", session, console) is True
+
+        output = buf.getvalue()
+        assert "background records" in output.lower()
+        assert str(tmp_path) not in output
+        assert "investigations.json" not in output
+
     def test_background_notify_set_validates_against_the_adapter_registry(self) -> None:
         """AC-4 asks that adapters declare background support rather than a curated
         list deciding it. Registering one makes its channel acceptable without any
