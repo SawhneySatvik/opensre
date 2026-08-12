@@ -233,3 +233,60 @@ def test_gateway_manager_registers_harness_adapters(monkeypatch: pytest.MonkeyPa
     assert "adapters" in calls
     assert "runners" not in calls
     reset_process_runtime_for_tests()
+
+
+# Rich draws tables with these; nothing on the chat path converts them, so they
+# reach Telegram as literal characters inside an 80-column hard-wrapped block.
+_BOX_DRAWING = set("─│┃━╭╮╰╯┏┓┗┛┿┼┤├┬┴┌┐└┘╡╞═")
+
+
+def _seed_record(**overrides: Any) -> str:
+    from platform.background_investigations.store import background_investigation_store
+    from platform.background_investigations.types import BackgroundInvestigationRecord
+
+    fields: dict[str, Any] = {
+        "task_id": "bg-chat-1",
+        "status": "completed",
+        "command": "/investigate checkout-latency",
+        "root_cause": "connection pool saturation on the payments replica",
+        "top_analysis": ("rds cpu spike at 14:02",),
+        "next_steps": ("raise the pool ceiling to 64",),
+    }
+    fields.update(overrides)
+    record = BackgroundInvestigationRecord(**fields)
+    background_investigation_store().save(record)
+    return record.task_id
+
+
+def test_gateway_background_show_returns_the_rca_as_plain_text() -> None:
+    """AC2 and AC3: a completed RCA is retrievable from a chat transport.
+
+    Asserting the absence of box-drawing is the load-bearing half. The Rich table
+    renders fine into the captured console and would 'pass' a content-only
+    assertion while arriving in Telegram as an 80-column hard-wrapped grid of
+    ━ and │ that no sink converts.
+    """
+    task_id = _seed_record()
+
+    sink = _run_gateway_slash(f"/background show {task_id}")
+
+    assert sink.finalized is not None
+    assert "connection pool saturation" in sink.finalized
+    assert "raise the pool ceiling" in sink.finalized
+    assert not _BOX_DRAWING & set(sink.finalized), sink.finalized
+
+
+def test_gateway_background_list_is_plain_and_bounded() -> None:
+    """One line per record, and the root cause is trimmed. An unbounded list of
+    twenty folded RCAs overruns the 4096-character message cap, and the transports
+    tail-truncate, so the closing hint would be the first thing lost."""
+    for index in range(3):
+        _seed_record(task_id=f"bg-many-{index}", root_cause="saturation " * 60)
+
+    sink = _run_gateway_slash("/background list")
+
+    assert sink.finalized is not None
+    assert "bg-many-2" in sink.finalized
+    assert not _BOX_DRAWING & set(sink.finalized), sink.finalized
+    assert len(sink.finalized) < 4096
+    assert "/background show" in sink.finalized

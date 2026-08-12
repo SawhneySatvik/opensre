@@ -32,6 +32,9 @@ from surfaces.interactive_shell.utils.error_handling.exception_reporting import 
 
 # The store keeps 100 rows; a lookup surface wants the recent ones, not the archive.
 _STORE_READ_LIMIT = 50
+# A chat message caps at 4096 characters and the transports tail-truncate.
+_CHAT_LIST_LIMIT = 10
+_CHAT_CAUSE_CHARS = 120
 
 
 def _allowed_notify_channels() -> tuple[str, ...]:
@@ -96,12 +99,89 @@ def _tracked_records(session: Session, console: Console) -> dict[str, Any]:
     return records
 
 
+def _plain_status(session: Session, records: dict[str, Any]) -> str:
+    return "\n".join(
+        (
+            "Background mode",
+            f"  enabled: {'yes' if background_mode_enabled(session) else 'no'}",
+            f"  tracked jobs: {len(records)}",
+            f"  notify channels: {', '.join(background_notification_channels(session)) or 'none'}",
+        )
+    )
+
+
+def _plain_list(records: dict[str, Any]) -> str:
+    """One line per record, newest-looking first, root cause trimmed.
+
+    Bounded twice over. Chat platforms cap a message at 4096 characters and the
+    transports tail-truncate, so an unbounded list would drop the closing hint
+    first, which is the one line telling the reader how to get the rest.
+    """
+    from platform.common.truncation import truncate
+
+    lines = ["Background investigations", ""]
+    for task_id, record in list(records.items())[:_CHAT_LIST_LIMIT]:
+        cause = (
+            truncate(record.root_cause, _CHAT_CAUSE_CHARS, suffix="…") if record.root_cause else "-"
+        )
+        lines.append(f"  {task_id}  [{record.status}]  {record.command}")
+        lines.append(f"      {cause}")
+    remaining = len(records) - _CHAT_LIST_LIMIT
+    if remaining > 0:
+        lines.append(f"  ... and {remaining} more")
+    lines.append("")
+    lines.append("Use /background show <task_id> for the full RCA.")
+    return "\n".join(lines)
+
+
+def _plain_show(task_id: str, record: Any) -> str:
+    """The same bounded sections the chat notification adapters already send."""
+    from platform.notifications.rca_summary import summary_sections
+
+    command, root_cause, top_analysis, next_steps = summary_sections(record)
+    lines = [
+        f"Background investigation {task_id}",
+        "",
+        f"  status: {record.status}",
+        f"  command: {command}",
+        "",
+        f"Root cause: {root_cause or '-'}",
+    ]
+    if top_analysis:
+        lines += ["", "Top analysis:"] + [f"  - {item}" for item in top_analysis]
+    if next_steps:
+        lines += ["", "What to do next:"] + [f"  - {item}" for item in next_steps]
+    if record.notification_results:
+        delivered = ", ".join(f"{k}:{v}" for k, v in record.notification_results.items())
+        lines += ["", f"Notified: {delivered}"]
+    return "\n".join(lines)
+
+
+def _reply_headless(session: Session, console: Console, message: str) -> bool:
+    """Answer a chat surface in plain text.
+
+    Printed as well as published so the captured-console fallback stays sane and
+    the existing "every form answers" test still sees output.
+    """
+    from surfaces.interactive_shell.command_registry.cli_parity import (
+        publish_headless_slash_response,
+    )
+
+    console.print(escape(message))
+    publish_headless_slash_response(session, message=message)
+    return True
+
+
 def _render_background_status(session: Session, console: Console) -> None:
+    records = _tracked_records(session, console)
+    if session_terminal(session) is None:
+        _reply_headless(session, console, _plain_status(session, records))
+        return
     table = repl_table(title="Background mode\n", title_style=BOLD_BRAND, show_header=False)
     table.add_column("key", style="bold")
     table.add_column("value")
     table.add_row("enabled", "yes" if background_mode_enabled(session) else "no")
-    table.add_row("tracked jobs", str(len(_tracked_records(session, console))))
+    table.add_row("tracked jobs", str(len(records)))
     table.add_row(
         "notify channels",
         ", ".join(background_notification_channels(session)) or "none",
@@ -141,6 +221,8 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
         if not tracked:
             console.print(f"[{DIM}]no background investigations tracked.[/]")
             return True
+        if session_terminal(session) is None:
+            return _reply_headless(session, console, _plain_list(tracked))
         table = repl_table(title="Background investigations\n", title_style=BOLD_BRAND)
         table.add_column("id", style="bold")
         table.add_column("status")
@@ -166,6 +248,8 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
             console.print(f"[{ERROR}]unknown background task:[/] {escape(task_id)}")
             session.mark_latest(ok=False, kind="slash")
             return True
+        if session_terminal(session) is None:
+            return _reply_headless(session, console, _plain_show(task_id, selected_record))
         table = repl_table(
             title=f"Background investigation: {task_id}\n",
             title_style=BOLD_BRAND,
