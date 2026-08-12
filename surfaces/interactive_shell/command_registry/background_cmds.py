@@ -6,8 +6,6 @@ RCA can be looked up from a chat transport. Write forms stay shell-only.
 
 from __future__ import annotations
 
-from typing import Any
-
 from rich.console import Console
 from rich.markup import escape
 
@@ -17,6 +15,7 @@ from core.agent_harness.spi.session_state import (
     background_notification_channels,
     session_terminal,
 )
+from platform.background_investigations.types import BackgroundInvestigationRecord
 from surfaces.interactive_shell.command_registry.types import SlashCommand
 from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.ui import (
@@ -67,20 +66,20 @@ _BACKGROUND_FIRST_ARGS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _tracked_records(session: Session, console: Console) -> dict[str, Any]:
+def _tracked_records(
+    session: Session, console: Console
+) -> dict[str, BackgroundInvestigationRecord]:
     """Records this session is holding, with the durable ones behind them.
 
     Session-live first: the runner persists only on the way out, so an in-flight
     record is fresher in memory, and only the live copy carries ``final_state``,
     which ``/background use`` needs.
 
-    Never raises. ``dispatch_slash`` puts no ``try`` around the handler, so an
-    escaping error would reach the transport's generic path and log a traceback
-    for what is a readable condition. The reported message stays generic because a
-    chat transport is an external sink and the store's own error text carries the
-    absolute document path.
+    Never raises: ``dispatch_slash`` puts no ``try`` around the handler. The
+    reported message stays generic because a chat transport is an external sink
+    and the store's error text carries the absolute document path.
     """
-    records: dict[str, Any] = dict(background_investigations(session))
+    records: dict[str, BackgroundInvestigationRecord] = dict(background_investigations(session))
     try:
         from platform.background_investigations.store import (
             background_investigation_store,
@@ -99,23 +98,62 @@ def _tracked_records(session: Session, console: Console) -> dict[str, Any]:
     return records
 
 
-def _plain_status(session: Session, records: dict[str, Any]) -> str:
+def _notify_channels(session: Session) -> tuple[str, ...]:
+    """Channels for this session, falling back to the durable ones.
+
+    A chat session has no terminal facet to hold preferences, so without the
+    store it would report "none" however the shell was configured.
+    """
+    channels = background_notification_channels(session)
+    if channels or session_terminal(session) is not None:
+        return channels
+    try:
+        from platform.background_investigations.store import (
+            background_investigation_store,
+        )
+
+        return background_investigation_store().notify_channels()
+    except Exception:  # noqa: BLE001
+        return ()
+
+
+def _persist_notify_channels(console: Console, channels: tuple[str, ...]) -> None:
+    """Write the channels so the next shell starts with them.
+
+    Reported rather than raised: the in-session change already took effect, and
+    the user should know it will not outlive the session rather than lose the
+    turn to a traceback.
+    """
+    try:
+        from platform.background_investigations.store import (
+            background_investigation_store,
+        )
+
+        background_investigation_store().set_notify_channels(channels)
+    except Exception as exc:  # noqa: BLE001
+        report_exception(exc, context="surfaces.interactive_shell.background_notify_persist")
+        console.print(
+            f"[{WARNING}]channels not saved for the next session[/] "
+            f"[{DIM}]({escape(type(exc).__name__)}); they apply to this one.[/]"
+        )
+
+
+def _plain_status(session: Session, records: dict[str, BackgroundInvestigationRecord]) -> str:
     return "\n".join(
         (
             "Background mode",
             f"  enabled: {'yes' if background_mode_enabled(session) else 'no'}",
             f"  tracked jobs: {len(records)}",
-            f"  notify channels: {', '.join(background_notification_channels(session)) or 'none'}",
+            f"  notify channels: {', '.join(_notify_channels(session)) or 'none'}",
         )
     )
 
 
-def _plain_list(records: dict[str, Any]) -> str:
-    """One line per record, newest-looking first, root cause trimmed.
+def _plain_list(records: dict[str, BackgroundInvestigationRecord]) -> str:
+    """One line per record, root cause trimmed.
 
-    Bounded twice over. Chat platforms cap a message at 4096 characters and the
-    transports tail-truncate, so an unbounded list would drop the closing hint
-    first, which is the one line telling the reader how to get the rest.
+    Bounded because the transports tail-truncate: an unbounded list drops the
+    closing hint first, which is the line telling the reader how to get the rest.
     """
     from platform.common.truncation import truncate
 
@@ -134,7 +172,7 @@ def _plain_list(records: dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def _plain_show(task_id: str, record: Any) -> str:
+def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
     """The same bounded sections the chat notification adapters already send."""
     from platform.notifications.rca_summary import summary_sections
 
@@ -158,11 +196,7 @@ def _plain_show(task_id: str, record: Any) -> str:
 
 
 def _reply_headless(session: Session, console: Console, message: str) -> bool:
-    """Answer a chat surface in plain text.
-
-    Printed as well as published so the captured-console fallback stays sane and
-    the existing "every form answers" test still sees output.
-    """
+    """Answer a chat surface in plain text, printed as well as published."""
     from surfaces.interactive_shell.command_registry.cli_parity import (
         publish_headless_slash_response,
     )
@@ -182,10 +216,7 @@ def _render_background_status(session: Session, console: Console) -> None:
     table.add_column("value")
     table.add_row("enabled", "yes" if background_mode_enabled(session) else "no")
     table.add_row("tracked jobs", str(len(records)))
-    table.add_row(
-        "notify channels",
-        ", ".join(background_notification_channels(session)) or "none",
-    )
+    table.add_row("notify channels", ", ".join(_notify_channels(session)) or "none")
     print_repl_table(console, table)
 
 
@@ -306,10 +337,14 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
     if sub == "notify":
         action = (args[1].lower() if len(args) > 1 else "list").strip()
         if action == "list":
-            console.print(
-                f"[{DIM}]background notify channels:[/] "
-                f"{', '.join(background_notification_channels(session)) or 'none'}"
-            )
+            channels = _notify_channels(session)
+            if session_terminal(session) is None:
+                return _reply_headless(
+                    session,
+                    console,
+                    f"Background notify channels: {', '.join(channels) or 'none'}",
+                )
+            console.print(f"[{DIM}]background notify channels:[/] {', '.join(channels) or 'none'}")
             return True
         if action == "set":
             if session_terminal(session) is None:
@@ -328,10 +363,11 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
                 )
                 session.mark_latest(ok=False, kind="slash")
                 return True
-            session.terminal.background_notification_preferences.set_channels(requested)
+            preferences = session.terminal.background_notification_preferences
+            preferences.set_channels(requested)
+            _persist_notify_channels(console, preferences.channels)
             console.print(
-                f"[{HIGHLIGHT}]background notify channels set:[/] "
-                f"{', '.join(session.terminal.background_notification_preferences.channels)}"
+                f"[{HIGHLIGHT}]background notify channels set:[/] {', '.join(preferences.channels)}"
             )
             return True
         console.print(f"[{ERROR}]unknown notify subcommand:[/] {escape(action)}")
