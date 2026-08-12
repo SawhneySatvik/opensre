@@ -13,6 +13,7 @@ import pathlib
 from bootstrap.adapters import install_notification_adapters
 from platform.notifications.outbound_registry import (
     BACKGROUND_RCA,
+    clear_outbound_adapters,
     get_outbound_adapter,
     outbound_adapter_names_for,
 )
@@ -33,6 +34,21 @@ def test_step_is_idempotent() -> None:
     second = sorted(install_notification_adapters())
 
     assert first == second == list(_EXPECTED_CHANNELS)
+
+
+def test_step_repopulates_a_cleared_registry() -> None:
+    """Calling it twice proves nothing on its own: the second call is a no-op
+    against an already-full registry either way. Registration has to survive a
+    clear, because the step registers adapter objects rather than relying on the
+    module import side effect, and imports are cached. Relying on the import
+    alone leaves the registry empty here while the step reports success, which
+    would make ``/background notify set email`` reject its own shipped channel."""
+    clear_outbound_adapters()
+
+    names = install_notification_adapters()
+
+    assert sorted(names) == list(_EXPECTED_CHANNELS)
+    assert get_outbound_adapter("telegram") is not None
 
 
 def test_every_registered_channel_advertises_background_rca() -> None:

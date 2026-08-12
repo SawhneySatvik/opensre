@@ -394,7 +394,10 @@ class TestDispatchSlash:
         output = buf.getvalue()
         assert "invalid channel" in output
         assert session.terminal.background_notification_preferences.channels == ()
-        assert "email, telegram" in output
+        # Listed individually, not as an adjacent pair: the hint now comes from the
+        # adapter registry, which reports capable channels sorted.
+        assert "email" in output
+        assert "telegram" in output
 
     def test_background_notify_set_telegram_shows_in_list_and_status(self) -> None:
         """AC-21: after setting telegram, /background notify list and the /background status
@@ -423,6 +426,41 @@ class TestDispatchSlash:
         assert dispatch_slash("/background notify set telegram,telegram", session, console) is True
         assert session.terminal.background_notification_preferences.channels == ("telegram",)
         assert "invalid channel" not in buf.getvalue().lower()
+
+    def test_background_notify_set_validates_against_the_adapter_registry(self) -> None:
+        """AC-4 asks that adapters declare background support rather than a curated
+        list deciding it. Registering one makes its channel acceptable without any
+        edit here, which a hardcoded tuple cannot do."""
+        from bootstrap.adapters import install_notification_adapters
+        from platform.notifications.outbound_registry import (
+            BACKGROUND_RCA,
+            clear_outbound_adapters,
+            get_outbound_adapter,
+            register_outbound_adapter,
+        )
+
+        class _StubAdapter:
+            name = "pagerduty"
+            capabilities = frozenset({BACKGROUND_RCA})
+
+            def deliver(self, record: BackgroundInvestigationRecord) -> str:
+                _ = record
+                return "sent"
+
+        session = Session()
+        console, buf = _capture()
+        register_outbound_adapter(_StubAdapter())
+        try:
+            assert dispatch_slash("/background notify set pagerduty", session, console) is True
+            assert session.terminal.background_notification_preferences.channels == ("pagerduty",)
+            assert "invalid channel" not in buf.getvalue().lower()
+        finally:
+            # Clearing alone would leave every later test in this worker with an
+            # empty registry, silently turning each channel into "unsupported".
+            clear_outbound_adapters()
+            install_notification_adapters()
+        assert get_outbound_adapter("pagerduty") is None
+        assert get_outbound_adapter("telegram") is not None
 
     def test_background_show_renders_real_dispatcher_telegram_sent(
         self, monkeypatch: pytest.MonkeyPatch

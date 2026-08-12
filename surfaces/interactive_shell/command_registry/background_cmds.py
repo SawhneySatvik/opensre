@@ -22,7 +22,26 @@ from surfaces.interactive_shell.ui import (
     repl_table,
 )
 
-_ALLOWED_NOTIFY_CHANNELS = ("email", "telegram", "rocketchat", "buzz")
+
+def _allowed_notify_channels() -> tuple[str, ...]:
+    """Channels that advertise background-RCA delivery, sorted.
+
+    Derived from the adapter registry rather than a curated tuple, so adding an
+    adapter makes its channel selectable without editing this file. Registration
+    is triggered here rather than at REPL boot: the four adapter modules keep
+    their vendor clients inside the delivery functions, so this costs nine
+    modules at command time and nothing on the boot path.
+    """
+    from bootstrap.adapters import install_notification_adapters
+    from platform.notifications.outbound_registry import (
+        BACKGROUND_RCA,
+        outbound_adapter_names_for,
+    )
+
+    install_notification_adapters()
+    return outbound_adapter_names_for(BACKGROUND_RCA)
+
+
 _BACKGROUND_FIRST_ARGS: tuple[tuple[str, str], ...] = (
     ("on", "enable background investigation mode"),
     ("off", "disable background investigation mode"),
@@ -173,11 +192,12 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
                 session.mark_latest(ok=False, kind="slash")
                 return True
             requested = [part.strip().lower() for part in args[2].split(",") if part.strip()]
-            invalid = [part for part in requested if part not in _ALLOWED_NOTIFY_CHANNELS]
+            allowed = _allowed_notify_channels()
+            invalid = [part for part in requested if part not in allowed]
             if invalid:
                 console.print(
                     f"[{ERROR}]invalid channel(s):[/] {escape(', '.join(invalid))} "
-                    f"[{DIM}](allowed: {', '.join(_ALLOWED_NOTIFY_CHANNELS)})[/]"
+                    f"[{DIM}](allowed: {', '.join(allowed)})[/]"
                 )
                 session.mark_latest(ok=False, kind="slash")
                 return True

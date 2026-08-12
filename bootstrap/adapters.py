@@ -57,16 +57,32 @@ def install_notification_adapters() -> tuple[str, ...]:
     ``"unsupported"``, so the returned names are the diagnostic that tells an
     empty registry apart from a genuinely unknown channel.
 
-    Called per background-RCA completion, not at boot. Importing an adapter
-    module does not pull its vendor transport, because each keeps its client
-    import inside the delivery function.
-    """
-    import integrations.buzz.background_adapter  # noqa: F401
-    import integrations.rocketchat.background_adapter  # noqa: F401
-    import integrations.smtp.background_adapter  # noqa: F401
-    import integrations.telegram.background_adapter  # noqa: F401
-    from platform.notifications.outbound_registry import registered_outbound_adapter_names
+    Called on background-RCA completion and when ``/background notify set``
+    validates a channel, not at boot. Importing an adapter module does not pull
+    its vendor transport, because each keeps its client import inside the
+    delivery function.
 
+    Registers the adapter objects rather than relying on the import side effect
+    alone. Imports are cached, so a re-import after
+    ``clear_outbound_adapters()`` runs no module body and would leave the
+    registry empty while this function reported success.
+    """
+    from integrations.buzz.background_adapter import buzz_background_adapter
+    from integrations.rocketchat.background_adapter import rocketchat_background_adapter
+    from integrations.smtp.background_adapter import email_background_adapter
+    from integrations.telegram.background_adapter import telegram_background_adapter
+    from platform.notifications.outbound_registry import (
+        register_outbound_adapter,
+        registered_outbound_adapter_names,
+    )
+
+    for adapter in (
+        buzz_background_adapter,
+        rocketchat_background_adapter,
+        email_background_adapter,
+        telegram_background_adapter,
+    ):
+        register_outbound_adapter(adapter)
     return registered_outbound_adapter_names()
 
 
