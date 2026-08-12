@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from surfaces.interactive_shell.runtime.background.rca_summary import summary_sections
-from surfaces.interactive_shell.session.background_investigations import (
-    BackgroundInvestigationRecord,
+from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.notifications.outbound_registry import (
+    BACKGROUND_RCA,
+    register_outbound_adapter,
 )
+from platform.notifications.rca_summary import summary_sections
 
 
 def deliver_buzz_notification(record: BackgroundInvestigationRecord) -> str:
@@ -55,3 +57,17 @@ def deliver_buzz_notification(record: BackgroundInvestigationRecord) -> str:
     # delivery helper, but redact again at this boundary since the string
     # lands in the record and `/background show`.
     return f"failed: {redact_token(error, private_key)}"
+
+
+class _BuzzBackgroundAdapter:
+    """Registry adapter wrapping :func:`deliver_buzz_notification`."""
+
+    name = "buzz"
+    capabilities = frozenset({BACKGROUND_RCA})
+
+    def deliver(self, record: BackgroundInvestigationRecord) -> str:
+        return deliver_buzz_notification(record)
+
+
+buzz_background_adapter = _BuzzBackgroundAdapter()
+register_outbound_adapter(buzz_background_adapter)

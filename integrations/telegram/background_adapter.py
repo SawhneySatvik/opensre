@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+from platform.common.background_investigation_types import BackgroundInvestigationRecord
 from platform.common.errors import OpenSREError
-from surfaces.interactive_shell.runtime.background.rca_summary import summary_sections
-from surfaces.interactive_shell.session.background_investigations import (
-    BackgroundInvestigationRecord,
+from platform.notifications.outbound_registry import (
+    BACKGROUND_RCA,
+    register_outbound_adapter,
 )
+from platform.notifications.rca_summary import summary_sections
 
 
 def deliver_telegram_notification(record: BackgroundInvestigationRecord) -> str:
@@ -43,3 +45,17 @@ def deliver_telegram_notification(record: BackgroundInvestigationRecord) -> str:
     # non-JSON error body verbatim, so redact before this reaches the record
     # and `/background show`.
     return f"failed: {redact_token(error, creds.bot_token)}"
+
+
+class _TelegramBackgroundAdapter:
+    """Registry adapter wrapping :func:`deliver_telegram_notification`."""
+
+    name = "telegram"
+    capabilities = frozenset({BACKGROUND_RCA})
+
+    def deliver(self, record: BackgroundInvestigationRecord) -> str:
+        return deliver_telegram_notification(record)
+
+
+telegram_background_adapter = _TelegramBackgroundAdapter()
+register_outbound_adapter(telegram_background_adapter)

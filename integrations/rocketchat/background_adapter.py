@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
-from surfaces.interactive_shell.runtime.background.rca_summary import summary_sections
-from surfaces.interactive_shell.session.background_investigations import (
-    BackgroundInvestigationRecord,
+from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.notifications.outbound_registry import (
+    BACKGROUND_RCA,
+    register_outbound_adapter,
 )
+from platform.notifications.rca_summary import summary_sections
 
 
 def deliver_rocketchat_notification(record: BackgroundInvestigationRecord) -> str:
@@ -77,3 +79,17 @@ def deliver_rocketchat_notification(record: BackgroundInvestigationRecord) -> st
         "missing rocketchat integration: configure token credentials "
         "(server_url, auth_token, user_id) or an incoming webhook."
     )
+
+
+class _RocketChatBackgroundAdapter:
+    """Registry adapter wrapping :func:`deliver_rocketchat_notification`."""
+
+    name = "rocketchat"
+    capabilities = frozenset({BACKGROUND_RCA})
+
+    def deliver(self, record: BackgroundInvestigationRecord) -> str:
+        return deliver_rocketchat_notification(record)
+
+
+rocketchat_background_adapter = _RocketChatBackgroundAdapter()
+register_outbound_adapter(rocketchat_background_adapter)
