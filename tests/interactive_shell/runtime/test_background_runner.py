@@ -169,6 +169,45 @@ def test_a_failing_store_does_not_escape_the_worker_thread(
     assert session.terminal.drain_background_notices()
 
 
+class _ExplodingAdapter:
+    name = "telegram"
+    capabilities = frozenset({"background_rca"})
+
+    def deliver(self, record: Any) -> str:
+        _ = record
+        raise RuntimeError("transport exploded")
+
+
+def test_a_raising_notification_channel_does_not_fail_the_investigation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The RCA is finished by the time channels are notified, so a channel that
+    blows up is a per-channel outcome, not an investigation failure. Before this
+    the exception reached the worker's ``except`` arm, which rewrote a completed
+    record to ``failed`` and persisted it that way."""
+    from platform.notifications.outbound_registry import (
+        clear_outbound_adapters,
+        register_outbound_adapter,
+    )
+
+    path = tmp_path / "background" / "investigations.json"
+    monkeypatch.setattr(_STORE_FACTORY, lambda: BackgroundInvestigationStore(path))
+    monkeypatch.setattr("bootstrap.adapters.install_notification_adapters", lambda: ("telegram",))
+    clear_outbound_adapters()
+    register_outbound_adapter(_ExplodingAdapter())
+    session = Session()
+    session.terminal.background_notification_preferences.set_channels(["telegram"])
+
+    task_id = _run_to_completion(session, monkeypatch)
+    clear_outbound_adapters()
+
+    stored = BackgroundInvestigationStore(path).get(task_id)
+    assert stored is not None
+    assert stored.status == "completed"
+    assert stored.root_cause == "pool saturation"
+    assert stored.notification_results == {"telegram": "failed: RuntimeError"}
+
+
 def test_new_resets_the_session_without_deleting_durable_records(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

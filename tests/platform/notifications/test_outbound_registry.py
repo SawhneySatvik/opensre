@@ -136,11 +136,19 @@ def test_dispatch_returns_empty_for_no_channels() -> None:
     assert dispatch_background_notifications(record=_record(), channels=()) == {}
 
 
-def test_dispatch_lets_an_adapter_exception_propagate() -> None:
-    """Unchanged from the if-chain this replaced: the background runner catches
-    it and marks the record failed. Swallowing here would silently change what
-    the user sees on a failing channel."""
-    register_outbound_adapter(_RaisingAdapter())
+def test_dispatch_records_an_adapter_exception_and_keeps_going() -> None:
+    """A raising channel is one channel's outcome, not the whole dispatch.
 
-    with pytest.raises(RuntimeError, match="transport exploded"):
-        dispatch_background_notifications(record=_record(), channels=("boom",))
+    Propagating lost every later channel and reached the runner's failure
+    handler, which rewrote an already completed RCA to ``failed``. The outcome
+    string is what ``/background show`` renders, so the user still learns the
+    channel failed.
+    """
+    register_outbound_adapter(_RaisingAdapter())
+    delivered = _StubAdapter("telegram")
+    register_outbound_adapter(delivered)
+
+    results = dispatch_background_notifications(record=_record(), channels=("boom", "telegram"))
+
+    assert results == {"boom": "failed: RuntimeError", "telegram": "sent"}
+    assert delivered.calls == ["bg-1"]
