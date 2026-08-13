@@ -6,7 +6,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 from platform.notifications.outbound_dispatch import dispatch_background_notifications
 from platform.notifications.outbound_registry import (
     BACKGROUND_RCA,

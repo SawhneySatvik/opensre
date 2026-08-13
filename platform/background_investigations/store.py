@@ -1,14 +1,4 @@
-"""Durable background-investigation records, shared across processes.
-
-Shape follows ``platform/common/task_registry.py``; the write recipe follows
-``gateway/core/storage/session/file_bindings.py``.
-
-The path comes from ``opensre_home()`` rather than ``OPENSRE_HOME_DIR``, because a
-background investigation can be started from a chat turn bound to an organization,
-and that organization decides which document the turn may read. ``opensre_home()``
-can raise for exactly that reason, so it is resolved per call in :attr:`path`,
-never at import and never as a constructor default.
-"""
+"""Durable background-investigation records shared across processes."""
 
 from __future__ import annotations
 
@@ -19,13 +9,13 @@ import tempfile
 import threading
 import time
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from typing import Any
 
 from filelock import FileLock, Timeout
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord, moment
+from platform.background_investigations.types import BackgroundInvestigationRecord, coerce_timestamp
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +39,7 @@ class UnreadableBackgroundInvestigationsError(RuntimeError):
 
 
 def _default_path() -> Path:
-    """Resolve the store path for the scope bound right now."""
+    """Resolve the store path for the currently bound organization scope."""
     from config.constants.paths import opensre_home
 
     return opensre_home() / _STORE_DIRNAME / _STORE_FILENAME
@@ -76,20 +66,13 @@ class BackgroundInvestigationStore:
 
     @property
     def path(self) -> Path:
-        """The document for the scope bound right now."""
+        """Return the document path for the currently bound scope."""
         return self._resolve_path()
 
     # ── public API ──────────────────────────────────────────────────────────
 
     def save(self, record: BackgroundInvestigationRecord) -> None:
-        """Insert or update ``record``, stamping its timestamps.
-
-        ``created_at`` survives updates so ordering stays stable once a record
-        exists; ``updated_at`` moves on every write.
-
-        ``record`` is always retained, so the document holds at most
-        ``max_records`` rows but never fewer than one.
-        """
+        """Save ``record`` while preserving creation time and always retaining this write."""
         path = self.path
         now = self._clock()
         with self._locked(path):
@@ -99,15 +82,12 @@ class BackgroundInvestigationStore:
 
             created = record.created_at or 0.0
             if existing is not None:
-                created = moment(existing.get("created_at")) or created
+                created = coerce_timestamp(existing.get("created_at")) or created
             record.created_at = created or now
             record.updated_at = now
 
-            # Ranking the handed record against the stored ones would evict it
-            # whenever its timestamp sorts low: a clock stepped back by an NTP
-            # correction, or an inf-stamped row that no clock can ever outrank.
-            # Rotate the others and keep this one outside the comparison.
-            others.sort(key=lambda row: moment(row.get("updated_at")))
+            # Keep the current write outside rotation so clock rollback cannot evict it.
+            others.sort(key=lambda row: coerce_timestamp(row.get("updated_at")))
             keep = max(self._max_records, 1) - 1
             self._write(path, [*(others[-keep:] if keep else []), record.to_dict()])
 
@@ -119,16 +99,11 @@ class BackgroundInvestigationStore:
         return None
 
     def list_recent(self, limit: int = 20) -> list[BackgroundInvestigationRecord]:
-        """Return records newest first.
-
-        Sorted ascending then reversed, not sorted with ``reverse=True``. A stable
-        sort keeps equal keys in document order either way, so ``reverse=True``
-        would hand back same-tick records oldest first. The document is not
-        necessarily ascending, because :meth:`save` appends the handed record
-        whatever its timestamp, but ties do stay in write order, which is what
-        reversing needs to put them newest first.
-        """
-        rows = sorted(self._load(self.path), key=lambda row: moment(row.get("updated_at")))
+        """Return at most ``limit`` records newest first; later writes win ties."""
+        rows = sorted(
+            self._load(self.path),
+            key=lambda row: coerce_timestamp(row.get("updated_at")),
+        )
         rows.reverse()
         records = [BackgroundInvestigationRecord.from_dict(row) for row in rows]
         return [record for record in records if record is not None][: max(limit, 0)]
@@ -136,11 +111,7 @@ class BackgroundInvestigationStore:
     # ── document ────────────────────────────────────────────────────────────
 
     def _load(self, path: Path) -> list[dict[str, Any]]:
-        """Read the rows. Absent is empty; unreadable raises.
-
-        Failing closed rather than returning empty, because the next write would
-        replace a damaged history with a fresh one and lose every record in it.
-        """
+        """Read rows, returning empty when absent and failing closed when damaged."""
         if not path.is_file():
             return []
         try:
@@ -166,9 +137,9 @@ class BackgroundInvestigationStore:
                 handle.flush()
                 os.fsync(handle.fileno())
             os.replace(temp_name, path)
-        except BaseException:
-            Path(temp_name).unlink(missing_ok=True)
-            raise
+        finally:
+            with suppress(OSError):
+                Path(temp_name).unlink(missing_ok=True)
         try:
             path.chmod(_FILE_MODE)
         except OSError:
@@ -192,11 +163,7 @@ _default_store_lock = threading.Lock()
 
 
 def background_investigation_store() -> BackgroundInvestigationStore:
-    """Return the process-wide store.
-
-    The instance holds no path: every operation re-resolves against the scope
-    bound at that moment, so one instance serves every organization.
-    """
+    """Return the process-wide store, resolving its scope on each operation."""
     global _default_store
     with _default_store_lock:
         if _default_store is None:

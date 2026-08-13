@@ -10,6 +10,11 @@
 
 - Use strict typing, follow DRY principle
 - One clear purpose per file (separation of concerns)
+- Keep docstrings concise and contract-focused. Use one sentence for straightforward
+  APIs; add only non-obvious invariants, failure behavior, or layering constraints
+  callers must understand. Keep bug history and implementation narration in tests,
+  commits, or the PR description instead. Do not remove meaningful rationale merely
+  to shorten a docstring.
 - Use named constants for HTTP status codes (`http.HTTPStatus`, e.g.
   `HTTPStatus.PAYMENT_REQUIRED`) in both source and tests — never hardcoded
   numeric literals like `402`.

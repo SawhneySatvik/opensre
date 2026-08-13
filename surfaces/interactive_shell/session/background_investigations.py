@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 
 
 @dataclass

@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 import pytest
 from rich.console import Console
 
-from platform.common.background_investigation_store import (
+from platform.background_investigations.store import (
     BackgroundInvestigationStore,
     BackgroundInvestigationStoreLockTimeout,
 )
@@ -20,7 +20,7 @@ from surfaces.interactive_shell.runtime.background.runner import (
 )
 from surfaces.interactive_shell.session import Session
 
-_STORE_FACTORY = "platform.common.background_investigation_store.background_investigation_store"
+_STORE_FACTORY = "platform.background_investigations.store.background_investigation_store"
 
 
 def _noop_tracker(**_kwargs: Any) -> Any:

@@ -1,10 +1,4 @@
-"""Background-investigation value types.
-
-Lives in ``platform/common`` so the vendor notification adapters under
-``integrations/`` can depend on the record contract without importing the CLI
-package, which the layering contract forbids. The session-scoped notification
-preferences stay in ``interactive_shell.session``.
-"""
+"""Background-investigation value types shared across surfaces."""
 
 from __future__ import annotations
 
@@ -14,15 +8,8 @@ from dataclasses import dataclass, field
 from typing import Any
 
 
-def moment(value: Any) -> float:
-    """Coerce a stored epoch-seconds field; anything unusable becomes ``0.0``.
-
-    Total by contract, because rows come from a file another writer may have
-    edited and an ordering comparison must not be able to raise. Non-finite is
-    rejected too: ``inf`` outranks every real timestamp and ``nan`` makes sort
-    order arbitrary. ``json.loads`` produces both from ordinary input, and an
-    integer literal too large for a float raises ``OverflowError``.
-    """
+def coerce_timestamp(value: object) -> float:
+    """Return a finite timestamp, or ``0.0`` for invalid persisted data."""
     if not isinstance(value, int | float):
         return 0.0
     try:
@@ -34,7 +21,7 @@ def moment(value: Any) -> float:
 
 @dataclass
 class BackgroundInvestigationRecord:
-    """One completed or in-flight background investigation tracked by the REPL."""
+    """One completed or in-flight background investigation."""
 
     task_id: str
     status: str
@@ -52,10 +39,7 @@ class BackgroundInvestigationRecord:
     updated_at: float = 0.0
 
     def to_dict(self) -> dict[str, Any]:
-        """Serialize for the durable store.
-
-        ``final_state`` is omitted: it is unbounded and nothing reads it back.
-        """
+        """Serialize persisted fields, omitting the unbounded ``final_state``."""
         return {
             "task_id": self.task_id,
             "status": self.status,
@@ -72,11 +56,7 @@ class BackgroundInvestigationRecord:
 
     @classmethod
     def from_dict(cls, data: Mapping[str, Any]) -> BackgroundInvestigationRecord | None:
-        """Rebuild a record from a stored row, or ``None`` when the row is unusable.
-
-        Row-level validation matching ``TaskRecord.from_dict``: one corrupt entry
-        is skipped rather than failing the whole document.
-        """
+        """Rebuild a record, returning ``None`` when required fields are invalid."""
         task_id = data.get("task_id")
         status = data.get("status")
         command = data.get("command")
@@ -111,9 +91,9 @@ class BackgroundInvestigationRecord:
             notification_results={
                 str(k): str(v) for k, v in _mapping("notification_results").items()
             },
-            created_at=moment(data.get("created_at")),
-            updated_at=moment(data.get("updated_at")),
+            created_at=coerce_timestamp(data.get("created_at")),
+            updated_at=coerce_timestamp(data.get("updated_at")),
         )
 
 
-__all__ = ["BackgroundInvestigationRecord", "moment"]
+__all__ = ["BackgroundInvestigationRecord", "coerce_timestamp"]

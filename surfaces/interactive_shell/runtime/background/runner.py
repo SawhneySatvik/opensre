@@ -41,7 +41,7 @@ def _persist_record(session: Session, record: BackgroundInvestigationRecord) -> 
     Failures report through both channels the arms above use, because the CLI
     configures no logging and a lost record is otherwise invisible.
     """
-    from platform.common.background_investigation_store import (
+    from platform.background_investigations.store import (
         UnreadableBackgroundInvestigationsError,
         background_investigation_store,
     )

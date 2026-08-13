@@ -12,11 +12,11 @@ from typing import Any
 
 import pytest
 
-from platform.common.background_investigation_store import (
+from platform.background_investigations.store import (
     BackgroundInvestigationStore,
     UnreadableBackgroundInvestigationsError,
 )
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 
 
 def _store(tmp_path: Path, **kwargs: Any) -> BackgroundInvestigationStore:
@@ -37,16 +37,16 @@ def _record(task_id: str = "bg-1", status: str = "completed") -> BackgroundInves
 
 
 _WRITER = (
-    "from platform.common.background_investigation_store import "
+    "from platform.background_investigations.store import "
     "background_investigation_store as s;"
-    "from platform.common.background_investigation_types import "
+    "from platform.background_investigations.types import "
     "BackgroundInvestigationRecord as R;"
     "s().save(R(task_id='bg-xproc', status='completed', command='/investigate generic',"
     "root_cause='pool saturation'));"
     "print('WROTE')"
 )
 _READER = (
-    "from platform.common.background_investigation_store import "
+    "from platform.background_investigations.store import "
     "background_investigation_store as s;"
     "r = s().get('bg-xproc');"
     "assert r is not None, 'record not visible from a second process';"
@@ -281,7 +281,7 @@ def test_the_home_directory_is_not_resolved_at_construction(monkeypatch) -> None
         calls.append(1)
         raise RuntimeError("opensre_home() must not be called at construction")
 
-    monkeypatch.setattr("platform.common.background_investigation_store._default_path", _explode)
+    monkeypatch.setattr("platform.background_investigations.store._default_path", _explode)
 
     store = BackgroundInvestigationStore()
 

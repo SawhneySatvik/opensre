@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 from platform.common.errors import OpenSREError
 from platform.notifications.outbound_registry import (
     BACKGROUND_RCA,

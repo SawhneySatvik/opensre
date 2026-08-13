@@ -11,7 +11,7 @@ Email keeps the full report. The chat channels carry the bounded summary from
 
 from __future__ import annotations
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 from platform.notifications.outbound_registry import (
     BACKGROUND_RCA,
     register_outbound_adapter,

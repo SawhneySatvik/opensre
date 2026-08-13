@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import logging
 
-from platform.common.background_investigation_types import BackgroundInvestigationRecord
+from platform.background_investigations.types import BackgroundInvestigationRecord
 from platform.notifications.outbound_registry import BACKGROUND_RCA, get_outbound_adapter
 
 logger = logging.getLogger(__name__)
