@@ -172,6 +172,10 @@ def _plain_list(records: dict[str, BackgroundInvestigationRecord]) -> str:
     return "\n".join(lines)
 
 
+def _chat_safe_outcome(outcome: str) -> str:
+    return "failed" if outcome.startswith("failed:") else outcome
+
+
 def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
     """The same bounded sections the chat notification adapters already send."""
     from platform.notifications.rca_summary import summary_sections
@@ -190,7 +194,9 @@ def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
     if next_steps:
         lines += ["", "What to do next:"] + [f"  - {item}" for item in next_steps]
     if record.notification_results:
-        delivered = ", ".join(f"{k}:{v}" for k, v in record.notification_results.items())
+        delivered = ", ".join(
+            f"{k}:{_chat_safe_outcome(v)}" for k, v in record.notification_results.items()
+        )
         lines += ["", f"Notified: {delivered}"]
     return "\n".join(lines)
 

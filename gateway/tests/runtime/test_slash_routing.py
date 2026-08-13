@@ -276,6 +276,25 @@ def test_gateway_background_show_returns_the_rca_as_plain_text() -> None:
     assert not _BOX_DRAWING & set(sink.finalized), sink.finalized
 
 
+def test_gateway_background_show_does_not_leak_delivery_exception_detail() -> None:
+    task_id = _seed_record(
+        task_id="bg-chat-redact",
+        notification_results={
+            "email": "failed: SMTPRecipientsRefused",
+            "telegram": "sent",
+            "buzz": "missing buzz integration: Buzz is not configured.",
+        },
+    )
+
+    sink = _run_gateway_slash(f"/background show {task_id}")
+
+    assert sink.finalized is not None
+    assert "email:failed" in sink.finalized
+    assert "SMTPRecipientsRefused" not in sink.finalized
+    assert "telegram:sent" in sink.finalized
+    assert "missing buzz integration: Buzz is not configured." in sink.finalized
+
+
 def test_gateway_background_list_is_plain_and_bounded() -> None:
     """One line per record, and the root cause is trimmed. An unbounded list of
     twenty folded RCAs overruns the 4096-character message cap, and the transports
