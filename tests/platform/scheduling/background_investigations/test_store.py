@@ -417,9 +417,9 @@ def test_list_recent_is_newest_first_when_the_document_is_not_ascending(tmp_path
 def test_the_shell_and_a_chat_turn_share_one_document(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """AC2's mechanism. The shell binds no storage scope and a chat transport binds
-    the deployment's organization, so before this the two wrote and read different
-    files and a chat lookup found nothing. Both must land on the org root."""
+    """The shell binds no storage scope and a chat transport binds the deployment's
+    organization, so the two otherwise write and read different files and a chat
+    lookup finds nothing. Both must land on the org root."""
     from config.constants import paths
     from config.constants.billing import ORGANIZATION_ID_ENV
     from config.principal import Actor, Principal, StorageScope

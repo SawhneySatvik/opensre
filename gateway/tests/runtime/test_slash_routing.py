@@ -283,10 +283,10 @@ def _seed_record(**overrides: Any) -> str:
 
 
 def test_gateway_background_show_returns_the_rca_as_plain_text() -> None:
-    """AC2 and AC3: a completed RCA is retrievable from a chat transport.
+    """A completed RCA is retrievable from a chat transport.
 
     Asserting the absence of box-drawing is the load-bearing half. The Rich table
-    renders fine into the captured console and would 'pass' a content-only
+    renders fine into the captured console and would pass a content-only
     assertion while arriving in Telegram as an 80-column hard-wrapped grid of
     ━ and │ that no sink converts.
     """

@@ -451,8 +451,8 @@ class TestDispatchSlash:
         assert "investigations.json" not in output
 
     def test_background_notify_set_survives_into_the_next_session(self) -> None:
-        """AC4. Without hydration the document is write-only: the channels persist
-        and the next shell still reads none, so the setting silently never applies."""
+        """Without hydration the document is write-only: the channels persist and
+        the next shell still reads none, so the setting silently never applies."""
         session = Session()
         console, _ = _capture()
         assert dispatch_slash("/background notify set telegram,email", session, console) is True
