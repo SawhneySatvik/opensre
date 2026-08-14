@@ -114,15 +114,20 @@ class BackgroundInvestigationStore:
                 return BackgroundInvestigationRecord.from_dict(row)
         return None
 
-    def list_recent(self, limit: int = 20) -> list[BackgroundInvestigationRecord]:
-        """Return at most ``limit`` records newest first; later writes win ties."""
+    def list_recent(self, limit: int | None = 20) -> list[BackgroundInvestigationRecord]:
+        """Return at most ``limit`` records newest first; later writes win ties.
+
+        ``limit=None`` returns the whole document, for a caller that resolves a
+        record by id and must not miss one the bound would have cut.
+        """
         rows = sorted(
             self._load(self.path),
             key=lambda row: coerce_timestamp(row.get("updated_at")),
         )
         rows.reverse()
         records = [BackgroundInvestigationRecord.from_dict(row) for row in rows]
-        return [record for record in records if record is not None][: max(limit, 0)]
+        found = [record for record in records if record is not None]
+        return found if limit is None else found[: max(limit, 0)]
 
     def notify_channels(self) -> tuple[str, ...]:
         """Channels background-RCA notices are delivered to, or empty when unset."""

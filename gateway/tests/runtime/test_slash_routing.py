@@ -101,6 +101,20 @@ def test_gateway_background_write_forms_report_repl_only() -> None:
     assert "uv run opensre" in sink.finalized
 
 
+def test_gateway_background_show_reaches_a_record_past_the_listing_bound() -> None:
+    # Oldest, then enough newer rows to push it out of any recent-N listing while
+    # staying inside the store's own bound, so only a full read finds it.
+    buried = _seed_record(task_id="bg-buried", root_cause="the oldest cause")
+    for index in range(60):
+        _seed_record(task_id=f"bg-bulk-{index:03d}", root_cause=f"cause {index}")
+
+    sink = _run_gateway_slash(f"/background show {buried}")
+
+    assert sink.finalized is not None
+    assert "the oldest cause" in sink.finalized
+    assert "unknown background task" not in sink.finalized
+
+
 def test_gateway_onboard_slash_returns_headless_guidance(monkeypatch: pytest.MonkeyPatch) -> None:
     """Literal /onboard on SessionCore must not spawn a blocking interactive wizard."""
     recorded: list[list[str]] = []

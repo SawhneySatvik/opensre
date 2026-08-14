@@ -29,8 +29,6 @@ from surfaces.interactive_shell.ui import (
 )
 from surfaces.interactive_shell.utils.error_handling.exception_reporting import report_exception
 
-# The store keeps 100 rows; a lookup surface wants the recent ones, not the archive.
-_STORE_READ_LIMIT = 50
 # A chat message caps at 4096 characters and the transports tail-truncate.
 _CHAT_LIST_LIMIT = 10
 _CHAT_CAUSE_CHARS = 120
@@ -85,7 +83,7 @@ def _tracked_records(
             background_investigation_store,
         )
 
-        stored = background_investigation_store().list_recent(limit=_STORE_READ_LIMIT)
+        stored = background_investigation_store().list_recent(limit=None)
     except Exception as exc:  # noqa: BLE001
         report_exception(exc, context="surfaces.interactive_shell.background_read")
         console.print(
