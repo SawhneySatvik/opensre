@@ -101,6 +101,16 @@ def test_gateway_background_write_forms_report_repl_only() -> None:
     assert "uv run opensre" in sink.finalized
 
 
+def test_gateway_background_use_is_refused_before_the_record_lookup() -> None:
+    task_id = _seed_record(task_id="bg-use-chat")
+
+    sink = _run_gateway_slash(f"/background use {task_id}")
+
+    assert sink.finalized is not None
+    assert "uv run opensre" in sink.finalized
+    assert "unknown background task" not in sink.finalized
+
+
 def test_gateway_background_show_reaches_a_record_past_the_listing_bound() -> None:
     # Oldest, then enough newer rows to push it out of any recent-N listing while
     # staying inside the store's own bound, so only a full read finds it.

@@ -315,6 +315,10 @@ def _cmd_background(session: Session, console: Console, args: list[str]) -> bool
         print_repl_table(console, table)
         return True
     if sub == "use":
+        # Before the lookup: the promoted state is not persisted, so a chat
+        # surface would otherwise call an id it just listed unknown.
+        if session_terminal(session) is None:
+            return _reject_repl_only(session, console, "use")
         if len(args) < 2:
             console.print(f"[{ERROR}]usage:[/] /background use <task_id>")
             session.mark_latest(ok=False, kind="slash")
