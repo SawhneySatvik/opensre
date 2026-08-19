@@ -13,6 +13,7 @@ import time
 from collections.abc import Callable
 from typing import Any
 
+from config.constants.llm import OPENAI_API_KEY_ENV
 from core.context_budget import strip_internal_message_markers
 from core.llm.shared.llm_retry import (
     maybe_raise_credit_exhausted,
@@ -22,6 +23,7 @@ from core.llm.shared.openai_chat_completions import (
     _RETRY_INITIAL_BACKOFF_SEC,
     _RETRY_MAX_ATTEMPTS,
     AGENT_CLIENT_TIMEOUT_SEC,
+    is_openai_reasoning_model,
 )
 from core.llm.shared.openai_chat_completions import (
     build_assistant_message as build_openai_compat_assistant_message,
@@ -189,6 +191,11 @@ class AnthropicAgentClient:
             kwargs["system"] = _anthropic_cached_system(system) if cache else system
         if tools:
             kwargs["tools"] = _anthropic_tools_with_cache(tools) if cache else tools
+        from config.llm_sampling import get_agent_temperature
+
+        temperature = get_agent_temperature()
+        if temperature is not None:
+            kwargs["temperature"] = temperature
 
         backoff = _RETRY_INITIAL_BACKOFF_SEC
         last_err: Exception | None = None
@@ -446,6 +453,11 @@ class BedrockConverseAgentClient:
             kwargs["system"] = [{"text": system}]
         if tools:
             kwargs["toolConfig"] = {"tools": tools}
+        from config.llm_sampling import get_agent_temperature
+
+        temperature = get_agent_temperature()
+        if temperature is not None:
+            kwargs["inferenceConfig"]["temperature"] = temperature
 
         backoff = _RETRY_INITIAL_BACKOFF_SEC
         response: dict[str, Any] | None = None
@@ -510,23 +522,18 @@ class BedrockConverseAgentClient:
         return raw_content
 
 
-_OPENAI_O_SERIES_RE = re.compile(r"(?:^|[^A-Za-z0-9])o\d", re.IGNORECASE)
-_OPENAI_GPT5_RE = re.compile(r"(?:^|[^A-Za-z0-9])gpt-5", re.IGNORECASE)
-
-
 def _supports_openai_parallel_tool_calls_param(api_key_env: str) -> bool:
     """Return whether this client targets OpenAI's native chat-completions API."""
-    return api_key_env == "OPENAI_API_KEY"
+    return api_key_env == OPENAI_API_KEY_ENV
+
+
+def _supports_openai_seed_param(api_key_env: str) -> bool:
+    """Whether ``seed`` may be sent: it is OpenAI-native, and proxies reject it."""
+    return api_key_env == OPENAI_API_KEY_ENV
 
 
 def _openai_max_token_kwarg(model: str) -> str:
-    # OpenAI o-series (o1, o3, o4-mini, …) and gpt-5 series reject max_tokens.
-    # O-series: matches a bare ``o<digit>`` token at the start of the name or
-    # following a non-alphanumeric separator, so vendor-prefixed routes
-    # (``openai/o4-mini``, ``azure/o3``) and custom deployments are detected.
-    # gpt-5: matches ``gpt-5`` at the start or after a separator, covering
-    # gpt-5, gpt-5o, gpt-5o-mini, and future gpt-5* variants.
-    if _OPENAI_O_SERIES_RE.search(model) or _OPENAI_GPT5_RE.search(model):
+    if is_openai_reasoning_model(model):
         return "max_completion_tokens"
     return "max_tokens"
 
@@ -553,6 +560,7 @@ class OpenAIAgentClient:
         base_url: str | None = None,
         api_key_env: str = "OPENAI_API_KEY",
         api_key_default: str = "",
+        temperature: float | None = None,
         credential_resolver: Callable[[str], str] | None = None,
     ) -> None:
         from openai import OpenAI
@@ -565,6 +573,7 @@ class OpenAIAgentClient:
         self._model = model
         self._max_tokens = max_tokens
         self._api_key_env = api_key_env
+        self._temperature = temperature
 
     @property
     def model_id(self) -> str | None:
@@ -659,6 +668,15 @@ class OpenAIAgentClient:
                 kwargs["tool_choice"] = "auto"
                 if _supports_openai_parallel_tool_calls_param(api_key_env):
                     kwargs["parallel_tool_calls"] = True
+            from config.llm_sampling import get_agent_seed, get_agent_temperature
+
+            configured = getattr(self, "_temperature", None)
+            temperature = configured if configured is not None else get_agent_temperature()
+            if temperature is not None and not is_openai_reasoning_model(self._model):
+                kwargs["temperature"] = temperature
+            seed = get_agent_seed()
+            if seed is not None and _supports_openai_seed_param(api_key_env):
+                kwargs["seed"] = seed
 
         backoff = _RETRY_INITIAL_BACKOFF_SEC
         last_err: Exception | None = None

@@ -95,6 +95,7 @@ def _native_sdk_agent_client(route: LLMRoute) -> AgentLLMClient:
             base_url=resolved.base_url,
             api_key_env=resolved.api_key_env,
             api_key_default=resolved.api_key_default,
+            temperature=resolved.temperature,
         )
 
     if is_custom_anthropic_provider(provider):

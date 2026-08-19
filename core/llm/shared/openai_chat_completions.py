@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import time
 from collections.abc import Callable, Iterator
 from http import HTTPStatus
@@ -21,6 +22,18 @@ _RETRY_MAX_ATTEMPTS = 3
 
 AGENT_CLIENT_TIMEOUT_SEC: float = 90.0
 LLM_CLIENT_TIMEOUT_SEC: float = 60.0
+
+_OPENAI_O_SERIES_RE = re.compile(r"(?:^|[^A-Za-z0-9])o\d", re.IGNORECASE)
+_OPENAI_GPT5_RE = re.compile(r"(?:^|[^A-Za-z0-9])gpt-5", re.IGNORECASE)
+
+
+def is_openai_reasoning_model(model: str) -> bool:
+    """Whether the model is o-series or gpt-5, which reject ``max_tokens`` and ``temperature``.
+
+    Matches after a separator too, so vendor-prefixed routes (``openai/o4-mini``,
+    ``azure/o3``) and LiteLLM model ids are detected.
+    """
+    return bool(_OPENAI_O_SERIES_RE.search(model) or _OPENAI_GPT5_RE.search(model))
 
 
 def get_attr_or_item(value: Any, key: str, default: Any = None) -> Any:

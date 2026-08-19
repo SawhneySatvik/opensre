@@ -1116,6 +1116,7 @@ def test_get_llm_agent_routes_deepseek_to_openai_compatible_client(
             base_url: str | None = None,
             api_key_env: str = "OPENAI_API_KEY",
             api_key_default: str = "",
+            temperature: float | None = None,
         ) -> None:
             captured.update(
                 {
@@ -1124,6 +1125,7 @@ def test_get_llm_agent_routes_deepseek_to_openai_compatible_client(
                     "base_url": base_url,
                     "api_key_env": api_key_env,
                     "api_key_default": api_key_default,
+                    "temperature": temperature,
                 }
             )
 
@@ -1886,3 +1888,142 @@ def test_bedrock_converse_emits_provider_usage(monkeypatch: pytest.MonkeyPatch) 
 
     assert result.content == "ok"
     assert usage == [(_MISTRAL_MODEL, 200, 30)]
+
+
+@pytest.fixture(autouse=True)
+def _clear_agent_sampling_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a developer's shell from leaking sampling overrides into assertions."""
+    monkeypatch.delenv("OPENSRE_AGENT_TEMPERATURE", raising=False)
+    monkeypatch.delenv("OPENSRE_AGENT_SEED", raising=False)
+
+
+def _capture_openai_kwargs(
+    *, model: str, api_key_env: str = "OPENAI_API_KEY", responses: bool = False
+) -> dict[str, Any]:
+    captured: dict[str, Any] = {}
+
+    def capture_create(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return _make_fake_openai_response(content="ok")
+
+    client = OpenAIAgentClient.__new__(OpenAIAgentClient)
+    if responses:
+        client._client = types.SimpleNamespace(
+            responses=types.SimpleNamespace(create=capture_create)
+        )
+    else:
+        client._client = types.SimpleNamespace(
+            chat=types.SimpleNamespace(completions=types.SimpleNamespace(create=capture_create))
+        )
+    client._model = model
+    client._max_tokens = 1024
+    client._api_key_env = api_key_env
+    client.invoke(messages=[{"role": "user", "content": "alert"}])
+    return captured
+
+
+def test_anthropic_agent_client_sends_deterministic_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_anthropic(monkeypatch)
+    captured: dict[str, Any] = {}
+
+    def capture_create(**kwargs: object) -> object:
+        captured.update(kwargs)
+        return types.SimpleNamespace(content=[], stop_reason="end_turn", usage=None)
+
+    client = AnthropicAgentClient.__new__(AnthropicAgentClient)
+    client._client = types.SimpleNamespace(messages=types.SimpleNamespace(create=capture_create))
+    client._model = "claude-opus-5"
+    client._max_tokens = 1024
+    client._cache_markers_enabled = False
+
+    client.invoke(messages=[{"role": "user", "content": "alert"}])
+
+    assert captured["temperature"] == 0.0
+    assert "seed" not in captured
+
+
+def test_bedrock_converse_nests_temperature_in_inference_config(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("AWS_REGION", "us-east-1")
+    captured: dict[str, Any] = {}
+
+    def converse(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return _make_converse_response(text="ok")
+
+    monkeypatch.setitem(
+        sys.modules,
+        "boto3",
+        types.SimpleNamespace(
+            client=lambda *_args, **_kwargs: types.SimpleNamespace(converse=converse)
+        ),
+    )
+
+    from core.llm.transports.sdk.agent_clients import BedrockConverseAgentClient
+
+    BedrockConverseAgentClient(model=_MISTRAL_MODEL).invoke(
+        messages=[{"role": "user", "content": [{"text": "hi"}]}]
+    )
+
+    assert captured["inferenceConfig"]["temperature"] == 0.0
+    assert "temperature" not in captured
+
+
+def test_openai_agent_client_sends_temperature_and_seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """seed=0 is falsy, so it must still reach the wire."""
+    _install_fake_openai(monkeypatch)
+
+    captured = _capture_openai_kwargs(model="gpt-4o")
+
+    assert captured["temperature"] == 0.0
+    assert captured["seed"] == 0
+
+
+def test_openai_compat_endpoint_omits_seed(monkeypatch: pytest.MonkeyPatch) -> None:
+    _install_fake_openai(monkeypatch)
+
+    captured = _capture_openai_kwargs(model="deepseek-v4", api_key_env="DEEPSEEK_API_KEY")
+
+    assert captured["temperature"] == 0.0
+    assert "seed" not in captured
+
+
+@pytest.mark.parametrize("model", ["o3", "gpt-5", "openai/o4-mini"])
+def test_openai_reasoning_models_omit_temperature(
+    monkeypatch: pytest.MonkeyPatch, model: str
+) -> None:
+    _install_fake_openai(monkeypatch)
+
+    captured = _capture_openai_kwargs(model=model)
+
+    assert "temperature" not in captured
+    assert captured["seed"] == 0
+
+
+def test_openai_responses_api_omits_both_sampling_params(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_openai(monkeypatch)
+
+    captured = _capture_openai_kwargs(model="gpt-5.6", responses=True)
+
+    assert "temperature" not in captured
+    assert "seed" not in captured
+
+
+def test_agent_sampling_env_overrides_reach_the_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _install_fake_openai(monkeypatch)
+    monkeypatch.setenv("OPENSRE_AGENT_TEMPERATURE", "0.9")
+    monkeypatch.setenv("OPENSRE_AGENT_SEED", "none")
+
+    captured = _capture_openai_kwargs(model="gpt-4o")
+
+    assert captured["temperature"] == 0.9
+    assert "seed" not in captured

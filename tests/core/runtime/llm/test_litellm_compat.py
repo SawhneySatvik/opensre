@@ -19,6 +19,13 @@ class _FakeMessage:
         return {"role": "assistant", "content": self.content, "tool_calls": self.tool_calls}
 
 
+@pytest.fixture(autouse=True)
+def _clear_agent_sampling_env(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep a developer's shell from leaking sampling overrides into assertions."""
+    monkeypatch.delenv("OPENSRE_AGENT_TEMPERATURE", raising=False)
+    monkeypatch.delenv("OPENSRE_AGENT_SEED", raising=False)
+
+
 def _fake_response(*, content: str = "ok", tool_calls: list[Any] | None = None) -> Any:
     message = _FakeMessage(content=content, tool_calls=tool_calls)
     choice = types.SimpleNamespace(message=message, finish_reason="stop")
@@ -266,3 +273,96 @@ def test_litellm_llm_client_invoke_stream_retries_before_emit(monkeypatch) -> No
 
     assert chunks == ["ok"]
     assert len(attempts) == 2
+
+
+def test_litellm_agent_client_applies_deterministic_sampling_by_default() -> None:
+    captured: dict[str, Any] = {}
+
+    def completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _fake_response()
+
+    client = LiteLLMAgentClient(
+        litellm_model="openai/gpt-4o",
+        api_key_env="OPENAI_API_KEY",
+        credential_resolver=lambda _env: "sk-key",
+        completion_func=completion,
+    )
+    client.invoke([{"role": "user", "content": "hi"}])
+
+    assert captured["temperature"] == 0.0
+    assert captured["seed"] == 0
+
+
+def test_litellm_agent_client_omits_temperature_for_reasoning_models() -> None:
+    captured: dict[str, Any] = {}
+
+    def completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _fake_response()
+
+    client = LiteLLMAgentClient(
+        litellm_model="openai/o3",
+        api_key_env="OPENAI_API_KEY",
+        credential_resolver=lambda _env: "sk-key",
+        completion_func=completion,
+    )
+    client.invoke([{"role": "user", "content": "hi"}])
+
+    assert "temperature" not in captured
+    assert captured["seed"] == 0
+
+
+def test_litellm_agent_client_sends_seed_only_to_openai() -> None:
+    captured: dict[str, Any] = {}
+
+    def completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _fake_response()
+
+    client = LiteLLMAgentClient(
+        litellm_model="anthropic/claude-opus-5",
+        api_key_env="ANTHROPIC_API_KEY",
+        credential_resolver=lambda _env: "sk-key",
+        completion_func=completion,
+    )
+    client.invoke([{"role": "user", "content": "hi"}])
+
+    assert captured["temperature"] == 0.0
+    assert "seed" not in captured
+
+
+def test_litellm_agent_client_keeps_a_provider_pinned_temperature() -> None:
+    captured: dict[str, Any] = {}
+
+    def completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _fake_response()
+
+    client = LiteLLMAgentClient(
+        litellm_model="openai/minimax-m2",
+        api_key_env=None,
+        temperature=1.0,
+        completion_func=completion,
+    )
+    client.invoke([{"role": "user", "content": "hi"}])
+
+    assert captured["temperature"] == 1.0
+
+
+def test_litellm_reasoning_client_is_not_given_agent_sampling() -> None:
+    captured: dict[str, Any] = {}
+
+    def completion(**kwargs: Any) -> Any:
+        captured.update(kwargs)
+        return _fake_response()
+
+    client = LiteLLMLLMClient(
+        litellm_model="openai/deepseek-v4-pro",
+        api_key_env=None,
+        completion_func=completion,
+    )
+    client.invoke("hi")
+
+    assert "temperature" not in captured
+    assert "seed" not in captured

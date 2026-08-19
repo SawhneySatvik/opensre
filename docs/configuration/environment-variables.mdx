@@ -196,6 +196,31 @@ Want credentials only from the environment, never on disk? Set
 | --- | --- | --- |
 | `OPENSRE_REASONING_EFFORT` |  | Effort for extended-thinking models: `low`, `medium`, `high`, or `xhigh` |
 
+## Agent sampling
+
+Investigations constrain tool-choice sampling by default, so the same alert tends to produce the
+same tool calls. Raise the temperature only if you want the agent to explore alternatives.
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `OPENSRE_AGENT_TEMPERATURE` | `0` | Sampling temperature for tool-calling turns. Set `none` to use the provider's own default |
+| `OPENSRE_AGENT_SEED` | `0` | Sampling seed, sent only to OpenAI. Set `none` to omit it |
+
+Both apply to the agent tier (investigations and the interactive shell's action agent) and leave
+chat and reasoning models alone.
+
+How much you get depends on the model, because reasoning models fix their own sampling:
+
+- **OpenAI/Azure reasoning models** (`gpt-5*`, `o3`, and the default `gpt-5.4-mini`) reject a
+  temperature, so only the seed is sent. Azure takes neither, since seed is OpenAI-only.
+  Pick a non-reasoning model such as `gpt-4o` if you want temperature control.
+- **Anthropic, Bedrock, and OpenAI-compatible gateways** get the temperature.
+- **CLI-backed providers** (Codex, Claude Code) accept no sampling options at all.
+
+A provider that pins its own temperature keeps it: MiniMax stays at its required `1.0`. Values
+outside a provider's accepted range are rejected by that provider: Anthropic caps temperature at
+`1.0`, OpenAI at `2.0`.
+
 ## CLI investigation tools
 
 <AccordionGroup>

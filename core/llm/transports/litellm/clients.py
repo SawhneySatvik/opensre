@@ -15,6 +15,7 @@ ensure_tiktoken_encodings_discoverable()
 from litellm import completion  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
+from config.constants.llm import OPENAI_API_KEY_ENV  # noqa: E402
 from core.context_budget import strip_internal_message_markers  # noqa: E402
 from core.llm.shared.openai_chat_completions import (  # noqa: E402
     AGENT_CLIENT_TIMEOUT_SEC,
@@ -25,6 +26,7 @@ from core.llm.shared.openai_chat_completions import (  # noqa: E402
     build_tool_result_messages,
     invoke_with_litellm_agent_retries,
     invoke_with_litellm_llm_retries,
+    is_openai_reasoning_model,
     llm_response_from_completion,
     normalize_messages_openai,
     prepend_system_message,
@@ -114,8 +116,16 @@ class LiteLLMAgentClient:
             kwargs["api_base"] = self._api_base
         if self._api_version is not None:
             kwargs["api_version"] = self._api_version
-        if self._temperature is not None:
-            kwargs["temperature"] = self._temperature
+        from config.llm_sampling import get_agent_seed, get_agent_temperature
+
+        configured = self._temperature
+        temperature = configured if configured is not None else get_agent_temperature()
+        if temperature is not None and not is_openai_reasoning_model(self._litellm_model):
+            kwargs["temperature"] = temperature
+        # LiteLLM runs with drop_params off, so it raises on a backend that has no seed.
+        seed = get_agent_seed()
+        if seed is not None and self._api_key_env == OPENAI_API_KEY_ENV:
+            kwargs["seed"] = seed
         if self._vertex_project is not None:
             kwargs["vertex_project"] = self._vertex_project
         if self._vertex_location is not None:
