@@ -80,6 +80,36 @@ def test_deliver_background_notifications_marks_missing_smtp(monkeypatch) -> Non
     assert results == {"email": "missing smtp integration"}
 
 
+def test_deliver_background_notifications_redacts_smtp_delivery_failure(monkeypatch) -> None:
+    """Persisted notification outcomes must not expose SMTP provider detail."""
+    monkeypatch.setattr(
+        "integrations.catalog.resolve_effective_integrations",
+        lambda: {
+            "smtp": {
+                "config": {
+                    "host": "smtp.example.com",
+                    "from_address": "opensre@example.com",
+                    "default_to": "team@example.com",
+                },
+            }
+        },
+    )
+    secret = "smtp-password-should-not-be-persisted"
+    monkeypatch.setattr(
+        "integrations.smtp.delivery.send_smtp_report",
+        lambda **_: (False, f"authentication failed: {secret}"),
+    )
+
+    record = BackgroundInvestigationRecord(
+        task_id="bg-123", status="completed", command="free-text"
+    )
+
+    results = deliver_background_notifications(record=record, channels=("email",))
+
+    assert results == {"email": "failed: SMTP delivery failed"}
+    assert secret not in results["email"]
+
+
 # --- Telegram (Wave-2655) ---------------------------------------------------
 #
 # Patches below target the SOURCE modules

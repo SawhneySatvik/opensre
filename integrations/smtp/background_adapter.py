@@ -38,8 +38,11 @@ def deliver_email_notification(record: BackgroundInvestigationRecord) -> str:
         next_steps=record.next_steps,
         stats=record.stats,
     )
-    ok, error = send_smtp_report(report=body, subject=subject, smtp_ctx=smtp_config)
-    return "sent" if ok else f"failed: {error}"
+    ok, _error = send_smtp_report(report=body, subject=subject, smtp_ctx=smtp_config)
+    # Outcomes are persisted and displayed by ``/background show``. The SMTP
+    # transport's error value may include provider or credential detail, so it
+    # must not cross this external-surface boundary.
+    return "sent" if ok else "failed: SMTP delivery failed"
 
 
 class _EmailBackgroundAdapter:
