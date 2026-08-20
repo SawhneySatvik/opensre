@@ -80,8 +80,14 @@ def test_deliver_background_notifications_marks_missing_smtp(monkeypatch) -> Non
     assert results == {"email": "missing smtp integration"}
 
 
-def test_deliver_background_notifications_redacts_smtp_delivery_failure(monkeypatch) -> None:
-    """Persisted notification outcomes must not expose SMTP provider detail."""
+def test_deliver_background_notifications_keeps_the_smtp_failure_class(monkeypatch) -> None:
+    """The persisted outcome carries the exception class and nothing more.
+
+    ``send_smtp_report`` already narrows every failure to ``type(exc).__name__``,
+    so the class name is the whole error value — keeping it is what lets the
+    local ``/background show`` table separate an auth failure from a connection
+    one. Redaction for a chat transport happens at that sink, not here.
+    """
     monkeypatch.setattr(
         "integrations.catalog.resolve_effective_integrations",
         lambda: {
@@ -94,11 +100,11 @@ def test_deliver_background_notifications_redacts_smtp_delivery_failure(monkeypa
             }
         },
     )
-    secret = "smtp-password-should-not-be-persisted"
-    monkeypatch.setattr(
-        "integrations.smtp.delivery.send_smtp_report",
-        lambda **_: (False, f"authentication failed: {secret}"),
-    )
+
+    def _refuse(**_kwargs: object) -> tuple[bool, str]:
+        return False, "SMTPAuthenticationError"
+
+    monkeypatch.setattr("integrations.smtp.delivery.send_smtp_report", _refuse)
 
     record = BackgroundInvestigationRecord(
         task_id="bg-123", status="completed", command="free-text"
@@ -106,8 +112,7 @@ def test_deliver_background_notifications_redacts_smtp_delivery_failure(monkeypa
 
     results = deliver_background_notifications(record=record, channels=("email",))
 
-    assert results == {"email": "failed: SMTP delivery failed"}
-    assert secret not in results["email"]
+    assert results == {"email": "failed: SMTPAuthenticationError"}
 
 
 # --- Telegram (Wave-2655) ---------------------------------------------------

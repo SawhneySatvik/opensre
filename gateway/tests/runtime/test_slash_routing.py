@@ -301,12 +301,20 @@ def test_gateway_background_show_returns_the_rca_as_plain_text() -> None:
 
 
 def test_gateway_background_show_does_not_leak_delivery_exception_detail() -> None:
+    """Every free-form tail is dropped, whichever adapter produced it.
+
+    ``deliver_telegram_notification`` interpolates ``str(exc)`` from credential
+    loading, so a rule keyed on the ``failed:`` prefix passes it straight to
+    Telegram. The category before the colon is what gets reported; a rule that
+    allowlisted known-safe strings instead would fail open for the next adapter.
+    """
     task_id = _seed_record(
         task_id="bg-chat-redact",
         notification_results={
             "email": "failed: SMTPRecipientsRefused",
-            "telegram": "sent",
+            "telegram": "missing telegram integration: no bot token in /home/ops/.opensre",
             "buzz": "missing buzz integration: Buzz is not configured.",
+            "rocketchat": "sent",
         },
     )
 
@@ -315,8 +323,12 @@ def test_gateway_background_show_does_not_leak_delivery_exception_detail() -> No
     assert sink.finalized is not None
     assert "email:failed" in sink.finalized
     assert "SMTPRecipientsRefused" not in sink.finalized
-    assert "telegram:sent" in sink.finalized
-    assert "missing buzz integration: Buzz is not configured." in sink.finalized
+    assert "telegram:missing telegram integration" in sink.finalized
+    assert "/home/ops/.opensre" not in sink.finalized
+    assert "buzz:missing buzz integration" in sink.finalized
+    assert "Buzz is not configured" not in sink.finalized
+    # A tail-free outcome is reported whole; there is nothing to strip.
+    assert "rocketchat:sent" in sink.finalized
 
 
 def test_gateway_background_list_is_plain_and_bounded() -> None:
@@ -333,3 +345,27 @@ def test_gateway_background_list_is_plain_and_bounded() -> None:
     assert not _BOX_DRAWING & set(sink.finalized), sink.finalized
     assert len(sink.finalized) < 4096
     assert "/background show" in sink.finalized
+
+
+def test_gateway_background_list_stays_under_the_cap_on_worst_case_records() -> None:
+    """The cap has to hold on the record a real incident produces, not a short one.
+
+    ``command`` is operator-supplied alert text and was previously untrimmed, so
+    a listing of long-command records reached ~5.5k characters. The closing hint
+    is the assertion that matters: the transports cut the tail, so overrunning
+    loses exactly the line telling the reader how to read one of these.
+    """
+    alert = "alert:payments checkout latency spike on the eu-west-1 replica " * 6
+    for index in range(20):
+        _seed_record(
+            task_id=f"bg-worst-{index:02d}",
+            command=f"/investigate {alert}",
+            root_cause="saturation " * 60,
+        )
+
+    sink = _run_gateway_slash("/background list")
+
+    assert sink.finalized is not None
+    assert len(sink.finalized) <= 4096, len(sink.finalized)
+    assert sink.finalized.endswith("Use /background show <task_id> for the full RCA.")
+    assert "more" in sink.finalized

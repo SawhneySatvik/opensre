@@ -38,11 +38,14 @@ def deliver_email_notification(record: BackgroundInvestigationRecord) -> str:
         next_steps=record.next_steps,
         stats=record.stats,
     )
-    ok, _error = send_smtp_report(report=body, subject=subject, smtp_ctx=smtp_config)
-    # Outcomes are persisted and displayed by ``/background show``. The SMTP
-    # transport's error value may include provider or credential detail, so it
-    # must not cross this external-surface boundary.
-    return "sent" if ok else "failed: SMTP delivery failed"
+    ok, error = send_smtp_report(report=body, subject=subject, smtp_ctx=smtp_config)
+    # ``send_smtp_report`` already narrows a failure to ``type(exc).__name__``,
+    # which is what the local ``/background show`` table needs to tell an auth
+    # failure from a connection one. Redaction for a chat transport belongs at
+    # that sink (``_chat_safe_outcome``), not here — the terminal is not an
+    # external surface, and the sibling adapters keep their reason for the same
+    # reason.
+    return "sent" if ok else f"failed: {error}"
 
 
 class _EmailBackgroundAdapter:

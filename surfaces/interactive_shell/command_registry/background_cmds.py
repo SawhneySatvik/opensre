@@ -30,8 +30,12 @@ from surfaces.interactive_shell.ui import (
 from surfaces.shared.error_handling.exception_reporting import report_exception
 
 # A chat message caps at 4096 characters and the transports tail-truncate.
+_CHAT_MESSAGE_CHARS = 4096
 _CHAT_LIST_LIMIT = 10
 _CHAT_CAUSE_CHARS = 120
+_CHAT_COMMAND_CHARS = 120
+_CHAT_NOTIFIED_CHARS = 200
+_LIST_HINT = "Use /background show <task_id> for the full RCA."
 
 
 def _allowed_notify_channels() -> tuple[str, ...]:
@@ -148,35 +152,62 @@ def _plain_status(session: Session, records: dict[str, BackgroundInvestigationRe
 
 
 def _plain_list(records: dict[str, BackgroundInvestigationRecord]) -> str:
-    """One line per record, root cause trimmed.
+    """One line per record, every free-text field trimmed and the body capped.
 
-    Bounded because the transports tail-truncate: an unbounded list drops the
-    closing hint first, which is the line telling the reader how to get the rest.
+    The per-field trims keep an ordinary listing readable; the cap is the part
+    that has to hold. The transports tail-truncate, so an overlong body loses
+    the closing hint first — the one line telling the reader how to get the
+    rest. Both the command and the root cause are operator-supplied and
+    unbounded, so trimming either one alone still overruns. Rows are dropped
+    from the end until the body fits, and the drop is reported, rather than
+    letting the transport cut the message mid-word.
     """
     from platform.text.truncation import truncate
 
-    lines = ["Background investigations", ""]
+    rows: list[str] = []
     for task_id, record in list(records.items())[:_CHAT_LIST_LIMIT]:
         cause = (
             truncate(record.root_cause, _CHAT_CAUSE_CHARS, suffix="…") if record.root_cause else "-"
         )
-        lines.append(f"  {task_id}  [{record.status}]  {record.command}")
-        lines.append(f"      {cause}")
-    remaining = len(records) - _CHAT_LIST_LIMIT
-    if remaining > 0:
-        lines.append(f"  ... and {remaining} more")
-    lines.append("")
-    lines.append("Use /background show <task_id> for the full RCA.")
-    return "\n".join(lines)
+        command = truncate(record.command, _CHAT_COMMAND_CHARS, suffix="…")
+        rows.append(f"  {task_id}  [{record.status}]  {command}\n      {cause}")
+
+    def _body(shown: list[str]) -> str:
+        omitted = len(records) - len(shown)
+        tail = [f"  ... and {omitted} more"] if omitted > 0 else []
+        return "\n".join(["Background investigations", "", *shown, *tail, "", _LIST_HINT])
+
+    while rows and len(_body(rows)) > _CHAT_MESSAGE_CHARS:
+        rows.pop()
+    return _body(rows)
 
 
 def _chat_safe_outcome(outcome: str) -> str:
-    return "failed" if outcome.startswith("failed:") else outcome
+    """The outcome's category, without whatever an adapter appended to it.
+
+    Every adapter returns a free-form tail after the first colon, and
+    ``deliver_telegram_notification`` builds its own from ``str(exc)``. Since
+    ``/background show`` now answers a chat transport, that tail crosses an
+    external-surface boundary. Reporting the category alone still says what
+    happened, and means a new adapter cannot leak through here without being
+    audited first — an allowlist of known-safe strings would have to be revised
+    every time one is added, and would silently fail open until someone did.
+
+    The REPL table prints the full string: a terminal is not an external sink.
+    """
+    category, separator, _detail = outcome.partition(":")
+    return category.strip() if separator else outcome
 
 
 def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
-    """The same bounded sections the chat notification adapters already send."""
+    """The same bounded sections the chat notification adapters already send.
+
+    The delivery line is trimmed too: ``summary_sections`` budgets each section
+    so the worst case clears the message cap, and an unbounded trailer appended
+    after it would spend that headroom back.
+    """
     from platform.delivery.notifications.rca_summary import summary_sections
+    from platform.text.truncation import truncate
 
     command, root_cause, top_analysis, next_steps = summary_sections(record)
     lines = [
@@ -195,7 +226,7 @@ def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
         delivered = ", ".join(
             f"{k}:{_chat_safe_outcome(v)}" for k, v in record.notification_results.items()
         )
-        lines += ["", f"Notified: {delivered}"]
+        lines += ["", f"Notified: {truncate(delivered, _CHAT_NOTIFIED_CHARS, suffix='…')}"]
     return "\n".join(lines)
 
 
