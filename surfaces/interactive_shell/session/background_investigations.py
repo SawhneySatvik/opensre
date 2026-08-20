@@ -42,7 +42,7 @@ class BackgroundNotificationPreferences:
         read, must not stop the shell from starting; the user sees the same
         empty default they had before preferences were durable.
         """
-        from platform.background_investigations.store import (
+        from platform.scheduling.background_investigations.store import (
             background_investigation_store,
         )
 

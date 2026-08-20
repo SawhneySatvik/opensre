@@ -265,8 +265,8 @@ _BOX_DRAWING = set("─│┃━╭╮╰╯┏┓┗┛┿┼┤├┬┴┌┐
 
 
 def _seed_record(**overrides: Any) -> str:
-    from platform.background_investigations.store import background_investigation_store
-    from platform.background_investigations.types import BackgroundInvestigationRecord
+    from platform.scheduling.background_investigations.store import background_investigation_store
+    from platform.scheduling.background_investigations.types import BackgroundInvestigationRecord
 
     fields: dict[str, Any] = {
         "task_id": "bg-chat-1",

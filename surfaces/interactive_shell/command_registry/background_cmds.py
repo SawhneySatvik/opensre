@@ -15,7 +15,7 @@ from core.agent_harness.spi.session_state import (
     background_notification_channels,
     session_terminal,
 )
-from platform.background_investigations.types import BackgroundInvestigationRecord
+from platform.scheduling.background_investigations.types import BackgroundInvestigationRecord
 from surfaces.interactive_shell.command_registry.types import SlashCommand
 from surfaces.interactive_shell.runtime import Session
 from surfaces.interactive_shell.ui import (
@@ -27,7 +27,7 @@ from surfaces.interactive_shell.ui import (
     print_repl_table,
     repl_table,
 )
-from surfaces.interactive_shell.utils.error_handling.exception_reporting import report_exception
+from surfaces.shared.error_handling.exception_reporting import report_exception
 
 # A chat message caps at 4096 characters and the transports tail-truncate.
 _CHAT_LIST_LIMIT = 10
@@ -79,7 +79,7 @@ def _tracked_records(
     """
     records: dict[str, BackgroundInvestigationRecord] = dict(background_investigations(session))
     try:
-        from platform.background_investigations.store import (
+        from platform.scheduling.background_investigations.store import (
             background_investigation_store,
         )
 
@@ -106,7 +106,7 @@ def _notify_channels(session: Session) -> tuple[str, ...]:
     if channels or session_terminal(session) is not None:
         return channels
     try:
-        from platform.background_investigations.store import (
+        from platform.scheduling.background_investigations.store import (
             background_investigation_store,
         )
 
@@ -123,7 +123,7 @@ def _persist_notify_channels(console: Console, channels: tuple[str, ...]) -> Non
     turn to a traceback.
     """
     try:
-        from platform.background_investigations.store import (
+        from platform.scheduling.background_investigations.store import (
             background_investigation_store,
         )
 
@@ -153,7 +153,7 @@ def _plain_list(records: dict[str, BackgroundInvestigationRecord]) -> str:
     Bounded because the transports tail-truncate: an unbounded list drops the
     closing hint first, which is the line telling the reader how to get the rest.
     """
-    from platform.common.truncation import truncate
+    from platform.text.truncation import truncate
 
     lines = ["Background investigations", ""]
     for task_id, record in list(records.items())[:_CHAT_LIST_LIMIT]:
@@ -176,7 +176,7 @@ def _chat_safe_outcome(outcome: str) -> str:
 
 def _plain_show(task_id: str, record: BackgroundInvestigationRecord) -> str:
     """The same bounded sections the chat notification adapters already send."""
-    from platform.notifications.rca_summary import summary_sections
+    from platform.delivery.notifications.rca_summary import summary_sections
 
     command, root_cause, top_analysis, next_steps = summary_sections(record)
     lines = [
